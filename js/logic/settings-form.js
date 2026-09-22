@@ -1,4 +1,5 @@
 import { generateDotPositions } from './t5.js';
+import { lapCandidates } from './t1.js';
 
 const number = (key, label, min, max, options = {}) => ({ key, label, min, max, type: 'number', ...options });
 const list = (key, label, min, max, options = {}) => ({ key, label, min, max, type: 'list', ...options });
@@ -21,6 +22,16 @@ export const SETTING_FIELDS = Object.freeze({
     list('percentagePercents', '割合の候補', 1, 99, { integer: true, unit: '%', hint: 'カンマ区切り' }),
     number('percentageUnitMin', '割合問題の単位最小', 1, 1000, { integer: true }),
     number('percentageUnitMax', '割合問題の単位最大', 1, 1000, { integer: true }),
+    number('priceMin', '単価の最小値', 2, 1000, { integer: true, unit: '円' }),
+    number('priceMax', '単価の最大値', 2, 1000, { integer: true, unit: '円' }),
+    number('priceCountMin', '商品の最小個数', 2, 100, { integer: true }),
+    number('priceCountMax', '商品の最大個数', 2, 100, { integer: true }),
+    number('averageMin', '平均問題の最小値', 2, 1000, { integer: true }),
+    number('averageMax', '平均問題の最大値', 2, 1000, { integer: true }),
+    number('clockStartHourMin', '経過時間の開始時(最小)', 0, 20, { integer: true }),
+    number('clockStartHourMax', '経過時間の開始時(最大)', 0, 20, { integer: true }),
+    number('elapsedMinutesMin', '経過時間の最小値', 1, 180, { integer: true, unit: '分' }),
+    number('elapsedMinutesMax', '経過時間の最大値', 1, 180, { integer: true, unit: '分' }),
   ]),
   t2: Object.freeze([
     duration(),
@@ -127,6 +138,9 @@ export function validateTestSettings(testId, raw, defaults) {
 
   if (testId === 't1') {
     for (const pair of [['unitValueMin', 'unitValueMax'], ['speedMin', 'speedMax'], ['speedHoursMin', 'speedHoursMax'], ['lapSpeedMin', 'lapSpeedMax'], ['lapMultiplierMin', 'lapMultiplierMax'], ['percentageUnitMin', 'percentageUnitMax']]) minMax(errors, value, ...pair);
+    for (const pair of [['priceMin', 'priceMax'], ['priceCountMin', 'priceCountMax'], ['averageMin', 'averageMax'], ['clockStartHourMin', 'clockStartHourMax'], ['elapsedMinutesMin', 'elapsedMinutesMax']]) minMax(errors, value, ...pair);
+    if (value.averageMax - value.averageMin < 2) errors.averageMax = '整数の平均を作るため、最小値より2以上大きくしてください';
+    if (!Object.keys(errors).length && !lapCandidates(value).integer.length) errors.lapMultiplierMax = '整数の周回距離を作れる速度と倍率の組がありません';
   } else if (testId === 't2') {
     const total = Math.floor((value.durationSec * 1000) / value.intervalMs);
     if (total < 1) errors.intervalMs = '制限時間内に1回以上表示できる間隔にしてください';

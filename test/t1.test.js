@@ -24,14 +24,60 @@ test('T1 の既定値は承認済みの数値', () => {
     lapSpeedMax: 10,
     lapMultiplierMin: 3,
     lapMultiplierMax: 10,
+    lapIntegerRate: 0.8,
     percentagePercents: [10, 20, 25, 40, 50, 75],
     percentageUnitMin: 2,
     percentageUnitMax: 20,
+    priceMin: 10, priceMax: 200, priceCountMin: 2, priceCountMax: 12,
+    averageMin: 2, averageMax: 50,
+    clockStartHourMin: 6, clockStartHourMax: 18,
+    elapsedMinutesMin: 15, elapsedMinutesMax: 180,
   });
 });
 
-test('5種類は単位換算・速さ・出会い・追いつき・割合', () => {
-  assert.deepEqual(PROBLEM_KINDS, ['unit', 'speed', 'meeting', 'catchup', 'percentage']);
+test('問題は均等に選ぶ9種類', () => {
+  assert.deepEqual(PROBLEM_KINDS, ['unit', 'speed', 'meeting', 'catchup', 'percentage', 'inversePercentage', 'price', 'average', 'elapsed']);
+  const seen = PROBLEM_KINDS.map((_, i) => generateT1Problem(() => (i + 0.5) / 9, P).kind);
+  assert.deepEqual(seen, PROBLEM_KINDS);
+});
+
+test('2000シード: 小数は第1位まで・20%以下・9種類の正解が式に一致', () => {
+  let decimals = 0;
+  const seen = new Set();
+  const factors = { 'ha-to-m2': 10000, 'm2-to-ha': 1/10000, 'a-to-m2': 100, 'm2-to-a': 1/100, 'km2-to-ha': 100, 'ha-to-km2': 1/100, 'km-to-m': 1000, 'm-to-km': 1/1000, 'hours-to-minutes': 60, 'minutes-to-hours': 1/60 };
+  for (let seed = 1; seed <= 2000; seed++) {
+    const q = generateT1Problem(createRng(seed), P);
+    seen.add(q.kind);
+    assert.ok(!/\d+\.\d{2,}/.test(q.prompt), `seed=${seed} ${q.prompt}`);
+    if (/\d+\.\d+/.test(q.prompt)) decimals++;
+    const n = q.prompt.match(/\d+(?:\.\d+)?/g).map(Number);
+    let expected;
+    if (q.kind === 'unit') expected = n[0] * factors[q.variant];
+    if (q.kind === 'speed') expected = q.variant === 'distance' ? n[0]*n[1] : n[0]/n[1];
+    if (q.kind === 'meeting') expected = n[0]*60/(n[1]+n[2]);
+    if (q.kind === 'catchup') expected = n[0]*60/(n[1]-n[2]);
+    if (q.kind === 'percentage') expected = n[0]*n[1]/100;
+    if (q.kind === 'inversePercentage') expected = n[1]*100/n[0];
+    if (q.kind === 'price') expected = q.variant === 'total' ? n[0]*n[1] : n[1]/n[0];
+    if (q.kind === 'average') expected = (n[0]+n[1]+n[2])/3;
+    if (q.kind === 'elapsed') expected = (n[2]-n[0])*60+n[3]-n[1];
+    assert.ok(Math.abs(q.answer-expected) < 1e-8, `seed=${seed} ${q.prompt}: ${q.answer} != ${expected}`);
+  }
+  assert.ok(decimals <= 400, `小数問題=${decimals}/2000`);
+  assert.equal(seen.size, 9);
+});
+
+test('周回問題は8割以上が整数の距離で、小数も第1位まで', () => {
+  for (const kind of ['meeting', 'catchup']) {
+    let integer = 0;
+    for (let seed=1; seed<=2000; seed++) {
+      const q = generateT1Problem(createRng(seed), P, null, kind);
+      const length = Number(q.prompt.match(/周囲([\d.]+)/)[1]);
+      if (Number.isInteger(length)) integer++;
+      assert.ok(!/\d+\.\d{2,}/.test(q.prompt), q.prompt);
+    }
+    assert.ok(integer >= 1550, `${kind}: ${integer}/2000 (80%の確率、標本許容差)`);
+  }
 });
 
 test('SPECの例: L=4.2, a=4, b=3 の逆方向は36分', () => {
@@ -54,7 +100,7 @@ test('4択は重ならず、正解を1つだけ含み、誤答は正の整数で
   assert.equal(made.choices[made.correctIndex], 36);
 });
 
-test('シード2000種類で全5種類が出て、4択は正の整数・重複なし・桁ずらし1つまで', () => {
+test('シード2000種類で全9種類が出て、4択は正の整数・重複なし・桁ずらし1つまで', () => {
   const kinds = new Set();
   for (let seed = 1; seed <= 2000; seed++) {
     const q = generateT1Problem(createRng(seed), P);

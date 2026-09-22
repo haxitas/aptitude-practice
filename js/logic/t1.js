@@ -1,7 +1,7 @@
-// テスト1 計算: 5種類の問題生成、典型誤答の4択、判定、採点。DOMには触れない。
+// テスト1 計算: 9種類の問題生成、典型誤答の4択、判定、採点。DOMには触れない。
 import { randInt, shuffle } from '../core/rng.js';
 
-export const PROBLEM_KINDS = Object.freeze(['unit', 'speed', 'meeting', 'catchup', 'percentage']);
+export const PROBLEM_KINDS = Object.freeze(['unit', 'speed', 'meeting', 'catchup', 'percentage', 'inversePercentage', 'price', 'average', 'elapsed']);
 
 const UNIT_VARIANTS = Object.freeze([
   { id: 'ha-to-m2', from: 'ha', to: 'm²', factor: 10000, reverse: false },
@@ -94,18 +94,35 @@ function speedProblem(rng, p) {
     [distance - hours, speed * 60, distance + hours, speed + hours, distance, speed * 10, speed / 10], rng);
 }
 
-function distinctSpeeds(rng, p) {
-  const a = randInt(rng, p.lapSpeedMin + 1, p.lapSpeedMax);
-  const b = randInt(rng, p.lapSpeedMin, a - 1);
-  return { a, b };
+const lapCache = new WeakMap();
+export function lapCandidates(p) {
+  if (lapCache.has(p)) return lapCache.get(p);
+  const pools = { integer: [], decimal: [] };
+  for (let a = p.lapSpeedMin + 1; a <= p.lapSpeedMax; a++) {
+    for (let b = p.lapSpeedMin; b < a; b++) {
+      for (let multiplier = p.lapMultiplierMin; multiplier <= p.lapMultiplierMax; multiplier++) {
+        const product = (a + b) * (a - b) * multiplier;
+        // 距離=product/60。整数演算で小数第1位までの候補だけを構成する。
+        if (product % 6 !== 0) continue;
+        pools[product % 60 === 0 ? 'integer' : 'decimal'].push({ a, b, multiplier, length: product / 60 });
+      }
+    }
+  }
+  lapCache.set(p, pools);
+  return pools;
+}
+
+function pickLap(rng, p) {
+  const pools = lapCandidates(p);
+  const pool = rng() < p.lapIntegerRate || !pools.decimal.length ? pools.integer : pools.decimal;
+  if (!pool.length) throw new RangeError('整数の周回距離を作れる速度・倍率の組がありません');
+  return pool[randInt(rng, 0, pool.length - 1)];
 }
 
 function meetingProblem(rng, p) {
-  const { a, b } = distinctSpeeds(rng, p);
+  const { a, b, multiplier, length } = pickLap(rng, p);
   const difference = a - b;
-  const multiplier = randInt(rng, p.lapMultiplierMin, p.lapMultiplierMax);
   const minutes = difference * multiplier;
-  const length = roundNumber((a + b) * minutes / 60);
   const wrongOperation = (a + b) * multiplier;
   return finish('meeting', 'opposite',
     `周囲${formatNumber(length)}kmの池を時速${a}kmと時速${b}kmで反対方向に進むと、何分後に出会いますか?`,
@@ -113,12 +130,10 @@ function meetingProblem(rng, p) {
 }
 
 function catchupProblem(rng, p) {
-  const { a, b } = distinctSpeeds(rng, p);
+  const { a, b, multiplier, length } = pickLap(rng, p);
   const sum = a + b;
   const difference = a - b;
-  const multiplier = randInt(rng, p.lapMultiplierMin, p.lapMultiplierMax);
   const minutes = sum * multiplier;
-  const length = roundNumber(difference * minutes / 60);
   const wrongOperation = difference * multiplier;
   return finish('catchup', 'same-direction',
     `周囲${formatNumber(length)}kmの池を時速${a}kmと時速${b}kmで同じ方向に進むと、速い人は何分後に追いつきますか?`,
@@ -134,7 +149,46 @@ function percentageProblem(rng, p) {
     [base * percent, base - answer, base + percent, Math.abs(base - percent), answer * 10, answer / 10], rng);
 }
 
-const GENERATORS = { unit: unitProblem, speed: speedProblem, meeting: meetingProblem, catchup: catchupProblem, percentage: percentageProblem };
+function inversePercentageProblem(rng, p) {
+  const percent = p.percentagePercents[randInt(rng, 0, p.percentagePercents.length - 1)];
+  const base = randInt(rng, p.percentageUnitMin, p.percentageUnitMax) * 100;
+  const part = base * percent / 100;
+  return finish('inversePercentage', 'basic', `${base}の何%が${part}ですか?`, percent, '%',
+    [100 - percent, percent * 100, percent / 100, base - part, base * part, percent * 10, percent / 10], rng);
+}
+
+function priceProblem(rng, p) {
+  const price = randInt(rng, p.priceMin, p.priceMax);
+  const count = randInt(rng, p.priceCountMin, p.priceCountMax);
+  const total = price * count;
+  if (rng() < 0.5) return finish('price', 'total', `単価${price}円の商品を${count}個買うと、合計は何円ですか?`, total, '円',
+    [price / count, price + count, price, total + price, total - price, total * 10, total / 10], rng);
+  return finish('price', 'unit-price', `${count}個で${total}円の商品は、単価が何円ですか?`, price, '円',
+    [total * count, total - count, total, price + count, price * 10, price / 10], rng);
+}
+
+function averageProblem(rng, p) {
+  const a = randInt(rng, p.averageMin, p.averageMax);
+  const b = randInt(rng, p.averageMin, p.averageMax);
+  const candidates = [];
+  for (let c = p.averageMin; c <= p.averageMax; c++) if ((a+b+c)%3 === 0) candidates.push(c);
+  const c = candidates[randInt(rng, 0, candidates.length - 1)];
+  const sum = a+b+c, answer = sum/3;
+  return finish('average', 'three', `${a}、${b}、${c}の平均はいくつですか?`, answer, '',
+    [sum, sum / 2, sum * 3, sum - 3, answer * 10, answer / 10], rng);
+}
+
+function elapsedProblem(rng, p) {
+  const start = randInt(rng, p.clockStartHourMin, p.clockStartHourMax) * 60 + randInt(rng, 0, 59);
+  const minutes = randInt(rng, p.elapsedMinutesMin, p.elapsedMinutesMax);
+  const end = start + minutes;
+  const h1 = Math.floor(start/60), m1 = start%60, h2 = Math.floor(end/60), m2 = end%60;
+  return finish('elapsed', 'same-day', `${h1}時${m1}分から${h2}時${m2}分までは何分ですか?`, minutes, '分',
+    [(h2-h1)*100+m2-m1, minutes*60, minutes/60, minutes+60, Math.abs(minutes-60), minutes*10, minutes/10], rng);
+}
+
+const GENERATORS = { unit: unitProblem, speed: speedProblem, meeting: meetingProblem, catchup: catchupProblem, percentage: percentageProblem,
+  inversePercentage: inversePercentageProblem, price: priceProblem, average: averageProblem, elapsed: elapsedProblem };
 
 export function generateT1Problem(rng, p, previous = null, forcedKind = null) {
   const kinds = forcedKind
