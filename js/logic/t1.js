@@ -33,25 +33,23 @@ export function lapMinutes(lengthKm, speedA, speedB, kind) {
 }
 
 export function makeT1Choices(answer, mistakes, rng) {
-  if (!(Number.isFinite(answer) && answer > 0)) throw new RangeError('正解は正数である必要があります');
-  const candidates = [];
+  if (!(Number.isInteger(answer) && answer > 0)) throw new RangeError('正解は正の整数である必要があります');
+  const typical = [];
+  const digitShifts = [];
   const seen = new Set([answer]);
   for (const raw of mistakes) {
     const value = roundNumber(raw);
-    if (!(Number.isFinite(value) && value > 0) || seen.has(value)) continue;
+    if (!(Number.isInteger(value) && value > 0) || seen.has(value)) continue;
     seen.add(value);
-    candidates.push(value);
+    if (value === answer * 10 || value === answer / 10) digitShifts.push(value);
+    else typical.push(value);
   }
-  for (let offset = 1; candidates.length < 3; offset++) {
-    for (const raw of [answer + offset, answer - offset]) {
-      const value = roundNumber(raw);
-      if (value <= 0 || seen.has(value)) continue;
-      seen.add(value);
-      candidates.push(value);
-      if (candidates.length === 3) break;
-    }
+  if (typical.length < 2 || typical.length + Math.min(1, digitShifts.length) < 3) {
+    throw new RangeError('正の整数の典型誤答を3つ作れません');
   }
-  const choices = shuffle(rng, [answer, ...shuffle(rng, candidates).slice(0, 3)]);
+  const distractors = shuffle(rng, typical).slice(0, digitShifts.length ? 2 : 3);
+  if (digitShifts.length) distractors.push(shuffle(rng, digitShifts)[0]);
+  const choices = shuffle(rng, [answer, ...distractors]);
   return { choices, correctIndex: choices.indexOf(answer) };
 }
 
@@ -75,7 +73,7 @@ function unitProblem(rng, p) {
     'unit', v.id,
     `${formatNumber(shown)}${v.from}は何${v.to}ですか?`,
     answer, v.to,
-    [shown, answer * 10, answer / 10, answer * 100], rng,
+    [shown, answer * v.factor, answer * 100, answer * 1000, answer * 10, answer / 10], rng,
   );
 }
 
@@ -86,14 +84,14 @@ function speedProblem(rng, p) {
   const variant = ['distance', 'time', 'speed'][randInt(rng, 0, 2)];
   if (variant === 'distance') {
     return finish('speed', variant, `時速${speed}kmで${hours}時間進むと何kmですか?`, distance, 'km',
-      [speed + hours, distance * 10, distance / 10, speed * 60], rng);
+      [speed + hours, speed * 60, distance + speed, Math.abs(distance - speed), distance * 10, distance / 10], rng);
   }
   if (variant === 'time') {
     return finish('speed', variant, `${distance}kmを時速${speed}kmで進むと何時間ですか?`, hours, '時間',
-      [distance - speed, hours * 60, hours / 60, distance + speed], rng);
+      [distance - speed, hours * 60, distance + speed, speed + hours, distance, hours * 10, hours / 10], rng);
   }
   return finish('speed', variant, `${distance}kmを${hours}時間で進む速さは時速何kmですか?`, speed, 'km/h',
-    [distance - hours, speed * 60, speed / 60, distance + hours], rng);
+    [distance - hours, speed * 60, distance + hours, speed + hours, distance, speed * 10, speed / 10], rng);
 }
 
 function distinctSpeeds(rng, p) {
@@ -111,7 +109,7 @@ function meetingProblem(rng, p) {
   const wrongOperation = (a + b) * multiplier;
   return finish('meeting', 'opposite',
     `周囲${formatNumber(length)}kmの池を時速${a}kmと時速${b}kmで反対方向に進むと、何分後に出会いますか?`,
-    minutes, '分', [wrongOperation, minutes / 60, minutes * 10, minutes / 10], rng);
+    minutes, '分', [wrongOperation, minutes / 60, minutes * 60, minutes * 10, minutes / 10], rng);
 }
 
 function catchupProblem(rng, p) {
@@ -124,7 +122,7 @@ function catchupProblem(rng, p) {
   const wrongOperation = difference * multiplier;
   return finish('catchup', 'same-direction',
     `周囲${formatNumber(length)}kmの池を時速${a}kmと時速${b}kmで同じ方向に進むと、速い人は何分後に追いつきますか?`,
-    minutes, '分', [wrongOperation, minutes / 60, minutes * 10, minutes / 10], rng);
+    minutes, '分', [wrongOperation, minutes / 60, minutes * 60, minutes * 10, minutes / 10], rng);
 }
 
 function percentageProblem(rng, p) {
@@ -133,7 +131,7 @@ function percentageProblem(rng, p) {
   const base = unit * 100;
   const answer = unit * percent;
   return finish('percentage', 'basic', `${base}の${percent}%はいくつですか?`, answer, '',
-    [base + percent, Math.abs(base - percent), answer * 10, answer / 10], rng);
+    [base * percent, base - answer, base + percent, Math.abs(base - percent), answer * 10, answer / 10], rng);
 }
 
 const GENERATORS = { unit: unitProblem, speed: speedProblem, meeting: meetingProblem, catchup: catchupProblem, percentage: percentageProblem };
