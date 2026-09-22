@@ -2,6 +2,7 @@
 // DOM と Canvas には触れない。
 
 const HALF_SIDES = Object.freeze(['up', 'down', 'left', 'right']);
+const SECTOR_CENTERS = Object.freeze([45, 135, 225, 315]);
 const ANGLE_EPSILON_DEG = 1e-9;
 
 export function normalizeAngleDeg(angle) {
@@ -27,47 +28,88 @@ export function clampToTunnel(position, maxRadius) {
   return { x: position.x * k, y: position.y * k };
 }
 
-// 60Hz では差の followRate(既定20%)を進み、ほかのfpsでも同じ実時間なら同じ位置になる。
-export function followPosition(position, target, dtMs, p) {
-  const referenceMs = 1000 / p.followReferenceFps;
-  const alpha = 1 - (1 - p.followRate) ** (dtMs / referenceMs);
-  return {
-    x: position.x + (target.x - position.x) * alpha,
-    y: position.y + (target.y - position.y) * alpha,
-  };
+export function normalizeInput(input) {
+  const length = Math.hypot(input.x, input.y);
+  if (length <= 1 || length === 0) return { x: input.x, y: input.y };
+  return { x: input.x / length, y: input.y / length };
 }
 
-// タッチ位置を下へずらしても、機体を断面の下端へ置く指がCanvas内に収まる最大円を作る。
+export function keyboardInput(keys) {
+  return normalizeInput({
+    x: (keys.has('ArrowRight') ? 1 : 0) - (keys.has('ArrowLeft') ? 1 : 0),
+    y: (keys.has('ArrowUp') ? 1 : 0) - (keys.has('ArrowDown') ? 1 : 0),
+  });
+}
+
+export function combineInputs(a, b) {
+  return normalizeInput({ x: a.x + b.x, y: a.y + b.y });
+}
+
+export function moveAircraft(position, input, dtSec, p) {
+  const normalized = normalizeInput(input);
+  return clampToTunnel({
+    x: position.x + normalized.x * p.moveSpeed * dtSec,
+    y: position.y + normalized.y * p.moveSpeed * dtSec,
+  }, p.aircraftMaxRadius);
+}
+
+function circleInside(circle, width, height, margin) {
+  return circle.centerX - circle.radius >= margin
+    && circle.centerX + circle.radius <= width - margin
+    && circle.centerY - circle.radius >= margin
+    && circle.centerY + circle.radius <= height - margin;
+}
+
 export function computeTunnelLayout(width, height, p) {
   if (!(width > 0) || !(height > 0)) throw new RangeError('Canvas の幅と高さは0より大きい必要があります');
   const margin = p.canvasMarginPx;
-  const touchOffsetPx = height * p.touchOffsetRatio;
-  const byWidth = width / 2 - margin;
-  const byHeight = height / 2 - margin;
-  const byTouch = (height - 2 * margin - touchOffsetPx) / (1 + p.aircraftMaxRadius);
-  const radius = Math.min(byWidth, byHeight, byTouch);
-  if (!(radius > 0)) throw new RangeError('Canvas が小さすぎてトンネルを配置できません');
-  return {
-    width, height, radius, touchOffsetPx,
+  const stickRadius = Math.min(
+    p.stickMaxRadiusPx,
+    Math.max(p.stickMinRadiusPx, height * p.stickRadiusRatio),
+  );
+  const gap = margin;
+  const stickStacked = {
     centerX: width / 2,
-    centerY: margin + radius,
+    centerY: height - margin - stickRadius,
+    radius: stickRadius,
   };
+  const tunnelBottom = stickStacked.centerY - stickRadius - gap;
+  const stackedRadius = Math.min(width / 2 - margin, (tunnelBottom - margin) / 2);
+  let tunnel;
+  let stick;
+  let mode;
+  if (stackedRadius >= height * p.layoutStackMinTunnelRatio) {
+    tunnel = { centerX: width / 2, centerY: margin + stackedRadius, radius: stackedRadius };
+    stick = stickStacked;
+    mode = 'stacked';
+  } else {
+    const sideRadius = Math.min(
+      height / 2 - margin,
+      (width - 2 * margin - stickRadius * 2 - gap) / 2,
+    );
+    tunnel = { centerX: margin + sideRadius, centerY: height / 2, radius: sideRadius };
+    stick = {
+      centerX: width - margin - stickRadius,
+      centerY: height - margin - stickRadius,
+      radius: stickRadius,
+    };
+    mode = 'side';
+  }
+  if (!(tunnel.radius > 0)
+      || !circleInside(tunnel, width, height, 0)
+      || !circleInside(stick, width, height, 0)
+      || Math.hypot(tunnel.centerX - stick.centerX, tunnel.centerY - stick.centerY) < tunnel.radius + stick.radius) {
+    throw new RangeError('Canvas が小さすぎてトンネルとスティックを配置できません');
+  }
+  return { width, height, tunnel, stick, mode };
 }
 
-export function sectionToPointer(position, layout, pointerType = 'mouse') {
-  const offset = pointerType === 'touch' ? layout.touchOffsetPx : 0;
-  return {
-    x: layout.centerX + position.x * layout.radius,
-    y: layout.centerY - position.y * layout.radius + offset,
-  };
-}
-
-export function pointerToSection(pointer, layout, pointerType = 'mouse', maxRadius = 1) {
-  const offset = pointerType === 'touch' ? layout.touchOffsetPx : 0;
-  return clampToTunnel({
-    x: (pointer.x - layout.centerX) / layout.radius,
-    y: (layout.centerY - (pointer.y - offset)) / layout.radius,
-  }, maxRadius);
+export function stickInputAt(pointer, layout) {
+  const dx = pointer.x - layout.stick.centerX;
+  const dy = layout.stick.centerY - pointer.y;
+  const length = Math.hypot(dx, dy);
+  if (length > layout.stick.radius) return null;
+  return normalizeInput({ x: dx / layout.stick.radius, y: dy / layout.stick.radius });
 }
 
 export function projectScale(focal, z) {
@@ -97,9 +139,34 @@ export function isBladeOpeningSafe(position, rotationDeg, p) {
   return false;
 }
 
+export function isSectorOpeningSafe(position, openCenterDeg, p) {
+  const { radius, angleDeg } = toPolar(position);
+  if (radius === 0) return false;
+  return angularDistanceDeg(angleDeg, openCenterDeg) < p.sectorOpeningDeg / 2 - ANGLE_EPSILON_DEG;
+}
+
+export function holeCenters(obstacle, p) {
+  return obstacle.openSlots.map(slot => {
+    const angle = slot * 360 / p.holeSlotCount;
+    const rad = angle * Math.PI / 180;
+    return { x: Math.cos(rad) * p.holeRingRadius, y: Math.sin(rad) * p.holeRingRadius };
+  });
+}
+
+export function isHoleOpeningSafe(position, obstacle, p) {
+  const limitSquared = p.holeRadius * p.holeRadius;
+  return holeCenters(obstacle, p).some(center => {
+    const dx = position.x - center.x;
+    const dy = position.y - center.y;
+    return dx * dx + dy * dy < limitSquared - Number.EPSILON;
+  });
+}
+
 export function isObstacleSafe(obstacle, position, p) {
   if (obstacle.type === 'half') return isHalfOpeningSafe(position, obstacle.blockedSide);
   if (obstacle.type === 'blades') return isBladeOpeningSafe(position, obstacle.rotationDeg, p);
+  if (obstacle.type === 'sector') return isSectorOpeningSafe(position, obstacle.openCenterDeg, p);
+  if (obstacle.type === 'holes') return isHoleOpeningSafe(position, obstacle, p);
   throw new RangeError(`不明な障害物です: ${obstacle.type}`);
 }
 
@@ -109,6 +176,27 @@ export function safeDirection(obstacle, position, p) {
     if (obstacle.blockedSide === 'down') return { x: 0, y: 1 };
     if (obstacle.blockedSide === 'left') return { x: 1, y: 0 };
     return { x: -1, y: 0 };
+  }
+  if (obstacle.type === 'sector') {
+    const rad = obstacle.openCenterDeg * Math.PI / 180;
+    return { x: Math.cos(rad), y: Math.sin(rad) };
+  }
+  if (obstacle.type === 'holes') {
+    const centers = holeCenters(obstacle, p);
+    let nearest = centers[0];
+    let best = (position.x - nearest.x) ** 2 + (position.y - nearest.y) ** 2;
+    for (let i = 1; i < centers.length; i++) {
+      const distance = (position.x - centers[i].x) ** 2 + (position.y - centers[i].y) ** 2;
+      if (distance < best) {
+        best = distance;
+        nearest = centers[i];
+      }
+    }
+    const dx = nearest.x - position.x;
+    const dy = nearest.y - position.y;
+    const length = Math.hypot(dx, dy);
+    if (length > 0) return { x: dx / length, y: dy / length };
+    return normalizeInput(nearest);
   }
   const angle = toPolar(position).angleDeg;
   let center = normalizeAngleDeg(obstacle.rotationDeg);
@@ -144,17 +232,32 @@ export function applyCollisionSpeed(speed, p) {
 }
 
 export function createObstacle(rng, z, id, p) {
-  if (rng() < 0.5) {
+  const typeIndex = Math.floor(rng() * 4);
+  if (typeIndex === 0) {
     return {
       id, type: 'half', z,
       blockedSide: HALF_SIDES[Math.floor(rng() * HALF_SIDES.length)],
     };
   }
-  return {
-    id, type: 'blades', z,
-    rotationDeg: rng() * 360,
-    rotationDirection: rng() < 0.5 ? -1 : 1,
-  };
+  if (typeIndex === 1) {
+    return {
+      id, type: 'blades', z,
+      rotationDeg: rng() * 360,
+      rotationDirection: rng() < 0.5 ? -1 : 1,
+    };
+  }
+  if (typeIndex === 2) {
+    return {
+      id, type: 'sector', z,
+      openCenterDeg: SECTOR_CENTERS[Math.floor(rng() * SECTOR_CENTERS.length)],
+    };
+  }
+  const slots = Array.from({ length: p.holeSlotCount }, (_, i) => i);
+  for (let i = slots.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [slots[i], slots[j]] = [slots[j], slots[i]];
+  }
+  return { id, type: 'holes', z, openSlots: slots.slice(0, p.holeOpenCount) };
 }
 
 export function createInitialObstacles(rng, p) {
@@ -180,13 +283,17 @@ export function advanceObstacle(obstacle, distanceDelta, elapsedSec, dtSec, p) {
 }
 
 export function recycleObstacles(obstacles, rng, p) {
-  const active = obstacles.filter(o => o.z > p.nearZ);
+  const active = obstacles.filter(o => o.z > p.collisionZ);
   let farthest = Math.max(p.farZ - p.obstacleSpacing, ...active.map(o => o.z));
   return obstacles.map(o => {
-    if (o.z > p.nearZ) return o;
+    if (o.z > p.collisionZ) return o;
     farthest += p.obstacleSpacing;
     return createObstacle(rng, farthest, o.id, p);
   });
+}
+
+export function drawableObstacles(obstacles, p) {
+  return obstacles.filter(o => o.z > p.collisionZ);
 }
 
 export function createT6State(rng, p) {
@@ -196,7 +303,6 @@ export function createT6State(rng, p) {
     distance: 0,
     maxSpeedReached: p.initialSpeed,
     position: { x: 0, y: 0 },
-    target: { x: 0, y: 0 },
     obstacles: createInitialObstacles(rng, p),
     cleared: 0,
     collisions: 0,
@@ -204,10 +310,10 @@ export function createT6State(rng, p) {
   };
 }
 
-function movePosition(state, target, dtSec, p) {
+function movePosition(state, input, dtSec, p) {
   if (!state.pushback) {
     return {
-      position: clampToTunnel(followPosition(state.position, target, dtSec * 1000, p), p.aircraftMaxRadius),
+      position: moveAircraft(state.position, input, dtSec, p),
       pushback: null,
     };
   }
@@ -223,11 +329,11 @@ function movePosition(state, target, dtSec, p) {
   };
 }
 
-export function stepT6State(state, target, dtSec, p, rng) {
+export function stepT6State(state, input, dtSec, p, rng) {
   if (!Number.isFinite(dtSec) || dtSec < 0) throw new RangeError('dtSec は0以上の有限値である必要があります');
   const nextElapsed = state.elapsedSec + dtSec;
-  const clampedTarget = clampToTunnel(target, p.aircraftMaxRadius);
-  const moved = movePosition(state, clampedTarget, dtSec, p);
+  const normalizedInput = normalizeInput(input);
+  const moved = movePosition(state, normalizedInput, dtSec, p);
   const speedBeforeCollision = advanceSpeed(state.speed, nextElapsed, dtSec, p);
   const distanceDelta = (state.speed + speedBeforeCollision) * 0.5 * dtSec;
   let speed = speedBeforeCollision;
@@ -262,7 +368,6 @@ export function stepT6State(state, target, dtSec, p, rng) {
     distance: state.distance + distanceDelta,
     maxSpeedReached: Math.max(state.maxSpeedReached, speedBeforeCollision),
     position: moved.position,
-    target: clampedTarget,
     obstacles,
     cleared,
     collisions,

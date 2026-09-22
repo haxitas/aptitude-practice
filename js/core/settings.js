@@ -48,8 +48,7 @@ export const DEFAULTS = Object.freeze({
   }),
   t6: Object.freeze({
     durationSec: 180,
-    followRate: 0.2, // 60Hz の1フレームで目標との差の20%を進む
-    followReferenceFps: 60,
+    moveSpeed: 1, // トンネル断面の内部単位/秒
     collisionSpeedFactor: 0.5,
     initialSpeed: 0.8, // トンネル半径を1とする内部単位/秒
     acceleration: 0.02,
@@ -63,15 +62,22 @@ export const DEFAULTS = Object.freeze({
     bladeAngularAccelerationDegSec2: 0.15,
     collisionPushMs: 350,
     collisionPushDistance: 0.28,
-    touchOffsetRatio: 0.12,
     aircraftMaxRadius: 0.86,
     canvasMarginPx: 8,
+    stickRadiusRatio: 0.14,
+    stickMinRadiusPx: 48,
+    stickMaxRadiusPx: 90,
+    layoutStackMinTunnelRatio: 0.3,
     stallAbortMs: 1000,
     perspectiveFocal: 1,
     collisionZ: 1,
-    nearZ: 0.35,
     farZ: 12,
     tunnelRingSpacing: 0.75,
+    sectorOpeningDeg: 90,
+    holeSlotCount: 8,
+    holeOpenCount: 3,
+    holeRingRadius: 0.6,
+    holeRadius: 0.2,
   }),
 });
 
