@@ -74,3 +74,12 @@ test('テストごとの既定値戻しは対象の上書きだけを除き、�
   assert.deepEqual(result, { t2: { durationSec: 30 } });
   assert.deepEqual(saved, { t1: { durationSec: 60 }, t2: { durationSec: 30 } });
 });
+
+test('T6の操縦円の左右を検証し、それ以外の値は保存しない', () => {
+  for (const side of ['left','right']) {
+    const result=validateTestSettings('t6',raw('t6',{stickSide:side}),DEFAULTS.t6);
+    assert.equal(result.ok,true);
+    assert.equal(result.value.stickSide,side);
+  }
+  assert.equal(validateTestSettings('t6',raw('t6',{stickSide:'center'}),DEFAULTS.t6).ok,false);
+});

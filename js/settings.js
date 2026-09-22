@@ -67,10 +67,17 @@ export function mount(root, ctx) {
     const label = document.createElement('label');
     label.htmlFor = id;
     label.textContent = field.label;
-    const input = document.createElement('input');
+    const input = document.createElement(field.type === 'select' ? 'select' : 'input');
     input.id = id;
     input.name = field.key;
-    input.type = field.type === 'list' ? 'text' : 'number';
+    if (field.type === 'select') {
+      for (const choice of field.options) {
+        const option = document.createElement('option');
+        option.value = choice.value;
+        option.textContent = choice.label;
+        input.append(option);
+      }
+    } else input.type = field.type === 'list' ? 'text' : 'number';
     input.value = valueText(current[field.key]);
     if (field.type === 'number') {
       input.min = String(field.min);
@@ -82,7 +89,7 @@ export function mount(root, ctx) {
     const help = document.createElement('span');
     help.id = `${id}-help`;
     help.className = 'setting-help';
-    help.textContent = `${field.min}〜${field.max}${field.unit ? ` ${field.unit}` : ''}${field.hint ? ` / ${field.hint}` : ''}`;
+    help.textContent = field.type === 'select' ? '縦画面では操縦円は下に配置されます' : `${field.min}〜${field.max}${field.unit ? ` ${field.unit}` : ''}${field.hint ? ` / ${field.hint}` : ''}`;
     const error = document.createElement('span');
     error.id = `${id}-error`;
     error.className = 'setting-error';

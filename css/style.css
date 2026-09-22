@@ -191,7 +191,7 @@ h1 { font-size: 1.6rem; margin: 0 0 16px; }
 }
 .setting-field { display: flex; flex-direction: column; }
 .setting-field label { font-weight: 600; }
-.setting-field input, .json-copy textarea {
+.setting-field input, .setting-field select, .json-copy textarea {
   min-height: var(--tap);
   padding: 8px 10px;
   border: 1px solid var(--border);
@@ -460,8 +460,10 @@ h1 { font-size: 1.6rem; margin: 0 0 16px; }
 @supports (height: 100dvh) {
   .t6-play { height: 100dvh; }
 }
-.t6-topbar { min-height: var(--tap); }
+.t6-topbar { min-height: var(--tap); display: grid; grid-template-columns: auto 1fr auto; gap: 4px 8px; }
+.t6-topbar [data-ref="side"] { justify-self: center; }
 .t6-live {
+  grid-row: 2; grid-column: 1 / -1;
   flex: 1;
   text-align: center;
   font-weight: 700;
@@ -469,6 +471,7 @@ h1 { font-size: 1.6rem; margin: 0 0 16px; }
   white-space: nowrap;
 }
 .t6-stage {
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow: hidden;
@@ -476,6 +479,9 @@ h1 { font-size: 1.6rem; margin: 0 0 16px; }
   border-radius: var(--radius);
   background: #07101f;
 }
+.t6-intro { position: absolute; inset: 0; overflow: auto; padding: 12px 18px; background: var(--bg); }
+.t6-intro h1 { margin: 0 0 12px; }
+.t6-message { margin: 0; font-size: 0.85rem; }
 .t6-stage canvas {
   display: block;
   width: 100%;

@@ -8,10 +8,9 @@ import {
 } from '../logic/t6.js';
 import { createRng, randomSeed } from '../core/rng.js';
 import { startTimer } from '../core/timer.js';
-import { appendRecord } from '../core/storage.js';
+import { appendRecord, readSettingsRaw, saveSettings } from '../core/storage.js';
 import { renderResult } from '../core/result.js';
 import { findTest, formatDetail } from '../core/catalog.js';
-import { createLandscapeGuard } from '../core/landscape.js';
 
 const DEG = Math.PI / 180;
 const AIRCRAFT_SIZE_RATIO = 0.055;
@@ -183,9 +182,8 @@ function drawScene(ctx, layout, state, p, stickInput) {
 }
 
 export function mount(root, ctx) {
-  const params = ctx.settings.t6;
+  const params = { ...ctx.settings.t6 };
   const meta = findTest('t6');
-  const guard = createLandscapeGuard();
   let teardown = null;
 
   function setPhase(cleanup) {
@@ -195,28 +193,73 @@ export function mount(root, ctx) {
     teardown = cleanup ?? null;
   }
 
+  // 準備中と本番で同じ帯・stageを使い、開始可否も実際の描画領域で測る。
+  function shell(intro = '') {
+    return `<section class="t6-play">
+      <div class="topbar t6-topbar">
+        <span class="remaining" data-ref="remaining">準備</span>
+        <button class="btn btn-quiet" type="button" data-ref="side"></button>
+        <button class="btn btn-quiet" type="button" data-ref="quit">${intro ? 'メニュー' : '途中終了'}</button>
+        <span class="t6-live" data-ref="live">矢印キー / 操縦円</span>
+      </div>
+      <p class="notice notice-error t6-message" data-ref="message" hidden></p>
+      <div class="t6-stage" data-ref="stage">
+        <canvas data-ref="canvas" aria-label="トンネル飛行の画面"></canvas>
+        ${intro ? `<div class="t6-intro">${intro}</div>` : ''}
+      </div>
+    </section>`;
+  }
+
+  function updateSideLabel() {
+    root.querySelector('[data-ref="side"]').textContent = params.stickSide === 'left' ? '操縦円: 左 → 右へ' : '操縦円: 右 → 左へ';
+  }
+
+  function swapSide() {
+    const side = params.stickSide === 'left' ? 'right' : 'left';
+    const raw = readSettingsRaw(ctx.store);
+    const saved = raw.value ?? {};
+    const result = raw.ok ? saveSettings(ctx.store, { ...saved, t6: { ...(saved.t6 ?? {}), stickSide: side } }) : raw;
+    const message = root.querySelector('[data-ref="message"]');
+    message.hidden = result.ok;
+    message.textContent = result.ok ? '' : result.message;
+    if (!result.ok) return false;
+    params.stickSide = side;
+    updateSideLabel();
+    return true;
+  }
+
+  function layoutForStage(stage) {
+    return computeTunnelLayout(stage.clientWidth, stage.clientHeight, params, {
+      viewportWidth: globalThis.innerWidth, viewportHeight: globalThis.innerHeight,
+    });
+  }
+
   function showStart() {
     setPhase(null);
-    root.innerHTML = `
-      <section class="screen t6-start">
-        <h1 data-ref="title"></h1>
-        <p>矢印キー、またはトンネルの下にある操縦用の円を指・マウスで動かして機体を操縦します。</p>
-        <p>半円、回転する3枚羽根、扇形、縁の小穴の開口を通り抜けます。</p>
-        <p class="muted">衝突すると速度が半分になり、安全な開口方向へ押し戻されます。制限時間は <span data-ref="duration"></span> 秒です。</p>
-        <div class="actions">
-          <button class="btn btn-primary btn-large" type="button" data-ref="start">開始</button>
-          <a class="btn" href="#/">メニュー</a>
-        </div>
-      </section>`;
+    root.innerHTML = shell(`<section class="t6-start">
+      <h1 data-ref="title"></h1>
+      <p>矢印キー、または操縦用の円を指・マウスで動かして機体を操縦します。横画面では左右ボタンで円の側を選べます。縦画面ではトンネルが上、操縦円が下です。</p>
+      <p>半円、回転する3枚羽根、扇形、縁の小穴の開口を通り抜けます。</p>
+      <p class="muted">衝突すると速度が半分になり、安全な開口方向へ押し戻されます。制限時間は <span data-ref="duration"></span> 秒です。</p>
+      <p class="notice notice-error" data-ref="layoutError" hidden></p>
+      <button class="btn btn-primary btn-large" type="button" data-ref="start">開始</button>
+    </section>`);
     root.querySelector('[data-ref="title"]').textContent = meta.name;
     root.querySelector('[data-ref="duration"]').textContent = String(params.durationSec);
     const startBtn = root.querySelector('[data-ref="start"]');
-    guard.setOnChange(landscape => { startBtn.disabled = !landscape; });
-    startBtn.addEventListener('click', () => {
-      if (guard.isLandscape()) startPlay();
-    });
+    const checkSize = () => {
+      const error = root.querySelector('[data-ref="layoutError"]');
+      try { layoutForStage(root.querySelector('[data-ref="stage"]')); startBtn.disabled = false; error.hidden = true; }
+      catch (e) { startBtn.disabled = true; error.textContent = e.message; error.hidden = false; }
+    };
+    startBtn.addEventListener('click', () => { checkSize(); if (!startBtn.disabled) startPlay(); });
+    root.querySelector('[data-ref="side"]').addEventListener('click', () => { swapSide(); checkSize(); });
+    root.querySelector('[data-ref="quit"]').addEventListener('click', () => ctx.navigate('#/'));
+    globalThis.addEventListener('resize', checkSize);
+    updateSideLabel();
+    checkSize();
     startBtn.focus();
-    setPhase(() => guard.setOnChange(null));
+    setPhase(() => globalThis.removeEventListener('resize', checkSize));
   }
 
   function startPlay() {
@@ -230,17 +273,8 @@ export function mount(root, ctx) {
     let layout = null;
     let disposed = false;
 
-    root.innerHTML = `
-      <section class="t6-play">
-        <div class="topbar t6-topbar">
-          <span class="remaining" data-ref="remaining"></span>
-          <span class="t6-live" data-ref="live"></span>
-          <button class="btn btn-quiet" type="button" data-ref="quit">途中終了</button>
-        </div>
-        <div class="t6-stage" data-ref="stage">
-          <canvas data-ref="canvas" aria-label="トンネル飛行の画面"></canvas>
-        </div>
-      </section>`;
+    root.innerHTML = shell();
+    updateSideLabel();
     const $ = name => root.querySelector(`[data-ref="${name}"]`);
     const canvas = $('canvas');
     const stage = $('stage');
@@ -248,9 +282,8 @@ export function mount(root, ctx) {
     const drawCtx = canvas.getContext('2d');
 
     function resizeCanvas() {
-      const rect = stage.getBoundingClientRect();
-      const width = Math.max(1, rect.width);
-      const height = Math.max(1, rect.height);
+      layout = layoutForStage(stage);
+      const { width, height } = layout;
       const dpr = Math.max(1, globalThis.devicePixelRatio || 1);
       const pixelWidth = Math.round(width * dpr);
       const pixelHeight = Math.round(height * dpr);
@@ -261,7 +294,6 @@ export function mount(root, ctx) {
         canvas.style.height = `${height}px`;
       }
       drawCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      layout = computeTunnelLayout(width, height, params);
     }
 
     function pointerPosition(e) {
@@ -312,7 +344,14 @@ export function mount(root, ctx) {
     function clearControls() {
       pressedKeys.clear();
       stickInput = { x: 0, y: 0 };
+      if (activePointerId !== null && canvas.hasPointerCapture?.(activePointerId)) canvas.releasePointerCapture(activePointerId);
       activePointerId = null;
+    }
+
+    function onResize() {
+      clearControls();
+      try { resizeCanvas(); }
+      catch (e) { abort(`${e.message}(記録は保存していません)`); }
     }
 
     function abort(message) {
@@ -328,9 +367,10 @@ export function mount(root, ctx) {
       }
       const dtSec = lastFrameTs === null ? 0 : (ts - lastFrameTs) / 1000;
       lastFrameTs = ts;
+      try { resizeCanvas(); }
+      catch (e) { abort(`${e.message}(記録は保存していません)`); return; }
       const input = combineInputs(keyboardInput(pressedKeys), stickInput);
       state = stepT6State(state, input, dtSec, params, rng);
-      resizeCanvas();
       drawScene(drawCtx, layout, state, params, stickInput);
       live.textContent = `通過 ${state.cleared}　衝突 ${state.collisions}　速度 ${state.speed.toFixed(2)}`;
     }
@@ -364,15 +404,14 @@ export function mount(root, ctx) {
     canvas.addEventListener('pointermove', onPointerMove);
     canvas.addEventListener('pointerup', stopPointer);
     canvas.addEventListener('pointercancel', stopPointer);
+    canvas.addEventListener('lostpointercapture', stopPointer);
     document.addEventListener('keydown', onKeyDown, { passive: false });
     document.addEventListener('keyup', onKeyUp, { passive: false });
     globalThis.addEventListener('blur', clearControls);
     $('quit').addEventListener('click', onQuit);
+    $('side').addEventListener('click', () => { clearControls(); swapSide(); onResize(); });
     document.addEventListener('visibilitychange', onVisibility);
-    globalThis.addEventListener('resize', resizeCanvas);
-    guard.setOnChange(landscape => {
-      if (!landscape) abort('端末が縦になったため中断しました(記録は保存していません)');
-    });
+    globalThis.addEventListener('resize', onResize);
 
     resizeCanvas();
     drawScene(drawCtx, layout, state, params, stickInput);
@@ -391,18 +430,17 @@ export function mount(root, ctx) {
       canvas.removeEventListener('pointermove', onPointerMove);
       canvas.removeEventListener('pointerup', stopPointer);
       canvas.removeEventListener('pointercancel', stopPointer);
+      canvas.removeEventListener('lostpointercapture', stopPointer);
       document.removeEventListener('keydown', onKeyDown);
       document.removeEventListener('keyup', onKeyUp);
       globalThis.removeEventListener('blur', clearControls);
       document.removeEventListener('visibilitychange', onVisibility);
-      globalThis.removeEventListener('resize', resizeCanvas);
-      guard.setOnChange(null);
+      globalThis.removeEventListener('resize', onResize);
     });
   }
 
   showStart();
   return () => {
     setPhase(null);
-    guard.destroy();
   };
 }

@@ -69,6 +69,7 @@ export const SETTING_FIELDS = Object.freeze({
   ]),
   t6: Object.freeze([
     duration(),
+    { key: 'stickSide', label: '横画面の操縦円の側', type: 'select', options: [{ value: 'right', label: '右' }, { value: 'left', label: '左' }] },
     number('moveSpeed', '機体の移動速度', 0.1, 10, { step: 0.1, unit: 'u/s' }),
     number('collisionSpeedFactor', '衝突時の速度倍率', 0.01, 1, { step: 0.01 }),
     number('initialSpeed', '初速', 0.1, 10, { step: 0.1, unit: 'u/s' }),
@@ -102,6 +103,9 @@ export function canPlaceT5Fallback(count, params) {
 }
 
 function parseField(field, input) {
+  if (field.type === 'select') {
+    return field.options.some(option => option.value === input) ? { value: input } : { error: '右または左を選んでください' };
+  }
   if (field.type === 'list') {
     const text = Array.isArray(input) ? input.join(',') : String(input ?? '').trim();
     if (!text) return { error: '値を入力してください' };

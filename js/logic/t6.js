@@ -60,39 +60,40 @@ function circleInside(circle, width, height, margin) {
     && circle.centerY + circle.radius <= height - margin;
 }
 
-export function computeTunnelLayout(width, height, p) {
-  if (!(width > 0) || !(height > 0)) throw new RangeError('Canvas の幅と高さは0より大きい必要があります');
+export function computeTunnelLayout(width, height, p, { topInset = 0, viewportWidth = width, viewportHeight = height } = {}) {
+  if (!(width > 0) || !(height > 0)) throw new RangeError('画面が小さすぎて、上の帯の下に描画領域を確保できません');
   const margin = p.canvasMarginPx;
-  const stickRadius = Math.min(
-    p.stickMaxRadiusPx,
-    Math.max(p.stickMinRadiusPx, height * p.stickRadiusRatio),
-  );
   const gap = margin;
-  const stickStacked = {
-    centerX: width / 2,
-    centerY: height - margin - stickRadius,
-    radius: stickRadius,
-  };
-  const tunnelBottom = stickStacked.centerY - stickRadius - gap;
-  const stackedRadius = Math.min(width / 2 - margin, (tunnelBottom - margin) / 2);
+  const usableHeight = height - topInset;
+  const stacked = viewportHeight > viewportWidth;
+  const minTunnel = Math.min(viewportWidth, viewportHeight) * p.tunnelMinRadiusRatio;
+  const axis = stacked ? usableHeight : width;
+  const cross = stacked ? width : usableHeight;
+  const stickRadius = Math.min(p.stickMaxRadiusPx,
+    Math.max(p.stickMinRadiusPx, Math.min(viewportWidth, viewportHeight) * p.stickRadiusRatio),
+    cross / 2 - margin, (axis - 2 * margin - gap - 2 * minTunnel) / 2);
+  const radius = Math.min(cross / 2 - margin, (axis - 2 * margin - gap - 2 * stickRadius) / 2);
+  if (stickRadius < p.stickMinRadiusPx || radius < minTunnel) {
+    throw new RangeError(`画面が小さすぎます。上の帯を除き、トンネル半径${Math.ceil(minTunnel)}px以上・操縦円半径${p.stickMinRadiusPx}px以上が必要です`);
+  }
   let tunnel;
   let stick;
   let mode;
-  if (stackedRadius >= height * p.layoutStackMinTunnelRatio) {
-    tunnel = { centerX: width / 2, centerY: margin + stackedRadius, radius: stackedRadius };
-    stick = stickStacked;
+  if (stacked) {
+    tunnel = { centerX: width / 2, centerY: topInset + margin + radius, radius };
+    stick = { centerX: width / 2, centerY: height - margin - stickRadius, radius: stickRadius };
     mode = 'stacked';
   } else {
-    const sideRadius = Math.min(
-      height / 2 - margin,
-      (width - 2 * margin - stickRadius * 2 - gap) / 2,
-    );
-    tunnel = { centerX: margin + sideRadius, centerY: height / 2, radius: sideRadius };
+    tunnel = { centerX: margin + radius, centerY: topInset + usableHeight / 2, radius };
     stick = {
       centerX: width - margin - stickRadius,
-      centerY: height - margin - stickRadius,
+      centerY: topInset + usableHeight / 2,
       radius: stickRadius,
     };
+    if (p.stickSide === 'left') {
+      tunnel.centerX = width - tunnel.centerX;
+      stick.centerX = width - stick.centerX;
+    }
     mode = 'side';
   }
   if (!(tunnel.radius > 0)

@@ -38,9 +38,10 @@ test('T6 の既定値は承認済みの数値', () => {
     aircraftMaxRadius: 0.86,
     canvasMarginPx: 8,
     stickRadiusRatio: 0.14,
-    stickMinRadiusPx: 48,
+    stickMinRadiusPx: 60,
     stickMaxRadiusPx: 90,
-    layoutStackMinTunnelRatio: 0.3,
+    tunnelMinRadiusRatio: 0.3,
+    stickSide: 'right',
     stallAbortMs: 1000,
     perspectiveFocal: 1,
     collisionZ: 1,
@@ -106,15 +107,18 @@ test('位置は入力×moveSpeed×dtで動き、入力0なら止まり、刻み�
   approx(once.y, twice.y);
 });
 
-for (const [width, height] of [[1180, 820], [844, 390]]) {
-  test(`${width}×${height}: トンネルとスティックは重ならず画面内で、スティック半径44px以上`, () => {
-    const layout = computeTunnelLayout(width, height, P);
-    assert.ok(layout.tunnel.radius > 0);
-    assert.ok(layout.stick.radius >= 44);
+for (const [width, height, side] of [[1180,820,'right'], [1180,820,'left'], [390,844,'right'], [844,390,'right']]) {
+  test(`${width}×${height} ${side}: 帯を避け画面内・非重複、トンネル短辺30%以上・スティック60px以上`, () => {
+    const topInset = 80;
+    const layout = computeTunnelLayout(width, height, { ...P, stickSide: side }, { topInset });
+    assert.ok(layout.tunnel.radius >= Math.min(width,height)*0.3);
+    assert.ok(layout.stick.radius >= 60);
+    if (height > width) { assert.equal(layout.mode, 'stacked'); assert.ok(layout.stick.centerY>layout.tunnel.centerY); }
+    else { assert.equal(layout.mode, 'side'); assert.equal(layout.stick.centerX>layout.tunnel.centerX, side==='right'); }
     for (const circle of [layout.tunnel, layout.stick]) {
       assert.ok(circle.centerX - circle.radius >= 0);
       assert.ok(circle.centerX + circle.radius <= width);
-      assert.ok(circle.centerY - circle.radius >= 0);
+      assert.ok(circle.centerY - circle.radius >= topInset);
       assert.ok(circle.centerY + circle.radius <= height);
     }
     const distance = Math.hypot(
@@ -124,6 +128,16 @@ for (const [width, height] of [[1180, 820], [844, 390]]) {
     assert.ok(distance >= layout.tunnel.radius + layout.stick.radius);
   });
 }
+
+test('最低サイズを確保できない画面は理由付きで拒否する', () => {
+  assert.throws(()=>computeTunnelLayout(240,200,P,{topInset:80}), /小さ|半径/);
+});
+
+test('Canvasが帯の下でも最低半径と縦横は画面全体を基準にする', () => {
+  const layout=computeTunnelLayout(828,294,P,{viewportWidth:844,viewportHeight:390});
+  assert.ok(layout.tunnel.radius>=117);
+  assert.equal(layout.mode,'side');
+});
 
 test('スティックは中心で入力0、縁で長さ1、円外は無効', () => {
   const layout = computeTunnelLayout(1180, 820, P);
