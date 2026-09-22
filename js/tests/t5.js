@@ -2,6 +2,7 @@
 
 import {
   generateT5Problem, reshuffleT5Dots, shuffleIndexAt, shouldTimeoutT5,
+  pairDotPositions, interpolateDotPositions,
   createT5Tally, recordT5Answer, recordT5Unanswered, buildT5Record,
 } from '../logic/t5.js';
 import { createRng, randomSeed } from '../core/rng.js';
@@ -15,8 +16,8 @@ function drawDots(canvas, problem, p) {
   const width = Math.max(1, rect.width);
   const height = Math.max(1, rect.height);
   const dpr = Math.max(1, globalThis.devicePixelRatio || 1);
-  canvas.width = Math.round(width * dpr);
-  canvas.height = Math.round(height * dpr);
+  if (canvas.width !== Math.round(width * dpr)) canvas.width = Math.round(width * dpr);
+  if (canvas.height !== Math.round(height * dpr)) canvas.height = Math.round(height * dpr);
   const ctx = canvas.getContext('2d');
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, width, height);
@@ -79,6 +80,7 @@ export function mount(root, ctx) {
     let questionStartMs = 0;
     let lastShuffleIndex = 0;
     let currentElapsed = 0;
+    let movement = null;
     let lastFrameTs = null;
     const pale = new Map();
 
@@ -106,11 +108,16 @@ export function mount(root, ctx) {
 
     function draw() {
       $('question').textContent = `第${questionNumber}問`;
-      drawDots(canvas, problem, params);
+      drawDots(canvas, { ...problem, dots: visibleDots() }, params);
+    }
+
+    function visibleDots() {
+      return movement ? interpolateDotPositions(movement.pairs, currentElapsed - movement.startedAt, params.dotMoveMs) : problem.dots;
     }
 
     function nextQuestion(elapsed) {
       problem = generateT5Problem(rng, params, problem);
+      movement = null;
       questionNumber++;
       questionStartMs = elapsed;
       lastShuffleIndex = 0;
@@ -163,11 +170,13 @@ export function mount(root, ctx) {
         } else {
           const index = shuffleIndexAt(elapsed - questionStartMs, params);
           if (index > lastShuffleIndex) {
+            const from = visibleDots(); // 前の移動が途中でも、その表示位置から続ける
             problem = reshuffleT5Dots(problem, rng, params);
+            movement = { pairs: pairDotPositions(from, problem.dots), startedAt: elapsed };
             lastShuffleIndex = index;
-            draw();
           }
         }
+        draw(); // 共通の1本のrAFで補間も描く
         for (const [button, pressedAt] of pale) {
           if (ts - pressedAt >= params.answerFeedbackMs) {
             button.classList.remove('is-pressed');

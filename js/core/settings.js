@@ -71,6 +71,7 @@ export const DEFAULTS = Object.freeze({
     minDots: 3,
     maxDots: 13,
     shuffleIntervalMs: 1000,
+    dotMoveMs: 400,
     questionLimitSec: 10,
     dotRadiusRatio: 0.025,
     dotMinDistanceRatio: 0.12,

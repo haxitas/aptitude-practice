@@ -106,6 +106,29 @@ export function reshuffleT5Dots(problem, rng, p) {
   return { count: problem.count, ...makeLayout(problem.count, rng, p) };
 }
 
+// 旧点を順に、まだ使っていない最も近い新点へ対応させる。同距離は添字の小さい方。
+export function pairDotPositions(old, next) {
+  if (old.length !== next.length) throw new RangeError('移動前後の点数が違います');
+  const used = new Set();
+  return old.map((from, fromIndex) => {
+    let toIndex = -1, nearest = Infinity;
+    next.forEach((point, index) => {
+      const distance = distanceSquared(from, point);
+      if (!used.has(index) && distance < nearest) { nearest = distance; toIndex = index; }
+    });
+    used.add(toIndex);
+    return { fromIndex, toIndex, from: { ...from }, to: { ...next[toIndex] } };
+  });
+}
+
+export function interpolateDotPositions(pairs, elapsedMs, durationMs) {
+  const k = durationMs <= 0 ? 1 : Math.max(0, Math.min(1, elapsedMs / durationMs));
+  return pairs.map(({ from, to }) => k === 1 ? { ...to } : ({
+    x: from.x + (to.x - from.x) * k,
+    y: from.y + (to.y - from.y) * k,
+  }));
+}
+
 export function shuffleIndexAt(elapsedMs, p) {
   if (!Number.isFinite(elapsedMs) || elapsedMs < 0) throw new RangeError('経過時間は0以上の有限値で指定してください');
   return Math.floor(elapsedMs / p.shuffleIntervalMs);
