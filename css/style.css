@@ -303,6 +303,41 @@ h1 { font-size: 1.6rem; margin: 0 0 16px; }
 .t3-audio-buttons { display: flex; gap: 12px; width: min(100%, 420px); }
 .t3-audio-buttons .t3-btn { flex: 1; height: clamp(44px, 9vh, 80px); font-size: clamp(1rem, 2vw, 1.3rem); }
 
+/* ---- テスト4 本番 ---- */
+.t4-play {
+  min-height: 100vh;
+  padding: 8px max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  user-select: none;
+  -webkit-user-select: none;
+}
+.t4-instruments { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; max-width: 760px; margin: 0 auto; }
+.t4-instruments figure { margin: 0; text-align: center; font-weight: 700; }
+.t4-instrument { display: block; width: min(100%, 280px); margin: 4px auto 0; color: var(--text); }
+.t4-dial { fill: var(--surface); stroke: var(--border); stroke-width: 3; }
+.t4-instrument text { fill: currentColor; font-size: 12px; font-weight: 700; }
+.t4-instrument .t4-nose { font-size: 15px; fill: var(--muted); }
+.t4-needle line { stroke: #d33232; stroke-width: 6; stroke-linecap: round; }
+.t4-needle path, .t4-hub { fill: #d33232; }
+.t4-answer { display: grid; grid-template-columns: minmax(210px, 320px) minmax(260px, 1fr); gap: 14px; max-width: 820px; margin: 12px auto 0; align-items: center; }
+.t4-map { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; aspect-ratio: 1; }
+.t4-choice, .t4-tower {
+  min-width: var(--tap); min-height: var(--tap); border: 1px solid var(--border); border-radius: 10px;
+  background: var(--surface); color: var(--text); font: inherit; font-size: 1.35rem; font-weight: 800;
+  display: flex; align-items: center; justify-content: center;
+}
+.t4-choice { cursor: pointer; transition: opacity 80ms linear, outline-color 80ms linear; }
+.t4-choice.is-selected { outline: 4px solid var(--accent); outline-offset: -4px; }
+.t4-tower { background: var(--warn-bg); color: var(--warn-text); font-size: 1rem; }
+.t4-headings { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.t4-heading { min-height: 58px; font-size: 1rem; }
+.t4-submit { grid-column: 2; min-height: 58px; transition: opacity 80ms linear; }
+.t4-submit.is-pressed { opacity: 0.35; }
+@media (max-width: 620px) {
+  .t4-answer { grid-template-columns: 1fr; }
+  .t4-map { max-width: 300px; width: 100%; margin: 0 auto; }
+  .t4-submit { grid-column: 1; }
+}
+
 /* ---- テスト6 本番 ---- */
 .t6-play {
   display: flex;

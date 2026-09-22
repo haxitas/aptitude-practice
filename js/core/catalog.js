@@ -31,7 +31,16 @@ export const TESTS = Object.freeze([
       { key: 'audioUnanswered', label: '音声 未回答' },
     ],
   },
-  { id: 't4', name: 'テスト4 計器の読み取り', implemented: false, details: [] },
+  {
+    id: 't4',
+    name: 'テスト4 計器の読み取り',
+    implemented: true,
+    details: [
+      { key: 'answered', label: '回答' },
+      { key: 'positionOnlyCorrect', label: '位置だけ正解' },
+      { key: 'headingOnlyCorrect', label: '向きだけ正解' },
+    ],
+  },
   { id: 't5', name: 'テスト5 点の数', implemented: false, details: [] },
   {
     id: 't6',

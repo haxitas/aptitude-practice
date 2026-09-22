@@ -38,6 +38,7 @@ export const DEFAULTS = Object.freeze({
   }),
   t4: Object.freeze({
     durationSec: 180,
+    answerFeedbackMs: 300,
   }),
   t5: Object.freeze({
     durationSec: 180,
