@@ -1,13 +1,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as storage from '../js/core/storage.js';
-import { readResults, appendRecord, readSettingsRaw, RESULTS_KEY, SETTINGS_KEY } from '../js/core/storage.js';
+import {
+  readResults, appendRecord, appendImportedRecords, clearResults,
+  readSettingsRaw, saveSettings, RESULTS_KEY, SETTINGS_KEY,
+} from '../js/core/storage.js';
 import { DEFAULTS, resolveSettings, loadSettings } from '../js/core/settings.js';
 
 class MemoryStore {
   constructor(init = {}) { this.data = new Map(Object.entries(init)); }
   getItem(k) { return this.data.has(k) ? this.data.get(k) : null; }
   setItem(k, v) { this.data.set(k, String(v)); }
+  removeItem(k) { this.data.delete(k); }
 }
 
 function rec(i) {
@@ -82,9 +86,9 @@ test('読み込み自体が例外を投げる保存先でも落ちずに失敗�
   assert.equal(appendRecord(store, rec(1)).ok, false);
 });
 
-test('storage には削除・書き換え用の関数がない', () => {
-  const bad = Object.keys(storage).filter(k => /^(delete|remove|clear|update|replace|overwrite|write|put)/i.test(k));
-  assert.deepEqual(bad, []);
+test('成績を消す関数は clearResults だけで、個別記録の書き換え関数はない', () => {
+  const destructive = Object.keys(storage).filter(k => /^(delete|remove|clear|update|replace|overwrite|write|put)/i.test(k));
+  assert.deepEqual(destructive, ['clearResults']);
 });
 
 // ---- apt_settings(読み込みのみ)と既定値の合成 ----
@@ -148,4 +152,52 @@ test('配列の設定値は、数値だけの配列なら使い、それ以外�
 test('文字列の設定値は文字列のときだけ使う', () => {
   assert.equal(resolveSettings({ t3: { speechLang: 'en-GB' } }).settings.t3.speechLang, 'en-GB');
   assert.equal(resolveSettings({ t3: { speechLang: 5 } }).settings.t3.speechLang, DEFAULTS.t3.speechLang);
+});
+
+test('設定を保存しても apt_results は1文字も変わらない', () => {
+  const original = JSON.stringify({ records: [rec(1)] });
+  const store = new MemoryStore({ [RESULTS_KEY]: original });
+  const result = saveSettings(store, { t2: { durationSec: 60 } });
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(store.getItem(RESULTS_KEY), original);
+  assert.equal(store.getItem(SETTINGS_KEY), JSON.stringify({ t2: { durationSec: 60 } }));
+});
+
+test('設定保存が例外でも apt_results は変わらず、画面用の理由を返す', () => {
+  const original = JSON.stringify({ records: [rec(1)] });
+  const store = new MemoryStore({ [RESULTS_KEY]: original });
+  store.setItem = (key) => { if (key === SETTINGS_KEY) { const e = new Error('denied'); e.name = 'SecurityError'; throw e; } };
+  const result = saveSettings(store, { t2: { durationSec: 60 } });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'write-failed');
+  assert.match(result.message, /設定を保存できませんでした.*SecurityError.*denied/);
+  assert.equal(store.getItem(RESULTS_KEY), original);
+});
+
+test('検証済みの読み込み記録は重複を除き、既存の後ろへ1回で追加する', () => {
+  const store = new MemoryStore();
+  appendRecord(store, rec(1));
+  const result = appendImportedRecords(store, [rec(1), rec(2), rec(2), rec(3)]);
+  assert.deepEqual(result, { ok: true, added: 2, ignored: 2 });
+  assert.deepEqual(readResults(store).records, [rec(1), rec(2), rec(3)]);
+});
+
+test('読み込みの書き込み失敗では apt_results を1文字も変えず、部分適用しない', () => {
+  const store = new MemoryStore();
+  appendRecord(store, rec(1));
+  const original = store.getItem(RESULTS_KEY);
+  store.setItem = (key) => { if (key === RESULTS_KEY) { const e = new Error('full'); e.name = 'QuotaExceededError'; throw e; } };
+  const result = appendImportedRecords(store, [rec(2), rec(3)]);
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'write-failed');
+  assert.match(result.message, /成績を保存できませんでした.*QuotaExceededError.*full/);
+  assert.equal(store.getItem(RESULTS_KEY), original);
+});
+
+test('clearResults は成績だけを消し、設定は変えない', () => {
+  const settings = JSON.stringify({ t2: { durationSec: 60 } });
+  const store = new MemoryStore({ [RESULTS_KEY]: JSON.stringify({ records: [rec(1)] }), [SETTINGS_KEY]: settings });
+  assert.deepEqual(clearResults(store), { ok: true });
+  assert.equal(store.getItem(RESULTS_KEY), null);
+  assert.equal(store.getItem(SETTINGS_KEY), settings);
 });

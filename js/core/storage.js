@@ -1,5 +1,5 @@
-// 成績(apt_results)は読み込みと追加だけ。削除・書き換えの関数は置かない。
-// 設定(apt_settings)は読み込みだけ(書き込みは Phase4 の設定画面で扱う)。
+// 成績(apt_results)は読み込みと追加が原則。全消去だけは設定画面の2段階確認後に許す。
+// 設定(apt_settings)は読み込みと上書きを行う。
 // 保存先は引数で渡す(getItem/setItem を持つもの)。node のテストではメモリ上の偽物を渡す。
 
 export const RESULTS_KEY = 'apt_results';
@@ -59,6 +59,53 @@ export function appendRecord(store, record) {
     store.setItem(RESULTS_KEY, JSON.stringify(next));
   } catch (e) {
     return { ok: false, reason: 'write-failed', message: `保存領域に書き込めませんでした(${errorText(e)})` };
+  }
+  return { ok: true };
+}
+
+// 検証済みの読み込み記録を1回の書き込みで追加する。既存要素は順番・内容とも変えない。
+export function appendImportedRecords(store, imported) {
+  const cur = readResults(store);
+  if (!cur.ok) return { ok: false, reason: cur.reason, message: cur.message };
+  const ids = new Set(cur.records.map(record => record?.id));
+  const addedRecords = [];
+  let ignored = 0;
+  for (const record of imported) {
+    if (ids.has(record.id)) {
+      ignored++;
+      continue;
+    }
+    ids.add(record.id);
+    addedRecords.push(record);
+  }
+  if (!addedRecords.length) return { ok: true, added: 0, ignored };
+  const next = { ...(cur.data ?? {}), records: [...cur.records, ...addedRecords] };
+  try {
+    store.setItem(RESULTS_KEY, JSON.stringify(next));
+  } catch (e) {
+    return { ok: false, reason: 'write-failed', message: `成績を保存できませんでした(${errorText(e)})` };
+  }
+  return { ok: true, added: addedRecords.length, ignored };
+}
+
+export function saveSettings(store, settings) {
+  if (!store) return { ok: false, reason: 'unavailable', message: '設定を保存できませんでした(保存領域を使えません)' };
+  try {
+    store.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  } catch (e) {
+    return { ok: false, reason: 'write-failed', message: `設定を保存できませんでした(${errorText(e)})` };
+  }
+  return { ok: true };
+}
+
+// append-only の唯一の例外。
+// 設定画面でユーザーが2段階の確認を完了した場合だけ呼ぶ。
+export function clearResults(store) {
+  if (!store) return { ok: false, reason: 'unavailable', message: '成績を消去できませんでした(保存領域を使えません)' };
+  try {
+    store.removeItem(RESULTS_KEY);
+  } catch (e) {
+    return { ok: false, reason: 'write-failed', message: `成績を消去できませんでした(${errorText(e)})` };
   }
   return { ok: true };
 }

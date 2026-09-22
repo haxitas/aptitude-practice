@@ -12,6 +12,7 @@ import * as t4 from './tests/t4.js';
 import * as t5 from './tests/t5.js';
 import * as t6 from './tests/t6.js';
 import * as history from './history.js';
+import * as settingsScreen from './settings.js';
 
 const SCREENS = { t1, t2, t3, t4, t5, t6 };
 
@@ -103,7 +104,7 @@ function render() {
   } else if (route === 'history') {
     cleanup = history.mount(root, ctx) ?? null;
   } else if (route === 'settings') {
-    renderPending('設定');
+    cleanup = settingsScreen.mount(root, ctx) ?? null;
   } else if (findTest(route)) {
     const screen = SCREENS[route];
     if (screen) cleanup = screen.mount(root, ctx) ?? null;
