@@ -1,5 +1,5 @@
 // テスト一覧。メニューと履歴画面が共用する。
-// details: 結果画面と履歴の表に出す内訳(record.detail のキーと表示名)
+// details: 結果画面に出す内訳(record.detail のキーと表示名)。inHistory: false のものは履歴の表に出さない
 
 export const TESTS = Object.freeze([
   { id: 't1', name: 'テスト1 計算', implemented: false, details: [] },
@@ -14,7 +14,23 @@ export const TESTS = Object.freeze([
       { key: 'meanRtMs', label: '平均反応時間', unit: 'ms' },
     ],
   },
-  { id: 't3', name: 'テスト3 マルチタスク', implemented: false, details: [] },
+  {
+    id: 't3',
+    name: 'テスト3 マルチタスク',
+    implemented: true,
+    details: [
+      { key: 'shapeCorrect', label: '図形 正答' },
+      { key: 'shapeAnswered', label: '図形 回答', inHistory: false },
+      { key: 'shapeAccuracy', label: '図形 正答率', unit: '%', inHistory: false },
+      { key: 'calcCorrect', label: '計算 正答' },
+      { key: 'calcAnswered', label: '計算 回答', inHistory: false },
+      { key: 'calcAccuracy', label: '計算 正答率', unit: '%', inHistory: false },
+      { key: 'audioCorrect', label: '音声 正答' },
+      { key: 'audioAnswered', label: '音声 回答', inHistory: false },
+      { key: 'audioAccuracy', label: '音声 正答率', unit: '%', inHistory: false },
+      { key: 'audioUnanswered', label: '音声 未回答' },
+    ],
+  },
   { id: 't4', name: 'テスト4 計器の読み取り', implemented: false, details: [] },
   { id: 't5', name: 'テスト5 点の数', implemented: false, details: [] },
   { id: 't6', name: 'テスト6 トンネル飛行', implemented: false, details: [] },

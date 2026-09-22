@@ -72,8 +72,9 @@ export function mount(root, ctx) {
       stats.append(cell('dt', label), cell('dd', String(value)));
     }
 
+    const cols = test.details.filter(d => d.inHistory !== false);
     const head = $('head');
-    head.replaceChildren(cell('th', '日時'), cell('th', '点数'), ...test.details.map(d => cell('th', d.label)));
+    head.replaceChildren(cell('th', '日時'), cell('th', '点数'), ...cols.map(d => cell('th', d.label)));
 
     const body = $('body');
     body.replaceChildren();
@@ -81,7 +82,7 @@ export function mount(root, ctx) {
     for (const r of rows) {
       const tr = document.createElement('tr');
       tr.append(cell('td', formatDate(r.date)), cell('td', String(r.score)));
-      for (const d of test.details) tr.append(cell('td', formatDetail(d, r.detail?.[d.key])));
+      for (const d of cols) tr.append(cell('td', formatDetail(d, r.detail?.[d.key])));
       body.append(tr);
     }
     $('empty').hidden = rows.length > 0;

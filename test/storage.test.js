@@ -133,3 +133,19 @@ test('loadSettings の結果を書き換えても DEFAULTS は変わらない', 
   settings.t2.durationSec = before + 1;
   assert.equal(DEFAULTS.t2.durationSec, before);
 });
+
+test('配列の設定値は、数値だけの配列なら使い、それ以外は既定値に戻す', () => {
+  const ok = resolveSettings({ t3: { calcDistractorOffsets: [3, 4, 5] } });
+  assert.deepEqual(ok.settings.t3.calcDistractorOffsets, [3, 4, 5]);
+  assert.deepEqual(ok.warnings, []);
+  for (const bad of ['1,2,10', { 0: 1 }, [1, 'a', 3], [1, NaN, 3]]) {
+    const r = resolveSettings({ t3: { calcDistractorOffsets: bad } });
+    assert.deepEqual(r.settings.t3.calcDistractorOffsets, DEFAULTS.t3.calcDistractorOffsets, JSON.stringify(bad));
+    assert.deepEqual(r.warnings, ['t3.calcDistractorOffsets']);
+  }
+});
+
+test('文字列の設定値は文字列のときだけ使う', () => {
+  assert.equal(resolveSettings({ t3: { speechLang: 'en-GB' } }).settings.t3.speechLang, 'en-GB');
+  assert.equal(resolveSettings({ t3: { speechLang: 5 } }).settings.t3.speechLang, DEFAULTS.t3.speechLang);
+});

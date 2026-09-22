@@ -6,9 +6,10 @@ import { defaultStore, readResults } from './core/storage.js';
 import { loadSettings } from './core/settings.js';
 import { summarize } from './core/stats.js';
 import * as t2 from './tests/t2.js';
+import * as t3 from './tests/t3.js';
 import * as history from './history.js';
 
-const SCREENS = { t2 };
+const SCREENS = { t2, t3 };
 
 const root = document.getElementById('app');
 const store = defaultStore();

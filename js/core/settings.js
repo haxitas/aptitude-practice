@@ -16,15 +16,23 @@ export const DEFAULTS = Object.freeze({
   }),
   t3: Object.freeze({
     durationSec: 240,
-    triangleTiltMaxDeg: 10,
+    triangleTiltMaxDeg: 10, // 三角形の傾きの最大(±)
+    calcTermCount: 4, // 計算の数の個数
     calcTermMin: 1,
     calcTermMax: 20,
+    calcSubtractRate: 0.5, // 引き算を選べるときに選ぶ確率
+    calcDistractorOffsets: Object.freeze([1, 2, 10]), // 誤答は正解 ± これらの値から作る
     speechWordCount: 5,
-    speechIntervalMs: 1000,
+    speechIntervalMs: 1000, // 語の読み始めの間隔
     speechRate: 0.9,
+    speechLang: 'en-US',
     duplicateRate: 0.5,
-    speechAnswerLimitMs: 5000,
-    speechNextDelayMs: 1000,
+    speechAnswerLimitMs: 5000, // 読み終えてから答えられる時間
+    speechNextDelayMs: 1000, // 回答(または未回答)から次の組までの時間
+    speechEndFallbackMs: 2500, // onend が来ないとき、読み始めからこの時間で読み終わりとみなす
+    speechIdleGraceMs: 250, // 読み上げが止まって見えても、読み始めからこの時間は待つ
+    stallAbortMs: 1000, // フレームの間隔がこれを超えたら描画が止まったとみなして中断する
+    answerFeedbackMs: 300, // 押したボタンを薄くしておく最低の時間
   }),
   t4: Object.freeze({
     durationSec: 180,
@@ -53,6 +61,7 @@ export const DISPLAY = Object.freeze({
 
 function sameType(def, val) {
   if (typeof def === 'number') return typeof val === 'number' && Number.isFinite(val);
+  if (Array.isArray(def)) return Array.isArray(val) && val.every(x => typeof x === 'number' && Number.isFinite(x));
   return typeof def === typeof val && val !== null;
 }
 
