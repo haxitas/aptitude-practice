@@ -88,16 +88,16 @@ test('記録: SPEC §4 の形で、その回の T2 設定をすべて入れる',
   assert.deepEqual(r, {
     id: '2026-09-23T10:15:00.000Z-t2', test: 't2', date, score: 72,
     detail: { hits: 36, misses: 9, falseAlarms: 4, meanRtMs: 512 },
-    settings: { durationSec: 180, intervalMs: 1000, matchRate: 0.25, maxConsecutiveMatches: 2, falseAlarmPenalty: 2 },
+    settings: { durationSec: 120, intervalMs: 1000, matchRate: 0.25, maxConsecutiveMatches: 1, falseAlarmPenalty: 2, pressFeedbackMs: 300 },
   });
   assert.notEqual(r.settings, P);
 });
 
 // ---- 生成 ----
 
-test('既定値: 表示回数 180、一致 45 回', () => {
-  assert.equal(displayCount(P), 180);
-  assert.equal(matchCount(P), 45);
+test('既定値: 表示回数 120、一致 30 回', () => {
+  assert.equal(displayCount(P), 120);
+  assert.equal(matchCount(P), 30);
 });
 
 test('表示回数は floor(制限時間 ÷ 間隔)、一致回数は Math.round(N×確率)', () => {
@@ -109,9 +109,9 @@ test('表示回数は floor(制限時間 ÷ 間隔)、一致回数は Math.round
 test('生成(シード200種類): SPEC の条件をすべて満たす', () => {
   for (let seed = 1; seed <= 200; seed++) {
     const seq = generateSequence(P, createRng(seed));
-    assert.equal(seq.length, 180, `seed=${seed}`);
-    assert.equal(seq.filter(d => d.match).length, 45, `seed=${seed}`);
-    assert.ok(longestMatchRun(seq) < 3, `seed=${seed}: 一致が3回以上続いた`);
+    assert.equal(seq.length, 120, `seed=${seed}`);
+    assert.equal(seq.filter(d => d.match).length, 30, `seed=${seed}`);
+    assert.ok(longestMatchRun(seq) < 2, `seed=${seed}: 一致が2回続いた`);
     for (let i = 0; i < seq.length; i++) {
       const d = seq[i];
       assert.ok(SHAPES.includes(d.left) && SHAPES.includes(d.right), `seed=${seed} i=${i}`);
@@ -135,7 +135,7 @@ test('生成: シードが同じなら同じ系列', () => {
 });
 
 test('生成: 実現できない設定(確率0.9)はエラーにし、使える確率の上限を示す', () => {
-  assert.throws(() => generateSequence({ ...P, matchRate: 0.9 }, createRng(1)), /上限.*0\.667/);
+  assert.throws(() => generateSequence({ ...P, matchRate: 0.9 }, createRng(1)), /上限.*0\.500/);
 });
 
 test('生成の境界: N=180, k=2 で m=120 は成功、m=121 はエラー', () => {

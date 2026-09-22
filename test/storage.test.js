@@ -97,7 +97,7 @@ test('apt_settings がなければ既定値そのもの', () => {
 
 test('T2 の既定値は SPEC §6 と承認済みの値', () => {
   assert.deepEqual(DEFAULTS.t2, {
-    durationSec: 180, intervalMs: 1000, matchRate: 0.25, maxConsecutiveMatches: 2, falseAlarmPenalty: 2,
+    durationSec: 120, intervalMs: 1000, matchRate: 0.25, maxConsecutiveMatches: 1, falseAlarmPenalty: 2, pressFeedbackMs: 300,
   });
   for (const id of ['t1', 't2', 't3', 't4', 't5', 't6']) assert.ok(DEFAULTS[id], id);
 });
@@ -115,7 +115,7 @@ test('保存値は既定値と合成され、型が合わないキーだけ既�
 
 test('NaN・Infinity は数値として扱わない', () => {
   const { settings } = resolveSettings({ t2: { durationSec: Infinity } });
-  assert.equal(settings.t2.durationSec, 180);
+  assert.equal(settings.t2.durationSec, DEFAULTS.t2.durationSec);
 });
 
 test('apt_settings が JSON として読めないときは既定値で動き、値は書き換えない', () => {
@@ -129,6 +129,7 @@ test('apt_settings が JSON として読めないときは既定値で動き、�
 
 test('loadSettings の結果を書き換えても DEFAULTS は変わらない', () => {
   const { settings } = loadSettings(new MemoryStore());
-  settings.t2.durationSec = 1;
-  assert.equal(DEFAULTS.t2.durationSec, 180);
+  const before = DEFAULTS.t2.durationSec;
+  settings.t2.durationSec = before + 1;
+  assert.equal(DEFAULTS.t2.durationSec, before);
 });

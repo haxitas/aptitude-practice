@@ -7,11 +7,12 @@ export const DEFAULTS = Object.freeze({
     durationSec: 180,
   }),
   t2: Object.freeze({
-    durationSec: 180,
+    durationSec: 120, // 2026-09-22 ユーザーの判断で 180 → 120
     intervalMs: 1000,
     matchRate: 0.25,
-    maxConsecutiveMatches: 2, // 一致が続いてよい最大回数(「3回以上続かない」)
+    maxConsecutiveMatches: 1, // 一致が続いてよい最大回数(2026-09-22 ユーザーの判断で「2回続けて出さない」)
     falseAlarmPenalty: 2, // 誤押し1回あたりの減点
+    pressFeedbackMs: 300, // 押したあとボタンを薄くしておく最低の時間
   }),
   t3: Object.freeze({
     durationSec: 240,

@@ -115,12 +115,25 @@ export function mount(root, ctx) {
     // フォーカスのあるボタンがスペースキーで押されないように外しておく
     document.activeElement?.blur?.();
 
+    // 押したことを見せる: 受け付けた押下のあと、その表示が終わるまで、かつ押してから
+    // pressFeedbackMs たつまではボタンを薄くする(表示が切り替わっても最低時間は保つ)。
+    // 時間の管理は rAF のループ(onFrame)で行う。正誤は出さない。
+    let lastPressTs = -Infinity;
+    let pale = false;
+    function setPale(on) {
+      if (on === pale) return;
+      pale = on;
+      sameBtn.classList.toggle('is-pressed', on);
+    }
+
     function press(ts) {
       if (cur < 0) return;
+      // 判定は押した時点の表示に対して行う(薄いあいだでも、新しい表示なら受け付ける)
       const r = registerPress(ds, Math.max(0, ts - frameTs));
       if (!r.accepted) return;
       ds = r.state;
-      sameBtn.classList.add('is-pressed');
+      lastPressTs = ts;
+      setPale(true);
     }
 
     // 描画が止まって表示が1つ以上飛んだ回は、非表示のときと同じく中断して保存しない
@@ -131,19 +144,21 @@ export function mount(root, ctx) {
 
     function onFrame(elapsed, ts) {
       const i = Math.min(N - 1, Math.floor(elapsed / params.intervalMs));
-      if (i === cur) return;
-      if (i > cur + 1) {
-        abortStalled();
-        return;
+      if (i !== cur) {
+        if (i > cur + 1) {
+          abortStalled();
+          return;
+        }
+        // 前の表示の判定を確定してから次を描く
+        if (cur >= 0) tally = settleDisplay(tally, seq[cur].match, ds);
+        cur = i;
+        ds = createDisplayState();
+        drawShape(leftEl, seq[i].left);
+        drawShape(rightEl, seq[i].right);
+        frameTs = ts;
       }
-      // 前の表示の判定を確定してから次を描く
-      if (cur >= 0) tally = settleDisplay(tally, seq[cur].match, ds);
-      cur = i;
-      ds = createDisplayState();
-      drawShape(leftEl, seq[i].left);
-      drawShape(rightEl, seq[i].right);
-      frameTs = ts;
-      sameBtn.classList.remove('is-pressed');
+      // いまの表示で押したか、押してから最低時間がたっていなければ薄いまま
+      setPale(ds.pressed || ts - lastPressTs < params.pressFeedbackMs);
     }
 
     function onEnd() {
