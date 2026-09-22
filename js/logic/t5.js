@@ -3,31 +3,93 @@ import { randInt, shuffle } from '../core/rng.js';
 
 const TAU = Math.PI * 2;
 
-function candidateDots(phase) {
-  const dots = [{ x: 0, y: 0 }];
-  for (let i = 0; i < 6; i++) {
-    const angle = phase + i * TAU / 6;
-    dots.push({ x: Math.cos(angle) * 0.3, y: Math.sin(angle) * 0.3 });
+export function distanceSquared(a, b) {
+  return (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
+}
+
+export function isPointInsideCircle(point, fieldRadius, dotRadius) {
+  const centerLimit = fieldRadius - dotRadius;
+  return centerLimit >= 0 && point.x ** 2 + point.y ** 2 <= centerLimit ** 2 + Number.EPSILON;
+}
+
+export function hasMinimumDistance(points, minDistance) {
+  const minSquared = minDistance ** 2;
+  for (let i = 0; i < points.length; i++) {
+    for (let j = i + 1; j < points.length; j++) {
+      if (distanceSquared(points[i], points[j]) < minSquared - Number.EPSILON) return false;
+    }
   }
-  for (let i = 0; i < 12; i++) {
-    const angle = phase + Math.PI / 12 + i * TAU / 12;
-    dots.push({ x: Math.cos(angle) * 0.68, y: Math.sin(angle) * 0.68 });
+  return true;
+}
+
+function randomPoint(rng, centerLimit) {
+  const radius = Math.sqrt(rng()) * centerLimit;
+  const angle = rng() * TAU;
+  return { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius };
+}
+
+function tryRandomLayout(rng, count, p) {
+  const centerLimit = 1 - p.dotRadiusRatio;
+  for (let restart = 0; restart < p.layoutRestartLimit; restart++) {
+    const dots = [];
+    for (let index = 0; index < count; index++) {
+      let placed = false;
+      for (let attempt = 0; attempt < p.placementAttemptLimit; attempt++) {
+        const candidate = randomPoint(rng, centerLimit);
+        if (dots.every(dot => distanceSquared(dot, candidate) >= p.dotMinDistanceRatio ** 2 - Number.EPSILON)) {
+          dots.push(candidate);
+          placed = true;
+          break;
+        }
+      }
+      if (!placed) break;
+    }
+    if (dots.length === count) return dots;
+  }
+  return null;
+}
+
+function fallbackGrid(rng, count, p) {
+  const limit = 1 - p.dotRadiusRatio;
+  const gap = p.dotMinDistanceRatio;
+  const rowGap = gap * Math.sqrt(3) / 2;
+  const rowLimit = Math.floor(limit / rowGap);
+  const columnLimit = Math.floor(limit / gap) + 1;
+  const candidates = [];
+  for (let row = -rowLimit; row <= rowLimit; row++) {
+    const y = row * rowGap;
+    const offset = Math.abs(row) % 2 ? gap / 2 : 0;
+    for (let column = -columnLimit; column <= columnLimit; column++) {
+      const point = { x: column * gap + offset, y };
+      if (isPointInsideCircle(point, 1, p.dotRadiusRatio)) candidates.push(point);
+    }
+  }
+  const angle = rng() * TAU;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const rotated = candidates.map(({ x, y }) => ({ x: x * cos - y * sin, y: x * sin + y * cos }));
+  const dots = shuffle(rng, rotated).slice(0, count);
+  if (dots.length !== count || !hasMinimumDistance(dots, gap)) {
+    throw new RangeError('代用の格子配置でも必要な点数を置けません');
   }
   return dots;
 }
 
+export function generateDotPositions(rng, count, p) {
+  const randomDots = tryRandomLayout(rng, count, p);
+  if (randomDots) return { dots: randomDots, layoutMode: 'random' };
+  return { dots: fallbackGrid(rng, count, p), layoutMode: 'fallback' };
+}
+
 function validateCount(count, p) {
-  if (!Number.isInteger(count) || count < p.minDots || count > p.maxDots || count > 19) {
-    throw new RangeError(`点の数は${p.minDots}〜${Math.min(p.maxDots, 19)}の整数で指定してください`);
+  if (!Number.isInteger(count) || count < p.minDots || count > p.maxDots) {
+    throw new RangeError(`点の数は${p.minDots}〜${p.maxDots}の整数で指定してください`);
   }
 }
 
-function makeLayout(count, rng, p, previousPhase = null) {
+function makeLayout(count, rng, p) {
   validateCount(count, p);
-  let phase = rng() * TAU;
-  if (phase === previousPhase) phase = (phase + Math.PI / 24) % TAU;
-  const dots = shuffle(rng, candidateDots(phase)).slice(0, count);
-  return { dots, phase };
+  return generateDotPositions(rng, count, p);
 }
 
 export function generateT5Problem(rng, p, previous = null) {
@@ -41,7 +103,7 @@ export function generateT5Problem(rng, p, previous = null) {
 }
 
 export function reshuffleT5Dots(problem, rng, p) {
-  return { count: problem.count, ...makeLayout(problem.count, rng, p, problem.phase) };
+  return { count: problem.count, ...makeLayout(problem.count, rng, p) };
 }
 
 export function shuffleIndexAt(elapsedMs, p) {

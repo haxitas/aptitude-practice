@@ -16,8 +16,10 @@ test('T5 の既定値は承認済みの数値', () => {
     maxDots: 13,
     shuffleIntervalMs: 1000,
     questionLimitSec: 10,
-    dotMinGapRatio: 0.2,
     dotRadiusRatio: 0.025,
+    dotMinDistanceRatio: 0.12,
+    placementAttemptLimit: 200,
+    layoutRestartLimit: 20,
     answerFeedbackMs: 300,
     stallAbortMs: 1000,
   });
@@ -44,7 +46,7 @@ function assertValidLayout(q) {
   }
   for (let i = 0; i < q.dots.length; i++) {
     for (let j = i + 1; j < q.dots.length; j++) {
-      assert.ok(Math.hypot(q.dots[i].x - q.dots[j].x, q.dots[i].y - q.dots[j].y) >= P.dotMinGapRatio - 1e-12);
+      assert.ok(Math.hypot(q.dots[i].x - q.dots[j].x, q.dots[i].y - q.dots[j].y) >= P.dotMinDistanceRatio - 1e-12);
     }
   }
 }
@@ -55,13 +57,42 @@ test('1000シードで点はすべて円内、最小間隔を守る', () => {
   }
 });
 
-test('13個でも1000シードすべて構成的に配置できる', () => {
+test('13個でも1000シードすべて配置できる', () => {
   const p = { ...P, minDots: 13, maxDots: 13 };
   for (let seed = 1; seed <= 1000; seed++) {
     const q = generateT5Problem(createRng(seed), p);
     assert.equal(q.count, 13);
     assertValidLayout(q);
   }
+});
+
+test('1000シードで半径が中心・中間・外側へ散らばり、固定の2重輪に乗らない点が多数ある', () => {
+  const zones = { center: 0, middle: 0, outer: 0 };
+  let total = 0;
+  let offOldRings = 0;
+  for (let seed = 1; seed <= 1000; seed++) {
+    const q = generateT5Problem(createRng(seed), P);
+    for (const dot of q.dots) {
+      const radius = Math.hypot(dot.x, dot.y);
+      if (radius < 0.3) zones.center++;
+      else if (radius < 0.6) zones.middle++;
+      else zones.outer++;
+      if (![0, 0.3, 0.68].some(ring => Math.abs(radius - ring) < 1e-9)) offOldRings++;
+      total++;
+    }
+  }
+  assert.ok(zones.center > 0, `中心付近がありません: ${JSON.stringify(zones)}`);
+  assert.ok(zones.middle > 0, `中間がありません: ${JSON.stringify(zones)}`);
+  assert.ok(zones.outer > 0, `外側がありません: ${JSON.stringify(zones)}`);
+  assert.ok(offOldRings > total * 0.8, `2重輪以外が少なすぎます: ${offOldRings}/${total}`);
+});
+
+test('同じ値しか返さない乱数では上限後に格子配置で13個を返す', () => {
+  const p = { ...P, minDots: 13, maxDots: 13 };
+  const q = generateT5Problem(() => 0.5, p);
+  assert.equal(q.layoutMode, 'fallback');
+  assert.equal(q.count, 13);
+  assertValidLayout(q);
 });
 
 test('位置の入れ替えは個数を変えず、別の配置にする', () => {
