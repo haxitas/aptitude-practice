@@ -144,6 +144,16 @@ test('計算(シード1000種類): 各数は1〜20、途中の値が負になら
   }
 });
 
+test('計算: 最終の答えが0以上でも、各項の途中の値が負でないことを確認する', () => {
+  const q = generateCalcProblem(createRng(1), P);
+  assert.ok(q.answer >= 0, `最終の答えが負 ${q.answer}`);
+  let r = 0;
+  q.terms.forEach((t, i) => {
+    r = t.op === '+' ? r + t.n : r - t.n;
+    assert.ok(r >= 0, `項${i + 1}: 途中の値が負 ${r} (最終の答え ${q.answer})`);
+  });
+});
+
 test('計算: 引き算も足し算も出る、答えが0の問題でも4択を作れる', () => {
   let sawMinus = false, sawPlus = false, sawZero = false;
   for (let seed = 1; seed <= 3000; seed++) {
