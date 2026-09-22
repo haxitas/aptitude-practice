@@ -1,7 +1,7 @@
 // テスト4 計器の読み取り: SVG描画、3段階の解答操作、時間管理、保存。
 
 import {
-  DIRECTIONS, generateT4Problem, createT4Selection,
+  DIRECTIONS, generateT4Problem, createT4Selection, createT4Example,
   selectT4Position, selectT4Heading, canSubmitT4,
   judgeT4, createT4Tally, recordT4Answer, buildT4Record,
 } from '../logic/t4.js';
@@ -44,28 +44,15 @@ export function mount(root, ctx) {
   }
 
   function showStart() {
-    setPhase(null);
-    root.innerHTML = `
-      <section class="screen">
-        <h1 data-ref="title"></h1>
-        <p>左のコンパスで機首の向き、右の相対方位計で電波塔の方向を読みます。</p>
-        <p>自機のマスと向きを選び、「決定」を押してください。制限時間は <span data-ref="duration"></span> 秒です。</p>
-        <div class="actions">
-          <button class="btn btn-primary btn-large" type="button" data-ref="start">開始</button>
-          <a class="btn" href="#/">メニュー</a>
-        </div>
-      </section>`;
-    const $ = name => root.querySelector(`[data-ref="${name}"]`);
-    $('title').textContent = meta.name;
-    $('duration').textContent = String(params.durationSec);
-    $('start').addEventListener('click', startPlay);
-    $('start').focus();
+    showBoard(true);
   }
 
-  function startPlay() {
+  // 例題と本番は計器・マス・矢印の描画を共用する。例題ではタイマーを作らない。
+  function showBoard(example = false, startAt = performance.now()) {
     setPhase(null);
     const rng = createRng(randomSeed());
-    let problem = generateT4Problem(rng);
+    const sample = createT4Example();
+    let problem = example ? sample.problem : generateT4Problem(rng);
     let selection = createT4Selection();
     let tally = createT4Tally();
     let paleUntil = -Infinity;
@@ -76,6 +63,9 @@ export function mount(root, ctx) {
           <span class="remaining" data-ref="remaining"></span>
           <button class="btn btn-quiet" type="button" data-ref="quit">途中終了</button>
         </div>
+        ${example ? `<p class="t4-example-note"><strong>例題 — 画面をタップして本番開始</strong><br>
+          機首N・ADFの針が右(相対90°)なので、塔は東。自機は塔の反対の<strong>西のマス</strong>、向きは機首と同じ<strong>N</strong>です。<br>
+          本番はマス→向き→決定。制限時間${params.durationSec}秒はタップから数えます。</p>` : ''}
         <div class="t4-instruments">
           <figure><figcaption>機首の方位</figcaption><div data-ref="compass"></div></figure>
           <figure><figcaption>塔の相対方向</figcaption><div data-ref="adf"></div></figure>
@@ -130,7 +120,7 @@ export function mount(root, ctx) {
     function drawProblem() {
       $('compass').innerHTML = instrumentSvg(problem.headingIndex, false);
       $('adf').innerHTML = instrumentSvg(problem.relativeIndex, true);
-      selection = createT4Selection();
+      selection = example ? { ...sample.selection } : createT4Selection();
       updateSelection();
     }
 
@@ -162,6 +152,19 @@ export function mount(root, ctx) {
       if (document.visibilityState === 'hidden') abort(`${meta.name}は、画面が切り替わったため中断しました(記録は保存していません)`);
     }
 
+    if (example) {
+      $('remaining').textContent = '例題';
+      $('quit').textContent = 'メニュー';
+      const onStart = e => {
+        if (e.target.closest('[data-ref="quit"]')) { setPhase(null); ctx.navigate('#/'); return; }
+        showBoard(false, performance.now());
+      };
+      drawProblem();
+      root.addEventListener('click', onStart);
+      setPhase(() => root.removeEventListener('click', onStart));
+      return;
+    }
+
     positionButtons.forEach(b => b.addEventListener('click', onPosition));
     headingButtons.forEach(b => b.addEventListener('click', onHeading));
     submit.addEventListener('click', onSubmit);
@@ -171,6 +174,7 @@ export function mount(root, ctx) {
     document.activeElement?.blur?.();
 
     const timer = startTimer({
+      startAt,
       durationMs: params.durationSec * 1000,
       remainingEl: $('remaining'),
       onFrame(_elapsed, ts) {

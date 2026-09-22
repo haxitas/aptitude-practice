@@ -1,5 +1,5 @@
 // requestAnimationFrame と performance.now() の時刻による共通ループ(setInterval は使わない)。
-// 最初のフレームの時刻を開始時刻とし、毎フレーム経過時間を onFrame に渡す。
+// startAt指定時はその時刻、未指定なら最初のフレームを開始時刻にする。
 // 時間が来たら onEnd を1回だけ呼んで止まる。
 
 export function formatRemaining(ms) {
@@ -7,9 +7,9 @@ export function formatRemaining(ms) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-export function startTimer({ durationMs, onFrame, onEnd, remainingEl }) {
+export function startTimer({ durationMs, onFrame, onEnd, remainingEl, startAt = null }) {
   let rafId = 0;
-  let start = null;
+  let start = startAt;
   let running = true;
   let shown = '';
 

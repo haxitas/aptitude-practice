@@ -4,11 +4,19 @@ import { createRng } from '../js/core/rng.js';
 import { DEFAULTS } from '../js/core/settings.js';
 import {
   DIRECTIONS, solutionFor, generateT4Problem,
+  createT4Example,
   createT4Selection, selectT4Position, selectT4Heading, canSubmitT4,
   judgeT4, createT4Tally, recordT4Answer, summarizeT4, buildT4Record,
 } from '../js/logic/t4.js';
 
 const P = DEFAULTS.t4;
+
+test('例題は機首N・相対90度、正解は西のマス・向きN', () => {
+  const example = createT4Example();
+  assert.deepEqual(example.problem, { headingIndex: 0, relativeIndex: 2 });
+  assert.deepEqual(example.selection, { position: 'W', heading: 'N' });
+  assert.equal(judgeT4(example.problem, example.selection).correct, true);
+});
 
 test('T4 の既定値は承認済みの数値', () => {
   assert.deepEqual(P, { durationSec: 180, answerFeedbackMs: 300 });

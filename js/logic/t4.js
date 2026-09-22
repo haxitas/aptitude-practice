@@ -41,6 +41,12 @@ export function generateT4Problem(rng, previous = null) {
   return { ...candidates[Math.floor(rng() * candidates.length)] };
 }
 
+export function createT4Example() {
+  const problem = { headingIndex: 0, relativeIndex: 2 };
+  const { position, heading } = solutionFor(problem.headingIndex, problem.relativeIndex);
+  return { problem, selection: { position, heading } };
+}
+
 export function createT4Selection() {
   return { position: null, heading: null };
 }
