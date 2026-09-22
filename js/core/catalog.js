@@ -41,7 +41,16 @@ export const TESTS = Object.freeze([
       { key: 'headingOnlyCorrect', label: '向きだけ正解' },
     ],
   },
-  { id: 't5', name: 'テスト5 点の数', implemented: false, details: [] },
+  {
+    id: 't5',
+    name: 'テスト5 点の数',
+    implemented: true,
+    details: [
+      { key: 'answered', label: '回答' },
+      { key: 'unanswered', label: '未回答' },
+      { key: 'meanError', label: '平均の誤差' },
+    ],
+  },
   {
     id: 't6',
     name: 'テスト6 トンネル飛行',

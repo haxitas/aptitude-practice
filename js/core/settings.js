@@ -46,6 +46,10 @@ export const DEFAULTS = Object.freeze({
     maxDots: 13,
     shuffleIntervalMs: 1000,
     questionLimitSec: 10,
+    dotMinGapRatio: 0.2,
+    dotRadiusRatio: 0.025,
+    answerFeedbackMs: 300,
+    stallAbortMs: 1000,
   }),
   t6: Object.freeze({
     durationSec: 180,
