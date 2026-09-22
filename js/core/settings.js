@@ -5,6 +5,21 @@ import { readSettingsRaw } from './storage.js';
 export const DEFAULTS = Object.freeze({
   t1: Object.freeze({
     durationSec: 180,
+    answerFeedbackMs: 300,
+    stallAbortMs: 1000,
+    unitValueMin: 1,
+    unitValueMax: 20,
+    speedMin: 2,
+    speedMax: 20,
+    speedHoursMin: 1,
+    speedHoursMax: 8,
+    lapSpeedMin: 2,
+    lapSpeedMax: 10,
+    lapMultiplierMin: 3,
+    lapMultiplierMax: 10,
+    percentagePercents: Object.freeze([10, 20, 25, 40, 50, 75]),
+    percentageUnitMin: 2,
+    percentageUnitMax: 20,
   }),
   t2: Object.freeze({
     durationSec: 120, // 2026-09-22 ユーザーの判断で 180 → 120

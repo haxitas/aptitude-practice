@@ -209,6 +209,26 @@ h1 { font-size: 1.6rem; margin: 0 0 16px; }
 }
 .t2-same.is-pressed { opacity: 0.35; } /* 押したら次の表示まで薄くする(正誤は出さない) */
 
+/* ---- テスト1 本番 ---- */
+.t1-play {
+  display: flex; flex-direction: column; min-height: 100vh;
+  padding: 8px max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  user-select: none; -webkit-user-select: none;
+}
+.t1-card {
+  flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center;
+  gap: 18px; width: min(100%, 820px); margin: 0 auto;
+}
+.t1-kind { margin: 0; color: var(--muted); font-weight: 700; }
+.t1-question { margin: 0; min-height: 3.2em; font-size: clamp(1.35rem, 3.5vw, 2.2rem); font-weight: 800; text-align: center; }
+.t1-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: min(100%, 680px); }
+.t1-choices button {
+  min-height: clamp(64px, 12vh, 100px); border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); color: var(--text); font: inherit; font-size: clamp(1.2rem, 3vw, 1.8rem);
+  font-weight: 800; cursor: pointer; transition: opacity 80ms linear;
+}
+.t1-choices button.is-pressed { opacity: 0.35; }
+
 .small { font-size: 0.85rem; }
 
 /* ---- 横画面の前提(テスト3・テスト6) ---- */

@@ -2,7 +2,15 @@
 // details: 結果画面に出す内訳(record.detail のキーと表示名)。inHistory: false のものは履歴の表に出さない
 
 export const TESTS = Object.freeze([
-  { id: 't1', name: 'テスト1 計算', implemented: false, details: [] },
+  {
+    id: 't1',
+    name: 'テスト1 計算',
+    implemented: true,
+    details: [
+      { key: 'answered', label: '回答' },
+      { key: 'accuracy', label: '正答率', unit: '%' },
+    ],
+  },
   {
     id: 't2',
     name: 'テスト2 同一図形の検出',

@@ -5,6 +5,7 @@ import { TESTS, findTest } from './core/catalog.js';
 import { defaultStore, readResults } from './core/storage.js';
 import { loadSettings } from './core/settings.js';
 import { summarize } from './core/stats.js';
+import * as t1 from './tests/t1.js';
 import * as t2 from './tests/t2.js';
 import * as t3 from './tests/t3.js';
 import * as t4 from './tests/t4.js';
@@ -12,7 +13,7 @@ import * as t5 from './tests/t5.js';
 import * as t6 from './tests/t6.js';
 import * as history from './history.js';
 
-const SCREENS = { t2, t3, t4, t5, t6 };
+const SCREENS = { t1, t2, t3, t4, t5, t6 };
 
 const root = document.getElementById('app');
 const store = defaultStore();
