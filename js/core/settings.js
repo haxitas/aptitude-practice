@@ -44,12 +44,32 @@ export const DEFAULTS = Object.freeze({
     shuffleIntervalMs: 1000,
     questionLimitSec: 10,
   }),
-  // 初速・加速度・速度の上限・障害物の間隔は SPEC に数値がないため Phase2 で決める
   t6: Object.freeze({
     durationSec: 180,
-    followRate: 0.2,
+    followRate: 0.2, // 60Hz の1フレームで目標との差の20%を進む
+    followReferenceFps: 60,
     collisionSpeedFactor: 0.5,
+    initialSpeed: 0.8, // トンネル半径を1とする内部単位/秒
+    acceleration: 0.02,
+    recoveryAcceleration: 0.16, // 最高速で衝突しても約5秒で基準速度へ戻る
+    maxSpeed: 1.6,
+    obstacleSpacing: 2.4,
+    firstObstacleDistance: 5,
     bladeOpeningDeg: 60,
+    bladeHubRadius: 0.18,
+    bladeInitialAngularSpeedDegSec: 30,
+    bladeAngularAccelerationDegSec2: 0.15,
+    collisionPushMs: 350,
+    collisionPushDistance: 0.28,
+    touchOffsetRatio: 0.12,
+    aircraftMaxRadius: 0.86,
+    canvasMarginPx: 8,
+    stallAbortMs: 1000,
+    perspectiveFocal: 1,
+    collisionZ: 1,
+    nearZ: 0.35,
+    farZ: 12,
+    tunnelRingSpacing: 0.75,
   }),
 });
 

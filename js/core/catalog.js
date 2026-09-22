@@ -33,7 +33,16 @@ export const TESTS = Object.freeze([
   },
   { id: 't4', name: 'テスト4 計器の読み取り', implemented: false, details: [] },
   { id: 't5', name: 'テスト5 点の数', implemented: false, details: [] },
-  { id: 't6', name: 'テスト6 トンネル飛行', implemented: false, details: [] },
+  {
+    id: 't6',
+    name: 'テスト6 トンネル飛行',
+    implemented: true,
+    details: [
+      { key: 'collisions', label: '衝突' },
+      { key: 'distance', label: '進んだ距離', unit: ' u' },
+      { key: 'maxSpeed', label: '最高速度', unit: ' u/s' },
+    ],
+  },
 ]);
 
 export function findTest(id) {
