@@ -21,13 +21,15 @@ test('T3 の既定値: SPEC §6 の数値と承認済みの追加分', () => {
   assert.equal(P.calcTermCount, 4);
   assert.equal(P.calcTermMin, 1);
   assert.equal(P.calcTermMax, 20);
+  assert.equal(P.calcMaxTwoDigitTerms, 2);
+  assert.equal(P.calcSingleDigitMax, 9);
   assert.deepEqual(P.calcDistractorOffsets, [1, 2, 10]);
   assert.equal(P.speechWordCount, 5);
   assert.equal(P.speechIntervalMs, 1000);
   assert.equal(P.speechRate, 0.9);
   assert.equal(P.speechLang, 'en-US');
   assert.equal(P.duplicateRate, 0.5);
-  assert.equal(P.speechAnswerLimitMs, 5000);
+  assert.equal(P.speechAnswerLimitMs, 0);
   assert.equal(P.speechNextDelayMs, 1000);
   assert.equal(P.answerFeedbackMs, 300);
 });
@@ -120,13 +122,20 @@ test('図形: シードが同じなら同じ問題、判定は向きで決まる
 
 // ---- 計算問題 ----
 
-test('計算(シード1000種類): 各数は1〜20、途中の値が負にならない、4択はすべて異なり正解を1つ含む', () => {
+test('計算(シード1000種類): 2桁は最大2つ、残りは1〜9、すべて20以下で途中の値が負にならない', () => {
+  const seenTwoDigitCounts = new Set();
+  const seenTwoDigitPositions = new Set();
   for (let seed = 1; seed <= 1000; seed++) {
     const q = generateCalcProblem(createRng(seed), P);
     assert.equal(q.terms.length, 4);
+    const twoDigitPositions = q.terms.flatMap((t, i) => t.n >= 10 ? [i] : []);
+    assert.ok(twoDigitPositions.length <= 2, `seed=${seed}: 2桁が${twoDigitPositions.length}個`);
+    seenTwoDigitCounts.add(twoDigitPositions.length);
+    twoDigitPositions.forEach(i => seenTwoDigitPositions.add(i));
     let r = 0;
     q.terms.forEach((t, i) => {
-      assert.ok(Number.isInteger(t.n) && t.n >= 1 && t.n <= 20, `seed=${seed}`);
+      assert.ok(Number.isInteger(t.n) && t.n >= 1 && t.n <= 20, `seed=${seed} n=${t.n}`);
+      if (t.n < 10) assert.ok(t.n <= 9, `seed=${seed} n=${t.n}`);
       if (i === 0) assert.equal(t.op, '+');
       r = t.op === '+' ? r + t.n : r - t.n;
       assert.ok(r >= 0, `seed=${seed}: 途中の値が負 ${r}`);
@@ -142,6 +151,8 @@ test('計算(シード1000種類): 各数は1〜20、途中の値が負になら
       if (c !== q.answer) assert.ok([1, 2, 10].includes(Math.abs(c - q.answer)), `seed=${seed} c=${c}`);
     }
   }
+  assert.deepEqual([...seenTwoDigitCounts].sort(), [0, 1, 2]);
+  assert.deepEqual([...seenTwoDigitPositions].sort(), [0, 1, 2, 3]);
 });
 
 test('計算: 最終の答えが0以上でも、各項の途中の値が負でないことを確認する', () => {
@@ -292,16 +303,33 @@ test('進行: 回答の1000ms後に次の組を始める', () => {
   assert.equal(r.state.setSeq, s.setSeq + 1);
 });
 
-test('進行: 読み終えて5秒答えなければ未回答にし、1000ms後に次の組', () => {
+test('進行: 時間制限0なら読み終えて60秒たっても未回答にせず、回答の1000ms後に次の組', () => {
   const { s, t, rng } = speakAll();
   let r = stepAudio(s, t + 16, P, rng);
-  const end = t + 16;
-  r = stepAudio(r.state, end + 4999, P, rng);
+  const answerStart = t + 16;
+  assert.deepEqual(kinds(r.actions), ['enableAnswer']);
+  r = stepAudio(r.state, answerStart + 60000, P, rng);
   assert.deepEqual(kinds(r.actions), []);
-  r = stepAudio(r.state, end + 5000, P, rng);
+  assert.equal(r.state.phase, 'answering');
+  const a = answerAudio(r.state, answerStart + 60000, true);
+  assert.equal(a.accepted, true);
+  r = stepAudio(a.state, answerStart + 60999, P, rng);
+  assert.deepEqual(kinds(r.actions), []);
+  r = stepAudio(r.state, answerStart + 61000, P, rng);
+  assert.deepEqual(kinds(r.actions), ['newSet', 'speak:0']);
+});
+
+test('進行: 読み終えて5秒答えなければ未回答にし、1000ms後に次の組', () => {
+  const timed = { ...P, speechAnswerLimitMs: 5000 };
+  const { s, t, rng } = speakAll();
+  let r = stepAudio(s, t + 16, timed, rng);
+  const end = t + 16;
+  r = stepAudio(r.state, end + 4999, timed, rng);
+  assert.deepEqual(kinds(r.actions), []);
+  r = stepAudio(r.state, end + 5000, timed, rng);
   assert.deepEqual(kinds(r.actions), ['timeout']);
   assert.equal(answerAudio(r.state, end + 5100, true).accepted, false);
-  r = stepAudio(r.state, end + 6000, P, rng);
+  r = stepAudio(r.state, end + 6000, timed, rng);
   assert.deepEqual(kinds(r.actions), ['newSet', 'speak:0']);
 });
 

@@ -20,6 +20,8 @@ export const DEFAULTS = Object.freeze({
     calcTermCount: 4, // 計算の数の個数
     calcTermMin: 1,
     calcTermMax: 20,
+    calcMaxTwoDigitTerms: 2, // 1問に入る2桁の数の最大個数
+    calcSingleDigitMax: 9,
     calcSubtractRate: 0.5, // 引き算を選べるときに選ぶ確率
     calcDistractorOffsets: Object.freeze([1, 2, 10]), // 誤答は正解 ± これらの値から作る
     speechWordCount: 5,
@@ -27,7 +29,7 @@ export const DEFAULTS = Object.freeze({
     speechRate: 0.9,
     speechLang: 'en-US',
     duplicateRate: 0.5,
-    speechAnswerLimitMs: 5000, // 読み終えてから答えられる時間
+    speechAnswerLimitMs: 0, // 0 は時間制限なし。正数なら読み終えてから答えられる時間
     speechNextDelayMs: 1000, // 回答(または未回答)から次の組までの時間
     speechEndFallbackMs: 2500, // onend が来ないとき、読み始めからこの時間で読み終わりとみなす
     speechIdleGraceMs: 250, // 読み上げが止まって見えても、読み始めからこの時間は待つ

@@ -77,17 +77,25 @@ export function judgeShape(problem, answer) {
 
 // { terms: [{ op: '+'|'-', n } ×4](先頭は '+'), answer, choices: [4], correctIndex }
 export function generateCalcProblem(rng, p) {
-  const terms = [{ op: '+', n: randInt(rng, p.calcTermMin, p.calcTermMax) }];
+  const twoDigitCount = randInt(rng, 0, Math.min(p.calcMaxTwoDigitTerms, p.calcTermCount));
+  const positions = shuffle(rng, Array.from({ length: p.calcTermCount }, (_, i) => i));
+  const twoDigitPositions = new Set(positions.slice(0, twoDigitCount));
+  const rangeAt = i => twoDigitPositions.has(i)
+    ? [p.calcSingleDigitMax + 1, p.calcTermMax]
+    : [p.calcTermMin, p.calcSingleDigitMax];
+  const [firstMin, firstMax] = rangeAt(0);
+  const terms = [{ op: '+', n: randInt(rng, firstMin, firstMax) }];
   let r = terms[0].n;
   for (let i = 1; i < p.calcTermCount; i++) {
-    // 引き算は、途中の値が負にならないときだけ選べる
-    const canSubtract = r >= p.calcTermMin;
+    const [termMin, termMax] = rangeAt(i);
+    // この位置の桁数を保ったまま、途中の値が負にならないときだけ引き算を選ぶ
+    const canSubtract = r >= termMin;
     if (canSubtract && rng() < p.calcSubtractRate) {
-      const n = randInt(rng, p.calcTermMin, Math.min(p.calcTermMax, r));
+      const n = randInt(rng, termMin, Math.min(termMax, r));
       terms.push({ op: '-', n });
       r -= n;
     } else {
-      const n = randInt(rng, p.calcTermMin, p.calcTermMax);
+      const n = randInt(rng, termMin, termMax);
       terms.push({ op: '+', n });
       r += n;
     }
@@ -178,10 +186,14 @@ export function stepAudio(state, now, p, rng, { idle = false } = {}) {
         s = { ...s, nextWord: s.nextWord + 1, lastSpeakAt: now, lastEnded: false };
       }
     } else if (lastWordDone(s, now, p, idle)) {
-      s = { ...s, phase: 'answering', answerDeadline: now + p.speechAnswerLimitMs };
+      s = {
+        ...s,
+        phase: 'answering',
+        answerDeadline: p.speechAnswerLimitMs > 0 ? now + p.speechAnswerLimitMs : null,
+      };
       actions.push({ type: 'enableAnswer' });
     }
-  } else if (s.phase === 'answering' && now >= s.answerDeadline) {
+  } else if (s.phase === 'answering' && p.speechAnswerLimitMs > 0 && now >= s.answerDeadline) {
     s = { ...s, phase: 'waiting', waitFrom: now };
     actions.push({ type: 'timeout' });
   }
