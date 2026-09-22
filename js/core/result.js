@@ -35,7 +35,7 @@ export function renderResult(root, { testName, score, details, saveResult, onRet
     save.setAttribute('role', 'alert');
     save.textContent = `保存できませんでした(${saveResult.message})`;
   }
-  const retry = $('retry');
-  retry.addEventListener('click', onRetry);
-  retry.focus();
+  $('retry').addEventListener('click', onRetry);
+  // 「もう一度」にフォーカスを当てない。終了直後に押したスペースキーで結果画面が消えないようにする
+  document.activeElement?.blur?.();
 }
