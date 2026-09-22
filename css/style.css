@@ -306,6 +306,7 @@ h1 { font-size: 1.6rem; margin: 0 0 16px; }
 .rotate-overlay[hidden] { display: none; }
 
 /* ---- テスト3 本番 ---- */
+.t3-start { min-height: 100vh; min-height: 100dvh; }
 .t3-play {
   /* 非表示のエラー行があってもパネルが残りの高さを使えるように、grid ではなく flex で縦に並べる */
   display: flex;
@@ -379,6 +380,12 @@ h1 { font-size: 1.6rem; margin: 0 0 16px; }
 .t3-audio-status { font-weight: 700; text-align: center; min-height: 1.6em; }
 .t3-audio-buttons { display: flex; gap: 12px; width: min(100%, 420px); }
 .t3-audio-buttons .t3-btn { flex: 1; height: clamp(44px, 9vh, 80px); font-size: clamp(1rem, 2vw, 1.3rem); }
+@media (orientation: portrait) {
+  .t3-grid { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr 1fr; }
+  .t3-shape-task { grid-row: auto; }
+  .t3-shape { --cell: min(calc((100vw - 100px) / 4), 16vh); }
+  .t3-dir-buttons .t3-btn { height: clamp(44px, 8vh, 80px); }
+}
 
 /* ---- テスト4 本番 ---- */
 .t4-play {

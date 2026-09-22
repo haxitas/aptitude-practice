@@ -50,7 +50,7 @@ export const SETTING_FIELDS = Object.freeze({
     number('calcSubtractRate', '引き算の確率', 0, 1, { step: 0.01 }),
     list('calcDistractorOffsets', '計算の誤答差', 1, 100, { integer: true, hint: 'カンマ区切り' }),
     number('speechWordCount', '音声の語数', 2, 26, { integer: true, unit: '語' }),
-    number('speechIntervalMs', '読み上げ間隔', 100, 10000, { integer: true, unit: 'ms' }),
+    number('speechGapMs', '読み終わりから次の語まで', 0, 10000, { integer: true, unit: 'ms' }),
     number('speechRate', '読み上げ速度', 0.1, 10, { step: 0.1 }),
     number('duplicateRate', '重複ありの確率', 0, 1, { step: 0.01 }),
     number('speechAnswerLimitMs', '回答時間', 0, 600000, { integer: true, unit: 'ms', hint: '0は時間制限なし' }),

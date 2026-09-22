@@ -51,7 +51,7 @@ export const DEFAULTS = Object.freeze({
     calcSubtractRate: 0.5, // 引き算を選べるときに選ぶ確率
     calcDistractorOffsets: Object.freeze([1, 2, 10]), // 誤答は正解 ± これらの値から作る
     speechWordCount: 5,
-    speechIntervalMs: 1000, // 語の読み始めの間隔
+    speechGapMs: 500, // 前の語を読み終えてから次の語まで
     speechRate: 0.9,
     speechLang: 'en-US',
     duplicateRate: 0.5,

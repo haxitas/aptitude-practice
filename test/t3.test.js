@@ -25,7 +25,8 @@ test('T3 の既定値: SPEC §6 の数値と承認済みの追加分', () => {
   assert.equal(P.calcSingleDigitMax, 9);
   assert.deepEqual(P.calcDistractorOffsets, [1, 2, 10]);
   assert.equal(P.speechWordCount, 5);
-  assert.equal(P.speechIntervalMs, 1000);
+  assert.equal(P.speechGapMs, 500);
+  assert.equal('speechIntervalMs' in P, false);
   assert.equal(P.speechRate, 0.9);
   assert.equal(P.speechLang, 'en-US');
   assert.equal(P.duplicateRate, 0.5);
@@ -230,17 +231,27 @@ function begin(now = 0) {
   return startAudioSet(createAudioState(), SET, now);
 }
 
-test('進行: 開始の時刻に1語目、以後は開始から1000ms ごと(読み終わっていれば)', () => {
+test('進行: 1語目は即時、読み終わり700msから500ms待って2語目', () => {
   const rng = createRng(1);
   let s = begin(0);
   let r = stepAudio(s, 0, P, rng);
   assert.deepEqual(kinds(r.actions), ['speak:0']);
-  s = audioEnded(r.state, r.state.setSeq, 0);
-  r = stepAudio(s, 999, P, rng);
+  s = audioEnded(r.state, r.state.setSeq, 0, 700);
+  r = stepAudio(s, 1199, P, rng);
   assert.deepEqual(kinds(r.actions), []);
-  r = stepAudio(r.state, 1000, P, rng);
+  r = stepAudio(r.state, 1200, P, rng);
   assert.deepEqual(kinds(r.actions), ['speak:1']);
   assert.equal(r.actions[0].word, 'Bravo');
+});
+
+test('進行: 読み終わりが遅れれば次の開始も同じだけ遅れる', () => {
+  const rng = createRng(1);
+  let r = stepAudio(begin(0), 0, P, rng);
+  const ended = audioEnded(r.state, r.state.setSeq, 0, 1800);
+  r = stepAudio(ended, 2299, P, rng);
+  assert.deepEqual(kinds(r.actions), []);
+  r = stepAudio(r.state, 2300, P, rng);
+  assert.deepEqual(kinds(r.actions), ['speak:1']);
 });
 
 test('進行: 前の語を読み終えていなければ待ち、onend が来なくても打ち切り時間で次へ', () => {
@@ -251,6 +262,10 @@ test('進行: 前の語を読み終えていなければ待ち、onend が来な
   r = stepAudio(r.state, P.speechEndFallbackMs - 1, P, rng);
   assert.deepEqual(kinds(r.actions), []);
   r = stepAudio(r.state, P.speechEndFallbackMs, P, rng);
+  assert.deepEqual(kinds(r.actions), []);
+  r = stepAudio(r.state, P.speechEndFallbackMs + 499, P, rng);
+  assert.deepEqual(kinds(r.actions), []);
+  r = stepAudio(r.state, P.speechEndFallbackMs + 500, P, rng);
   assert.deepEqual(kinds(r.actions), ['speak:1']);
 });
 
@@ -258,9 +273,11 @@ test('進行: 読み上げが止まっている(idle)なら、少し待ってか
   const rng = createRng(1);
   let r = stepAudio(begin(0), 0, P, rng);
   r = stepAudio(r.state, 1000, P, rng, { idle: true });
-  assert.deepEqual(kinds(r.actions), ['speak:1']);
-  r = stepAudio(r.state, 1000 + P.speechIdleGraceMs - 1, P, rng, { idle: true });
   assert.deepEqual(kinds(r.actions), []);
+  r = stepAudio(r.state, 1499, P, rng, { idle: true });
+  assert.deepEqual(kinds(r.actions), []);
+  r = stepAudio(r.state, 1500, P, rng, { idle: true });
+  assert.deepEqual(kinds(r.actions), ['speak:1']);
 });
 
 function speakAll(now0 = 0) {
@@ -271,7 +288,7 @@ function speakAll(now0 = 0) {
     t = now0 + k * 1000;
     const r = stepAudio(s, t, P, rng);
     assert.deepEqual(kinds(r.actions), [`speak:${k}`]);
-    s = audioEnded(r.state, r.state.setSeq, k);
+    s = audioEnded(r.state, r.state.setSeq, k, t);
   }
   return { s, t, rng };
 }

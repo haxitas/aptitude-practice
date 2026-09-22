@@ -11,7 +11,6 @@ import { startTimer } from '../core/timer.js';
 import { appendRecord } from '../core/storage.js';
 import { renderResult } from '../core/result.js';
 import { findTest, formatDetail } from '../core/catalog.js';
-import { createLandscapeGuard } from '../core/landscape.js';
 
 const synth = globalThis.speechSynthesis ?? null;
 
@@ -38,7 +37,6 @@ function voiceLabel(pick, lang) {
 export function mount(root, ctx) {
   const params = ctx.settings.t3;
   const meta = findTest('t3');
-  const guard = createLandscapeGuard();
   let teardown = null;
 
   function setPhase(cleanup) {
@@ -53,6 +51,12 @@ export function mount(root, ctx) {
     root.innerHTML = `
       <section class="screen t3-start">
         <h1 data-ref="title"></h1>
+        <p>本来は横画面で行います。画面をタップして開始します(音が出ます)</p>
+        <ul>
+          <li>図形: 三角形が左右どちらを向いているかを答える</li>
+          <li>計算: 4つの数の足し算・引き算の答えを4択から選ぶ</li>
+          <li>音声: 英単語5つの中に同じ語が2回出たかを答える</li>
+        </ul>
         <p data-ref="desc"></p>
         <p class="muted small" data-ref="voice"></p>
         <p class="notice notice-error" data-ref="error" hidden></p>
@@ -64,7 +68,6 @@ export function mount(root, ctx) {
     const $ = name => root.querySelector(`[data-ref="${name}"]`);
     $('title').textContent = meta.name;
     $('desc').textContent =
-      '左で三角形の向きを答え、右上で計算の答えを選び、右下で5つの単語に同じ単語が2回出たかを答えます。' +
       `3つは同時に進みます。制限時間は ${params.durationSec} 秒です。`;
     const startBtn = $('start');
 
@@ -82,21 +85,18 @@ export function mount(root, ctx) {
     // 声の一覧はあとから届くことがある
     synth.addEventListener?.('voiceschanged', showVoice);
 
-    guard.setOnChange(landscape => {
-      startBtn.disabled = !landscape;
-    });
-
     // iOS では、最初の読み上げをユーザーの操作の中で始めないと音が出ない。
     // そのため、この click の処理の中で同期的に1語目の speak() まで進める。
-    startBtn.addEventListener('click', () => {
-      if (!guard.isLandscape()) return;
+    const onStart = e => {
+      if (e.target.closest('a')) return; // メニューへの移動では開始しない
       startPlay();
-    });
+    };
+    root.addEventListener('click', onStart);
     startBtn.focus();
 
     setPhase(() => {
       synth.removeEventListener?.('voiceschanged', showVoice);
-      guard.setOnChange(null);
+      root.removeEventListener('click', onStart);
     });
   }
 
@@ -182,11 +182,11 @@ export function mount(root, ctx) {
       u.rate = params.speechRate;
       if (pick.voice) u.voice = pick.voice;
       u.onend = () => {
-        if (!disposed) audio = audioEnded(audio, setSeq, index);
+        if (!disposed) audio = audioEnded(audio, setSeq, index, performance.now());
       };
       u.onerror = e => {
         if (disposed) return;
-        audio = audioEnded(audio, setSeq, index);
+        audio = audioEnded(audio, setSeq, index, performance.now());
         // cancel() による中断は正常な動き
         if (e.error !== 'interrupted' && e.error !== 'canceled') {
           speechError.textContent = `音声を再生できませんでした(${e.error})`;
@@ -292,9 +292,6 @@ export function mount(root, ctx) {
     dupBtns.forEach(b => b.addEventListener('click', onDup));
     $('quit').addEventListener('click', onQuit);
     document.addEventListener('visibilitychange', onVisibility);
-    guard.setOnChange(landscape => {
-      if (!landscape) abort('端末が縦になったため中断しました(記録は保存していません)');
-    });
 
     nextShape();
     nextCalc();
@@ -315,13 +312,11 @@ export function mount(root, ctx) {
       timer.stop();
       synth.cancel();
       document.removeEventListener('visibilitychange', onVisibility);
-      guard.setOnChange(null);
     });
   }
 
   showStart();
   return () => {
     setPhase(null);
-    guard.destroy();
   };
 }

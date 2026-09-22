@@ -153,20 +153,23 @@ export function createAudioState() {
 export function startAudioSet(state, set, now) {
   return {
     phase: 'speaking', setSeq: state.setSeq + 1, set, setStart: now,
-    nextWord: 0, lastSpeakAt: null, lastEnded: true, answerDeadline: null, waitFrom: null,
+    nextWord: 0, lastSpeakAt: null, lastEnded: true, lastEndedAt: null, answerDeadline: null, waitFrom: null,
   };
 }
 
 // その組の index 語目の onend(前の組のものは無視する)
-export function audioEnded(state, setSeq, index) {
-  if (setSeq !== state.setSeq || index !== state.nextWord - 1) return state;
-  return { ...state, lastEnded: true };
+export function audioEnded(state, setSeq, index, now) {
+  if (setSeq !== state.setSeq || index !== state.nextWord - 1 || state.lastEnded) return state;
+  return { ...state, lastEnded: true, lastEndedAt: now };
 }
 
-function lastWordDone(s, now, p, idle) {
-  if (s.lastSpeakAt === null || s.lastEnded) return true;
-  if (now - s.lastSpeakAt >= p.speechEndFallbackMs) return true;
-  return idle && now - s.lastSpeakAt >= p.speechIdleGraceMs;
+function settleWord(s, now, p, idle) {
+  if (s.lastSpeakAt === null || s.lastEnded) return s;
+  if (now - s.lastSpeakAt >= p.speechEndFallbackMs) {
+    return { ...s, lastEnded: true, lastEndedAt: s.lastSpeakAt + p.speechEndFallbackMs };
+  }
+  if (idle && now - s.lastSpeakAt >= p.speechIdleGraceMs) return { ...s, lastEnded: true, lastEndedAt: now };
+  return s;
 }
 
 // { state, actions }。actions: {type:'speak', index, word} / 'enableAnswer' / 'timeout' / {type:'newSet', set}
@@ -179,13 +182,14 @@ export function stepAudio(state, now, p, rng, { idle = false } = {}) {
     actions.push({ type: 'newSet', set });
   }
   if (s.phase === 'speaking') {
+    s = settleWord(s, now, p, idle);
     const count = s.set.words.length;
     if (s.nextWord < count) {
-      if (now >= s.setStart + s.nextWord * p.speechIntervalMs && lastWordDone(s, now, p, idle)) {
+      if (s.nextWord === 0 || (s.lastEnded && now >= s.lastEndedAt + p.speechGapMs)) {
         actions.push({ type: 'speak', index: s.nextWord, word: s.set.words[s.nextWord] });
-        s = { ...s, nextWord: s.nextWord + 1, lastSpeakAt: now, lastEnded: false };
+        s = { ...s, nextWord: s.nextWord + 1, lastSpeakAt: now, lastEnded: false, lastEndedAt: null };
       }
-    } else if (lastWordDone(s, now, p, idle)) {
+    } else if (s.lastEnded) {
       s = {
         ...s,
         phase: 'answering',
