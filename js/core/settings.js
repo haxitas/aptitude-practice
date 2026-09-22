@@ -107,6 +107,16 @@ export const DEFAULTS = Object.freeze({
 export const DISPLAY = Object.freeze({
   historyRows: 20, // 履歴の表に出す直近の回数(SPEC §7)
   recentAvgCount: 5, // 直近平均に使う回数(SPEC §7)
+  historyChartHeight: 260,
+  historyChartLeft: 48,
+  historyChartRight: 16,
+  historyChartTop: 16,
+  historyChartBottom: 40,
+  historyChartPreferredTickCount: 5,
+  historyChartMaxDateLabels: 5,
+  historyChartPointRadius: 4,
+  historyChartCustomPointRadius: 7,
+  historyChartHitRadius: 18,
 });
 
 function sameType(def, val) {
