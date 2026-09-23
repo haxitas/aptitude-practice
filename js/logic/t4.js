@@ -41,10 +41,39 @@ export function generateT4Problem(rng, previous = null) {
   return { ...candidates[Math.floor(rng() * candidates.length)] };
 }
 
-export function createT4Example() {
-  const problem = { headingIndex: 1, relativeIndex: 2 };
+export function compassNeedleAngle(headingIndex, compassMode) {
+  if (!Number.isInteger(headingIndex) || headingIndex < 0 || headingIndex >= DIRECTIONS.length) {
+    throw new RangeError('機首の方位は0以上8未満の整数で指定してください');
+  }
+  if (compassMode === 'northUp') return headingIndex * 45;
+  if (compassMode === 'noseUp') return (360 - headingIndex * 45) % 360;
+  throw new RangeError(`不明な計器の流儀です: ${compassMode}`);
+}
+
+export function createT4Example(compassMode = 'noseUp') {
+  compassNeedleAngle(0, compassMode);
+  const problem = compassMode === 'noseUp'
+    ? { headingIndex: 6, relativeIndex: 0 }
+    : { headingIndex: 1, relativeIndex: 2 };
   const { position, heading } = solutionFor(problem.headingIndex, problem.relativeIndex);
   return { problem, selection: { position, heading } };
+}
+
+export function explainT4Solution(problem, compassMode) {
+  const { towerDirection, position, heading } = solutionFor(problem.headingIndex, problem.relativeIndex);
+  const northAngle = compassNeedleAngle(problem.headingIndex, compassMode);
+  const relativeAngle = problem.relativeIndex * 45;
+  const northPosition = ['真上(0°)', '右斜め前45°', '右90°', '右斜め後ろ135°',
+    '後ろ180°', '左斜め後ろ225°', '左270°', '左斜め前315°'][northAngle / 45];
+  const compassStep = compassMode === 'noseUp'
+    ? `1. 針は北。北は機首の${northPosition}にある → 機首は${heading}。`
+    : `1. 北が上。飛行機形の針は${heading}を指す → 機首は${heading}。`;
+  const adfStep = relativeAngle === 0 ? 'ADFの針は真上(相対0°)' : `ADFの針は相対${relativeAngle}°`;
+  return [
+    compassStep,
+    `2. ${adfStep}。機首${heading} + 相対${relativeAngle}° = 塔の方位${DIRECTIONS[towerDirection].key}。`,
+    `3. 塔から見た自機は反対の${position}のマス。向きは機首のまま${heading}。`,
+  ];
 }
 
 export function previousT4Feedback(problem, selection) {

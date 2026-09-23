@@ -7,30 +7,70 @@ import {
   createT4Example,
   createT4Selection, selectT4Position, selectT4Heading, canSubmitT4,
   judgeT4, createT4Tally, recordT4Answer, summarizeT4, buildT4Record,
-  previousT4Feedback,
+  previousT4Feedback, compassNeedleAngle, explainT4Solution,
 } from '../js/logic/t4.js';
 import { findTest, formatDetail } from '../js/core/catalog.js';
 import { instrumentSvg } from '../js/tests/t4.js';
 
 const P = DEFAULTS.t4;
 
-test('例題は機首NE・相対90度、塔SE・自機NW・向きNE', () => {
-  const example = createT4Example();
-  assert.deepEqual(example.problem, { headingIndex: 1, relativeIndex: 2 });
-  assert.deepEqual(example.selection, { position: 'NW', heading: 'NE' });
-  assert.equal(solutionFor(1, 2).towerDirection, 3);
-  assert.equal(judgeT4(example.problem, example.selection).correct, true);
+test('流儀ごとの例題は正解と一致し、既定は機首が上', () => {
+  const nose = createT4Example('noseUp');
+  assert.deepEqual(nose.problem, { headingIndex: 6, relativeIndex: 0 });
+  assert.deepEqual(nose.selection, { position: 'E', heading: 'W' });
+  const north = createT4Example('northUp');
+  assert.deepEqual(north.problem, { headingIndex: 1, relativeIndex: 2 });
+  assert.deepEqual(north.selection, { position: 'NW', heading: 'NE' });
+  assert.deepEqual(createT4Example(), nose);
+  for (const example of [nose, north]) assert.equal(judgeT4(example.problem, example.selection).correct, true);
 });
 
-test('計器の針はindex×45度で描き、ADFに右・後ろ・左の目盛りがある', () => {
-  assert.match(instrumentSvg(1), /rotate\(45 100 100\)/);
+test('流儀ごとの針角度は8方位で逆向きになり、不正入力を拒否する', () => {
+  for (let i = 0; i < 8; i++) {
+    const north = compassNeedleAngle(i, 'northUp');
+    const nose = compassNeedleAngle(i, 'noseUp');
+    assert.equal(north, i * 45);
+    assert.equal(nose, (360 - i * 45) % 360);
+    assert.ok(north + nose === 0 || north + nose === 360);
+  }
+  for (const [index, north, nose] of [[0, 0, 0], [1, 45, 315], [2, 90, 270], [5, 225, 135]]) {
+    assert.equal(compassNeedleAngle(index, 'northUp'), north);
+    assert.equal(compassNeedleAngle(index, 'noseUp'), nose);
+  }
+  assert.throws(() => compassNeedleAngle(-1, 'northUp'));
+  assert.throws(() => compassNeedleAngle(1, 'other'));
+});
+
+test('左の計器は流儀ごとに文字・機首印・針先を変え、ADFは変えない', () => {
+  const north = instrumentSvg(1, false, 'northUp');
+  assert.match(north, /rotate\(45 100 100\)/);
+  assert.match(north, />NE<\/text>/);
+  assert.match(north, /class="t4-aircraft"/);
+  assert.doesNotMatch(north, /class="t4-nose"/);
+  const nose = instrumentSvg(1, false, 'noseUp');
+  assert.match(nose, /rotate\(315 100 100\)/);
+  assert.match(nose, /class="t4-nose"/);
+  assert.match(nose, /class="t4-north-label"/);
+  assert.doesNotMatch(nose, />NE<\/text>/);
   const adf = instrumentSvg(2, true);
   assert.match(adf, /rotate\(90 100 100\)/);
   for (const mark of ['右90°', '後ろ180°', '左270°']) assert.ok(adf.includes(mark));
 });
 
+test('導き方は流儀ごとに機首の読み方を変え、塔と自機の正解は共通', () => {
+  const nose = explainT4Solution({ headingIndex: 6, relativeIndex: 0 }, 'noseUp');
+  assert.equal(nose.length, 3);
+  assert.match(nose[0], /北.*右90°.*機首.*W/);
+  assert.match(nose[1], /W.*0°.*W/);
+  assert.match(nose[2], /Eのマス.*W/);
+  const north = explainT4Solution({ headingIndex: 1, relativeIndex: 2 }, 'northUp');
+  assert.match(north[0], /北が上.*NE/);
+  assert.match(north[1], /NE.*90°.*SE/);
+  assert.match(north[2], /NWのマス.*NE/);
+});
+
 test('T4 の既定値は承認済みの数値', () => {
-  assert.deepEqual(P, { durationSec: 180, answerFeedbackMs: 300, showPreviousAnswer: true });
+  assert.deepEqual(P, { durationSec: 180, answerFeedbackMs: 300, showPreviousAnswer: true, compassMode: 'noseUp' });
 });
 
 test('方位は N から時計回りの8方向', () => {
@@ -124,7 +164,7 @@ test('記録はSPEC §4の形で、その回の設定を複製する', () => {
   assert.deepEqual(record, {
     id: `${date}-t4`, test: 't4', date, score: 2,
     detail: { answered: 4, correct: 2, positionOnlyCorrect: 1, headingOnlyCorrect: 1 },
-    settings: { durationSec: 180, answerFeedbackMs: 300, showPreviousAnswer: true },
+    settings: { durationSec: 180, answerFeedbackMs: 300, showPreviousAnswer: true, compassMode: 'noseUp' },
   });
   assert.notEqual(record.settings, P);
 });

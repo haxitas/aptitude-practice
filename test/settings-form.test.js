@@ -94,3 +94,14 @@ test('T4の前問表示はtrue/falseを保存し、不正値を拒否する', ()
   assert.equal(bad.ok, false);
   assert.ok(bad.errors.showPreviousAnswer);
 });
+
+test('T4の計器の流儀はnorthUp/noseUpだけを保存する', () => {
+  for (const mode of ['northUp', 'noseUp']) {
+    const result = validateTestSettings('t4', raw('t4', { compassMode: mode }), DEFAULTS.t4);
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal(result.value.compassMode, mode);
+  }
+  const bad = validateTestSettings('t4', raw('t4', { compassMode: 'southUp' }), DEFAULTS.t4);
+  assert.equal(bad.ok, false);
+  assert.ok(bad.errors.compassMode);
+});

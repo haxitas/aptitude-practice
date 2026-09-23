@@ -66,6 +66,7 @@ export const DEFAULTS = Object.freeze({
     durationSec: 180,
     answerFeedbackMs: 300,
     showPreviousAnswer: true,
+    compassMode: 'noseUp',
   }),
   t5: Object.freeze({
     durationSec: 180,

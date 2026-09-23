@@ -58,6 +58,10 @@ export const SETTING_FIELDS = Object.freeze({
   ]),
   t4: Object.freeze([
     duration(),
+    { key: 'compassMode', label: '左の計器の流儀', type: 'select', options: [
+      { value: 'noseUp', label: '機首が上・針が北' },
+      { value: 'northUp', label: '北が上・針が機首' },
+    ] },
     { key: 'showPreviousAnswer', label: '前の問題の正解を表示', type: 'select', options: [
       { value: 'true', label: '表示する', parsed: true },
       { value: 'false', label: '表示しない', parsed: false },

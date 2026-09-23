@@ -3,7 +3,8 @@
 import {
   DIRECTIONS, generateT4Problem, createT4Selection, createT4Example,
   selectT4Position, selectT4Heading, canSubmitT4,
-  judgeT4, previousT4Feedback, createT4Tally, recordT4Answer, buildT4Record,
+  judgeT4, previousT4Feedback, compassNeedleAngle, explainT4Solution,
+  createT4Tally, recordT4Answer, buildT4Record,
 } from '../logic/t4.js';
 import { createRng, randomSeed } from '../core/rng.js';
 import { startTimer, formatDuration } from '../core/timer.js';
@@ -11,23 +12,27 @@ import { appendRecord } from '../core/storage.js';
 import { renderResult } from '../core/result.js';
 import { findTest, formatDetail } from '../core/catalog.js';
 
-export function instrumentSvg(index, relative = false) {
-  const angle = index * 45;
+export function instrumentSvg(index, relative = false, compassMode = 'noseUp') {
+  const angle = relative ? index * 45 : compassNeedleAngle(index, compassMode);
   const labels = relative ? `<text x="169" y="77" text-anchor="middle" class="t4-adf-mark">右90°</text>
     <text x="100" y="175" text-anchor="middle" class="t4-adf-mark">後ろ180°</text>
-    <text x="31" y="77" text-anchor="middle" class="t4-adf-mark">左270°</text>` : DIRECTIONS.map((d, i) => {
+    <text x="31" y="77" text-anchor="middle" class="t4-adf-mark">左270°</text>` : compassMode === 'northUp' ? DIRECTIONS.map((d, i) => {
     const a = i * 45 * Math.PI / 180;
     const x = 100 + Math.sin(a) * 75;
     const y = 100 - Math.cos(a) * 75;
     return `<text x="${x}" y="${y}" text-anchor="middle" dominant-baseline="central">${d.key}</text>`;
-  }).join('');
+  }).join('') : '';
+  const tip = relative
+    ? `<line x1="100" y1="118" x2="100" y2="42"/><path d="M100 28 L91 48 L109 48 Z"/>`
+    : compassMode === 'northUp'
+      ? `<line x1="100" y1="118" x2="100" y2="55"/><path class="t4-aircraft" d="M100 37 L103 48 L112 52 L112 56 L103 54 L103 62 L106 65 L106 67 L100 64 L94 67 L94 65 L97 62 L97 54 L88 56 L88 52 L97 48 Z"/>`
+      : `<line x1="100" y1="118" x2="100" y2="67"/><path d="M100 57 L92 70 L108 70 Z"/><text x="100" y="49" text-anchor="middle" class="t4-north-label" transform="rotate(${-angle} 100 49)">北</text>`;
   return `<svg class="t4-instrument" viewBox="0 0 200 200" role="img" aria-label="${relative ? '相対方位計' : 'コンパス'}">
     <circle cx="100" cy="100" r="92" class="t4-dial"/>
     ${labels}
-    <text x="100" y="25" text-anchor="middle" class="t4-nose">▲</text>
+    ${relative || compassMode === 'noseUp' ? '<text x="100" y="25" text-anchor="middle" class="t4-nose">▲</text>' : ''}
     <g transform="rotate(${angle} 100 100)" class="t4-needle">
-      <line x1="100" y1="118" x2="100" y2="42"/>
-      <path d="M100 28 L91 48 L109 48 Z"/>
+      ${tip}
     </g>
     <circle cx="100" cy="100" r="6" class="t4-hub"/>
   </svg>`;
@@ -53,12 +58,14 @@ export function mount(root, ctx) {
   function showBoard(example = false, startAt = performance.now()) {
     setPhase(null);
     const rng = createRng(randomSeed());
-    const sample = createT4Example();
+    const sample = createT4Example(params.compassMode);
     let problem = example ? sample.problem : generateT4Problem(rng);
     let selection = createT4Selection();
     let tally = createT4Tally();
     let lastFeedback = null;
+    let lastExplanation = [];
     let paleUntil = -Infinity;
+    const modeName = params.compassMode === 'noseUp' ? '機首が上・針が北' : '北が上・針が機首';
 
     root.innerHTML = `
       <section class="t4-play">
@@ -66,13 +73,13 @@ export function mount(root, ctx) {
           <span class="remaining" data-ref="remaining"></span>
           <button class="btn btn-quiet" type="button" data-ref="quit">途中終了</button>
         </div>
+        <p class="t4-mode">計器の流儀: ${modeName}</p>
         ${example ? `<p class="t4-example-note"><strong>例題 — 画面をタップして本番開始</strong><br>
-          1. ADFの針 → 塔は機首から見て右90°の方向。<br>
-          2. 機首NE + 相対90° = 塔の方位SE → 塔は自機から見てSEの方向。<br>
-          3. だから塔から見た自機は反対の<strong>NWのマス</strong>。向きは機首のまま<strong>NE</strong>。<br>
+          この例題の流儀: ${modeName}<br>
+          <span class="t4-explanation" data-ref="exampleSteps"></span><br>
           本番はマス→向き→決定。制限時間${formatDuration(params.durationSec)}はタップから数えます。</p>` : ''}
         <div class="t4-instruments">
-          <figure><figcaption>自機の機首の向き(コンパス)</figcaption><div data-ref="compass"></div></figure>
+          <figure><figcaption>自機の機首の向き(コンパス)</figcaption><div data-ref="compass"></div><small class="t4-dial-mode">${params.compassMode === 'noseUp' ? '機首が上' : '北が上'}</small></figure>
           <figure><figcaption>塔はどちらにあるか(機首を上とした相対方向)</figcaption><div data-ref="adf"></div></figure>
         </div>
         <div class="t4-answer">
@@ -84,6 +91,7 @@ export function mount(root, ctx) {
       </section>`;
     const $ = name => root.querySelector(`[data-ref="${name}"]`);
     const submit = $('submit');
+    if (example) $('exampleSteps').textContent = explainT4Solution(sample.problem, params.compassMode).join('\n');
 
     for (let row = 0; row < 3; row++) {
       for (let col = 0; col < 3; col++) {
@@ -124,13 +132,14 @@ export function mount(root, ctx) {
     }
 
     function drawProblem() {
-      $('compass').innerHTML = instrumentSvg(problem.headingIndex, false);
+      $('compass').innerHTML = instrumentSvg(problem.headingIndex, false, params.compassMode);
       $('adf').innerHTML = instrumentSvg(problem.relativeIndex, true);
       selection = example ? { ...sample.selection } : createT4Selection();
       updateSelection();
       $('previous').hidden = !params.showPreviousAnswer || !lastFeedback || example;
       if (!$('previous').hidden) {
-        $('previous').textContent = `前問の正解: ${lastFeedback.position}のマス / 向き ${lastFeedback.heading}　あなたの答え: ${lastFeedback.correct ? '○' : '×'}`;
+        const answer = `前問の正解: ${lastFeedback.position}のマス / 向き ${lastFeedback.heading}　あなたの答え: ${lastFeedback.correct ? '○' : '×'}`;
+        $('previous').textContent = [answer, ...lastExplanation].join('\n');
       }
     }
 
@@ -147,6 +156,7 @@ export function mount(root, ctx) {
     function onSubmit(e) {
       if (!canSubmitT4(selection)) return;
       lastFeedback = previousT4Feedback(problem, selection);
+      lastExplanation = lastFeedback.correct ? [] : explainT4Solution(problem, params.compassMode);
       tally = recordT4Answer(tally, judgeT4(problem, selection));
       paleUntil = e.timeStamp + params.answerFeedbackMs;
       submit.classList.add('is-pressed');
