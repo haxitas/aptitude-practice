@@ -49,10 +49,11 @@ test('T6 の既定値は承認済みの数値', () => {
     farZ: 12,
     tunnelRingSpacing: 0.75,
     sectorOpeningDeg: 90,
-    holeSlotCount: 8,
-    holeOpenCount: 3,
+    holeSlotCount: 4,
+    holeOpenCounts: [1, 2, 3],
+    holeRotationRate: 0.5,
     holeRingRadius: 0.6,
-    holeRadius: 0.2,
+    holeRadius: 0.3,
   });
 });
 
@@ -255,7 +256,7 @@ test('扇形は両方向に回転し、0°/360°をまたぎ、以前安全な�
 });
 
 test('小穴は穴の中だけ安全で、縁・外・穴にしていない位置は衝突', () => {
-  const obstacle = { type: 'holes', openSlots: [4, 2, 5] };
+  const obstacle = { type: 'holes', openSlots: [0, 2, 3], rotationDeg: 0 };
   const centers = holeCenters(obstacle, P);
   assert.equal(centers.length, 3);
   const open = centers[0];
@@ -270,13 +271,51 @@ test('小穴は穴の中だけ安全で、縁・外・穴にしていない位�
   assert.equal(isHoleOpeningSafe(closed, obstacle, P), false);
 });
 
-test('小穴の3か所はすべて異なる', () => {
-  for (let seed = 1; seed <= 500; seed++) {
+test('小穴の初期中心は上下左右だけ、穴は重ならず円内に収まる', () => {
+  for (let seed = 1; seed <= 1000; seed++) {
     const obstacle = createObstacle(createRng(seed), 6, seed, P);
     if (obstacle.type !== 'holes') continue;
-    assert.equal(obstacle.openSlots.length, P.holeOpenCount);
-    assert.equal(new Set(obstacle.openSlots).size, P.holeOpenCount, `seed=${seed}`);
+    assert.equal(new Set(obstacle.openSlots).size, obstacle.openSlots.length, `seed=${seed}`);
+    assert.ok(obstacle.openSlots.every(slot => Number.isInteger(slot) && slot >= 0 && slot < 4));
+    const centers = holeCenters(obstacle, P);
+    for (const center of centers) {
+      approx(Math.hypot(center.x, center.y), P.holeRingRadius);
+      assert.ok(Math.abs(center.x) < 1e-9 || Math.abs(center.y) < 1e-9, `seed=${seed}`);
+      assert.ok(Math.hypot(center.x, center.y) + P.holeRadius <= 1);
+    }
+    for (let i = 0; i < centers.length; i++) for (let j = i + 1; j < centers.length; j++) {
+      assert.ok(Math.hypot(centers[i].x - centers[j].x, centers[i].y - centers[j].y) > 2 * P.holeRadius);
+    }
   }
+});
+
+test('小穴の開口数1〜3は均等に出て、1穴は静止、2・3穴は回転と静止が出る', () => {
+  const counts = new Map([[1, 0], [2, 0], [3, 0]]);
+  const modes = { 2: new Set(), 3: new Set() };
+  for (let seed = 1; seed <= 4000; seed++) {
+    const obstacle = createObstacle(createRng(seed), 6, seed, P);
+    if (obstacle.type !== 'holes') continue;
+    const n = obstacle.openSlots.length;
+    counts.set(n, (counts.get(n) ?? 0) + 1);
+    if (n === 1) assert.equal(obstacle.rotationDirection, 0);
+    else modes[n].add(obstacle.rotationDirection === 0 ? 'static' : 'rotating');
+  }
+  const total = [...counts.values()].reduce((a, b) => a + b, 0);
+  for (const n of [1, 2, 3]) assert.ok(Math.abs(counts.get(n) - total / 3) < total * 0.1, `${n}: ${counts.get(n)}/${total}`);
+  assert.deepEqual([...modes[2]].sort(), ['rotating', 'static']);
+  assert.deepEqual([...modes[3]].sort(), ['rotating', 'static']);
+});
+
+test('回転する小穴は時間で位置と当たり判定が変わり、静止穴は変わらない', () => {
+  const rotating = { type: 'holes', z: 5, openSlots: [0, 2], rotationDeg: 0, rotationDirection: 1 };
+  const initial = holeCenters(rotating, P)[0];
+  assert.equal(isHoleOpeningSafe(initial, rotating, P), true);
+  const turned = advanceObstacle(rotating, 0, 0, 3, P);
+  assert.notDeepEqual(holeCenters(turned, P), holeCenters(rotating, P));
+  assert.equal(isHoleOpeningSafe(initial, turned, P), false);
+  assert.equal(isHoleOpeningSafe(holeCenters(turned, P)[0], turned, P), true);
+  const staticHole = { ...rotating, rotationDirection: 0 };
+  assert.deepEqual(holeCenters(advanceObstacle(staticHole, 0, 0, 3, P), P), holeCenters(staticHole, P));
 });
 
 test('障害物が機体面をまたいだ瞬間だけ判定する', () => {
@@ -292,7 +331,7 @@ test('衝突時の安全方向を返す', () => {
   const sector = safeDirection({ type: 'sector', openCenterDeg: 135 }, { x: 0, y: 0 }, P);
   approx(sector.x, -Math.SQRT1_2);
   approx(sector.y, Math.SQRT1_2);
-  const holes = safeDirection({ type: 'holes', openSlots: [0, 2, 4] }, { x: 0.2, y: 0 }, P);
+  const holes = safeDirection({ type: 'holes', openSlots: [0, 2, 3] }, { x: 0.2, y: 0 }, P);
   approx(holes.x, 1);
   approx(holes.y, 0);
 });

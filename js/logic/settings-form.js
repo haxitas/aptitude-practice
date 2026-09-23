@@ -97,8 +97,9 @@ export const SETTING_FIELDS = Object.freeze({
     number('collisionPushDistance', '押し戻し距離', 0, 1, { step: 0.01, unit: 'u' }),
     number('aircraftMaxRadius', '機体の移動可能半径', 0.1, 0.99, { step: 0.01 }),
     number('sectorOpeningDeg', '扇形の開口角', 1, 359, { step: 1, unit: '°' }),
-    number('holeSlotCount', '小穴の候補数', 3, 24, { integer: true, unit: 'か所' }),
-    number('holeOpenCount', '開く小穴の数', 1, 24, { integer: true, unit: 'か所' }),
+    { key: 'holeSlotCount', label: '小穴の候補位置', type: 'select', options: [{ value: '4', label: '上下左右の4か所', parsed: 4 }] },
+    list('holeOpenCounts', '小穴の開口数候補', 1, 3, { integer: true, hint: '1〜3をカンマ区切り' }),
+    number('holeRotationRate', '2・3穴が回転する確率', 0, 1, { step: 0.01 }),
     number('holeRingRadius', '小穴中心の配置半径', 0.05, 0.95, { step: 0.01 }),
     number('holeRadius', '小穴の半径', 0.01, 0.45, { step: 0.01 }),
   ]),
@@ -177,7 +178,6 @@ export function validateTestSettings(testId, raw, defaults) {
     }
   } else if (testId === 't6') {
     if (value.initialSpeed > value.maxSpeed) errors.maxSpeed = '最高速度は初速以上にしてください';
-    if (value.holeOpenCount > value.holeSlotCount) errors.holeOpenCount = '開く数は候補数以下にしてください';
     const chord = 2 * value.holeRingRadius * Math.sin(Math.PI / value.holeSlotCount);
     if (value.holeRadius * 2 >= chord) errors.holeRadius = '隣の小穴と重ならない半径にしてください';
     if (value.holeRingRadius + value.holeRadius > 1) errors.holeRadius = '小穴全体がトンネル内に収まるようにしてください';

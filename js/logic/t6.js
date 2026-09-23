@@ -148,7 +148,7 @@ export function isSectorOpeningSafe(position, openCenterDeg, p) {
 
 export function holeCenters(obstacle, p) {
   return obstacle.openSlots.map(slot => {
-    const angle = slot * 360 / p.holeSlotCount;
+    const angle = slot * 360 / p.holeSlotCount + (obstacle.rotationDeg ?? 0);
     const rad = angle * Math.PI / 180;
     return { x: Math.cos(rad) * p.holeRingRadius, y: Math.sin(rad) * p.holeRingRadius };
   });
@@ -260,7 +260,9 @@ export function createObstacle(rng, z, id, p) {
     const j = Math.floor(rng() * (i + 1));
     [slots[i], slots[j]] = [slots[j], slots[i]];
   }
-  return { id, type: 'holes', z, openSlots: slots.slice(0, p.holeOpenCount) };
+  const openCount = p.holeOpenCounts[Math.floor(rng() * p.holeOpenCounts.length)];
+  const rotationDirection = openCount === 1 || rng() >= p.holeRotationRate ? 0 : (rng() < 0.5 ? -1 : 1);
+  return { id, type: 'holes', z, openSlots: slots.slice(0, openCount), rotationDeg: 0, rotationDirection };
 }
 
 export function createInitialObstacles(rng, p) {
@@ -276,11 +278,11 @@ export function createInitialObstacles(rng, p) {
 
 export function advanceObstacle(obstacle, distanceDelta, elapsedSec, dtSec, p) {
   const next = { ...obstacle, z: obstacle.z - distanceDelta };
-  if (obstacle.type === 'blades' || obstacle.type === 'sector') {
+  if (obstacle.type === 'blades' || obstacle.type === 'sector' || (obstacle.type === 'holes' && obstacle.rotationDirection !== 0)) {
     const end = elapsedSec + dtSec;
     const turn = p.bladeInitialAngularSpeedDegSec * dtSec
       + 0.5 * p.bladeAngularAccelerationDegSec2 * (end * end - elapsedSec * elapsedSec);
-    if (obstacle.type === 'blades') next.rotationDeg = normalizeAngleDeg(obstacle.rotationDeg + obstacle.rotationDirection * turn);
+    if (obstacle.type === 'blades' || obstacle.type === 'holes') next.rotationDeg = normalizeAngleDeg((obstacle.rotationDeg ?? 0) + obstacle.rotationDirection * turn);
     else next.openCenterDeg = normalizeAngleDeg(obstacle.openCenterDeg + obstacle.rotationDirection * turn);
   }
   return next;

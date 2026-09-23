@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { SETTING_FIELDS, validateTestSettings, resetTestOverrides, canPlaceT5Fallback } from '../js/logic/settings-form.js';
-import { DEFAULTS } from '../js/core/settings.js';
+import { DEFAULTS, resolveSettings } from '../js/core/settings.js';
 
 function raw(testId, changes = {}) {
   return Object.fromEntries(Object.entries({ ...DEFAULTS[testId], ...changes }).map(([key, value]) => [
@@ -68,12 +68,30 @@ test('T5 は個数の順序と点の大きさ・最小間隔の組み合わせ�
 test('T6 は速度と小穴の個数・重なり・範囲を検証する', () => {
   const speed = validateTestSettings('t6', raw('t6', { initialSpeed: 2, maxSpeed: 1 }), DEFAULTS.t6);
   assert.match(speed.errors.maxSpeed, /初速/);
-  const count = validateTestSettings('t6', raw('t6', { holeSlotCount: 8, holeOpenCount: 9 }), DEFAULTS.t6);
-  assert.match(count.errors.holeOpenCount, /候補数/);
-  const overlap = validateTestSettings('t6', raw('t6', { holeRingRadius: 0.3, holeRadius: 0.2, holeSlotCount: 8 }), DEFAULTS.t6);
+  const count = validateTestSettings('t6', raw('t6', { holeOpenCounts: '1,2,4' }), DEFAULTS.t6);
+  assert.match(count.errors.holeOpenCounts, /1〜3|範囲/);
+  const overlap = validateTestSettings('t6', raw('t6', { holeRingRadius: 0.3, holeRadius: 0.25 }), DEFAULTS.t6);
   assert.match(overlap.errors.holeRadius, /重な/);
-  const outside = validateTestSettings('t6', raw('t6', { holeRingRadius: 0.9, holeRadius: 0.2 }), DEFAULTS.t6);
+  const outside = validateTestSettings('t6', raw('t6', { holeRingRadius: 0.8, holeRadius: 0.25 }), DEFAULTS.t6);
   assert.match(outside.errors.holeRadius, /トンネル/);
+});
+
+test('T6の小穴は4方位固定で、開口数候補と回転確率を検証する', () => {
+  const fields = SETTING_FIELDS.t6.map(field => field.key);
+  assert.ok(fields.includes('holeOpenCounts'));
+  assert.ok(fields.includes('holeRotationRate'));
+  const valid = validateTestSettings('t6', raw('t6', { holeOpenCounts: '1,3', holeRotationRate: 0.25 }), DEFAULTS.t6);
+  assert.equal(valid.ok, true, JSON.stringify(valid));
+  assert.deepEqual(valid.value.holeOpenCounts, [1, 3]);
+  for (const bad of ['1,1', '0,2', '2,4', '1.5,2']) {
+    assert.equal(validateTestSettings('t6', raw('t6', { holeOpenCounts: bad }), DEFAULTS.t6).ok, false);
+  }
+  assert.equal(validateTestSettings('t6', raw('t6', { holeRotationRate: 1.1 }), DEFAULTS.t6).ok, false);
+  assert.equal(validateTestSettings('t6', raw('t6', { holeSlotCount: 8 }), DEFAULTS.t6).ok, false);
+  const legacy = resolveSettings({ t6: { holeSlotCount: 8, holeOpenCount: 3 } });
+  assert.equal(legacy.settings.t6.holeSlotCount, 4);
+  assert.deepEqual(legacy.settings.t6.holeOpenCounts, [1, 2, 3]);
+  assert.deepEqual(resolveSettings({}).warnings, []);
 });
 
 test('T6の羽根の開口数候補は1〜3の重複しない整数だけ保存する', () => {

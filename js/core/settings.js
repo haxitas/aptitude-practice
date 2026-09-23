@@ -112,10 +112,11 @@ export const DEFAULTS = Object.freeze({
     farZ: 12,
     tunnelRingSpacing: 0.75,
     sectorOpeningDeg: 90,
-    holeSlotCount: 8,
-    holeOpenCount: 3,
+    holeSlotCount: 4,
+    holeOpenCounts: Object.freeze([1, 2, 3]),
+    holeRotationRate: 0.5,
     holeRingRadius: 0.6,
-    holeRadius: 0.2,
+    holeRadius: 0.3,
   }),
 });
 
@@ -151,7 +152,10 @@ export function resolveSettings(saved) {
     const out = {};
     for (const [key, def] of Object.entries(defs)) {
       if (key in src) {
-        if (sameType(def, src[key])) {
+        if (testId === 't6' && key === 'holeSlotCount' && src[key] !== 4) {
+          out[key] = def;
+          warnings.push(`${testId}.${key}`);
+        } else if (sameType(def, src[key])) {
           out[key] = src[key];
         } else {
           out[key] = def;

@@ -26,6 +26,15 @@ function drawHalf(ctx, obstacle, cx, cy, radius) {
   else if (obstacle.blockedSide === 'left') ctx.fillRect(cx - radius, cy - radius, radius, radius * 2);
   else ctx.fillRect(cx, cy - radius, radius, radius * 2);
   ctx.restore();
+  ctx.beginPath();
+  if (obstacle.blockedSide === 'up' || obstacle.blockedSide === 'down') {
+    ctx.moveTo(cx - radius, cy);
+    ctx.lineTo(cx + radius, cy);
+  } else {
+    ctx.moveTo(cx, cy - radius);
+    ctx.lineTo(cx, cy + radius);
+  }
+  ctx.stroke();
 }
 
 function drawBlades(ctx, obstacle, cx, cy, radius, hubRatio, openingDeg) {
@@ -41,6 +50,17 @@ function drawBlades(ctx, obstacle, cx, cy, radius, hubRatio, openingDeg) {
   ctx.beginPath();
   ctx.arc(cx, cy, radius * hubRatio, 0, Math.PI * 2);
   ctx.fill();
+  ctx.stroke();
+  for (let i = 0; i < obstacle.openingCount; i++) {
+    const center = obstacle.rotationDeg + i * 360 / obstacle.openingCount;
+    for (const edge of [center - openingDeg / 2, center + openingDeg / 2]) {
+      const rad = edge * DEG;
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(rad) * radius * hubRatio, cy - Math.sin(rad) * radius * hubRatio);
+      ctx.lineTo(cx + Math.cos(rad) * radius, cy - Math.sin(rad) * radius);
+      ctx.stroke();
+    }
+  }
 }
 
 function drawSector(ctx, obstacle, cx, cy, radius, openingDeg) {
@@ -56,6 +76,13 @@ function drawSector(ctx, obstacle, cx, cy, radius, openingDeg) {
   );
   ctx.closePath();
   ctx.fill('evenodd');
+  for (const edge of [obstacle.openCenterDeg - half, obstacle.openCenterDeg + half]) {
+    const rad = edge * DEG;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(rad) * radius, cy - Math.sin(rad) * radius);
+    ctx.stroke();
+  }
 }
 
 function drawHoles(ctx, obstacle, cx, cy, radius, p) {
@@ -69,6 +96,11 @@ function drawHoles(ctx, obstacle, cx, cy, radius, p) {
     ctx.arc(x, y, holeRadius, 0, Math.PI * 2);
   }
   ctx.fill('evenodd');
+  for (const center of holeCenters(obstacle, p)) {
+    ctx.beginPath();
+    ctx.arc(cx + center.x * radius, cy - center.y * radius, p.holeRadius * radius, 0, Math.PI * 2);
+    ctx.stroke();
+  }
 }
 
 function drawAircraft(ctx, layout, position, pushing) {
@@ -152,8 +184,8 @@ function drawScene(ctx, layout, state, p, stickInput) {
     const scale = projectScale(p.perspectiveFocal, obstacle.z);
     const radius = tunnelRadius * scale;
     ctx.fillStyle = '#e25048';
-    ctx.strokeStyle = '#ffcdbe';
-    ctx.lineWidth = Math.max(1, 2.5 * scale);
+    ctx.strokeStyle = '#ffe5a1';
+    ctx.lineWidth = Math.max(1.5, 4 * scale);
     if (obstacle.type === 'half') drawHalf(ctx, obstacle, cx, cy, radius);
     else if (obstacle.type === 'blades') drawBlades(ctx, obstacle, cx, cy, radius, p.bladeHubRadius, p.bladeOpeningDeg);
     else if (obstacle.type === 'sector') drawSector(ctx, obstacle, cx, cy, radius, p.sectorOpeningDeg);
@@ -237,7 +269,7 @@ export function mount(root, ctx) {
     root.innerHTML = shell(`<section class="t6-start">
       <h1 data-ref="title"></h1>
       <p>矢印キー、または操縦用の円を指・マウスで動かして機体を操縦します。横画面では左右ボタンで円の側を選べます。縦画面ではトンネルが上、操縦円が下です。</p>
-      <p>半円、回転する羽根(開口1〜3個)、回転する扇形、縁の小穴の開口を通り抜けます。</p>
+          <p>半円、回転する羽根(開口1〜3個)、回転する扇形、縁の小穴(開口1〜3個)を通り抜けます。</p>
       <p class="muted">衝突すると速度が半分になり、安全な開口方向へ押し戻されます。制限時間は <span data-ref="duration"></span>です。</p>
       <p class="notice notice-error" data-ref="layoutError" hidden></p>
       <button class="btn btn-primary btn-large" type="button" data-ref="start">開始</button>
