@@ -7,7 +7,8 @@ import {
   createT4Example,
   createT4Selection, selectT4Position, selectT4Heading, canSubmitT4,
   judgeT4, createT4Tally, recordT4Answer, summarizeT4, buildT4Record,
-  previousT4Feedback, compassNeedleAngle, explainT4Solution,
+  previousT4Feedback, compassNeedleAngle, compassNeedleVertices, planeRotationDeg,
+  createT4Practice, answerT4Practice, advanceT4Practice, explainT4Solution,
 } from '../js/logic/t4.js';
 import { findTest, formatDetail } from '../js/core/catalog.js';
 import { instrumentSvg } from '../js/tests/t4.js';
@@ -40,36 +41,89 @@ test('流儀ごとの針角度は8方位で逆向きになり、不正入力を�
   assert.throws(() => compassNeedleAngle(1, 'other'));
 });
 
-test('左の計器は流儀ごとに文字・機首印・針先を変え、ADFは変えない', () => {
+test('左の計器は流儀ごとに方位文字と北印を変え、ADFは尖った針のまま', () => {
   const north = instrumentSvg(1, false, 'northUp');
-  assert.match(north, /rotate\(45 100 100\)/);
+  assert.match(north, /class="t4-compass-red"/);
+  assert.match(north, /class="t4-compass-pale"/);
   assert.match(north, />NE<\/text>/);
-  assert.match(north, /class="t4-aircraft"/);
   assert.doesNotMatch(north, /class="t4-nose"/);
   const nose = instrumentSvg(1, false, 'noseUp');
-  assert.match(nose, /rotate\(315 100 100\)/);
   assert.match(nose, /class="t4-nose"/);
   assert.match(nose, /class="t4-north-label"/);
   assert.doesNotMatch(nose, />NE<\/text>/);
   const adf = instrumentSvg(2, true);
   assert.match(adf, /rotate\(90 100 100\)/);
-  for (const mark of ['右90°', '後ろ180°', '左270°']) assert.ok(adf.includes(mark));
+  assert.match(adf, /class="t4-adf-needle"/);
+  for (const svg of [north, nose, adf]) {
+    assert.equal((svg.match(/class="t4-guide"/g) ?? []).length, 4);
+    assert.doesNotMatch(svg, /\d+°/);
+  }
+});
+
+test('コンパスの針は両流儀の全8方位で中心を通り、先端と尾端が点対称', () => {
+  for (const mode of ['northUp', 'noseUp']) for (let i = 0; i < 8; i++) {
+    const { tip, tail, right, left, center, pointingHalf, oppositeHalf } = compassNeedleVertices(i, mode);
+    assert.deepEqual(center, { x: 100, y: 100 });
+    for (const [a, b] of [[tip, tail], [right, left]]) {
+      assert.ok(Math.abs(a.x + b.x - 200) < 1e-9);
+      assert.ok(Math.abs(a.y + b.y - 200) < 1e-9);
+    }
+    assert.deepEqual(pointingHalf[2], center);
+    assert.deepEqual(oppositeHalf[2], center);
+    assert.ok(Math.abs(Math.hypot(tip.x - 100, tip.y - 100) - 62) < 1e-9);
+  }
+});
+
+test('選んだ向きの飛行機は基準45度から8方位へ45度刻みで回る', () => {
+  assert.equal(planeRotationDeg('N', 45), -45);
+  assert.equal(planeRotationDeg('E', 45), 45);
+  for (let i = 0; i < 8; i++) assert.equal(planeRotationDeg(DIRECTIONS[i].key, 45), i * 45 - 45);
+  assert.throws(() => planeRotationDeg('BAD', 45));
+});
+
+test('練習は回答→解説→次問を3回繰り返して終了し、やり直しで最初に戻る', () => {
+  const rng = createRng(81);
+  let state = createT4Practice(rng);
+  let lastProblem;
+  for (let i = 0; i < 3; i++) {
+    assert.equal(state.phase, 'question');
+    assert.equal(state.index, i);
+    const previous = state.problem;
+    lastProblem = previous;
+    state = answerT4Practice(state, { position: 'N', heading: 'N' });
+    assert.equal(state.phase, 'explanation');
+    assert.equal(state.answers.length, i + 1);
+    assert.deepEqual(state.problem, previous);
+    state = advanceT4Practice(state, rng);
+    if (i < 2) assert.notDeepEqual(state.problem, previous);
+  }
+  assert.equal(state.phase, 'complete');
+  assert.equal(state.answers.length, 3);
+  assert.deepEqual(state.lastProblem, lastProblem);
+  const again = createT4Practice(createRng(82), state.lastProblem);
+  assert.equal(again.index, 0);
+  assert.equal(again.answers.length, 0);
+  assert.equal(again.phase, 'question');
+  assert.notDeepEqual(again.problem, state.lastProblem);
+  const afterExample = createT4Practice(() => 0, createT4Example().problem);
+  assert.notDeepEqual(afterExample.problem, createT4Example().problem);
 });
 
 test('導き方は流儀ごとに機首の読み方を変え、塔と自機の正解は共通', () => {
   const nose = explainT4Solution({ headingIndex: 1, relativeIndex: 2 }, 'noseUp');
   assert.equal(nose.length, 3);
-  assert.match(nose[0], /機首が上.*針は北.*左上.*左45°.*機首はNE/);
-  assert.match(nose[1], /ADFの針が右\(相対90°\).*塔は NE\+90° = SE/);
+  assert.match(nose[0], /北を指す針.*左上.*機首.*NE/);
+  assert.match(nose[1], /ADF.*右.*塔.*SE/);
   assert.match(nose[2], /NWのマス.*NE/);
   const north = explainT4Solution({ headingIndex: 1, relativeIndex: 2 }, 'northUp');
   assert.match(north[0], /コンパスの針の先が機首.*NE/);
-  assert.match(north[1], /ADFの針が右\(相対90°\).*塔は NE\+90° = SE/);
+  assert.match(north[1], /ADF.*右.*塔.*SE/);
   assert.match(north[2], /NWのマス.*NE/);
+  for (const line of [...nose, ...north]) assert.doesNotMatch(line, /\d+°/);
 });
 
 test('T4 の既定値は承認済みの数値', () => {
-  assert.deepEqual(P, { durationSec: 180, answerFeedbackMs: 300, showPreviousAnswer: true, compassMode: 'noseUp' });
+  assert.deepEqual(P, { durationSec: 180, answerFeedbackMs: 300, showPreviousAnswer: true, compassMode: 'noseUp', planeGlyphBaseDeg: 45 });
 });
 
 test('方位は N から時計回りの8方向', () => {
@@ -163,7 +217,7 @@ test('記録はSPEC §4の形で、その回の設定を複製する', () => {
   assert.deepEqual(record, {
     id: `${date}-t4`, test: 't4', date, score: 2,
     detail: { answered: 4, correct: 2, positionOnlyCorrect: 1, headingOnlyCorrect: 1 },
-    settings: { durationSec: 180, answerFeedbackMs: 300, showPreviousAnswer: true, compassMode: 'noseUp' },
+    settings: { durationSec: 180, answerFeedbackMs: 300, showPreviousAnswer: true, compassMode: 'noseUp', planeGlyphBaseDeg: 45 },
   });
   assert.notEqual(record.settings, P);
 });

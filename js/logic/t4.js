@@ -50,6 +50,28 @@ export function compassNeedleAngle(headingIndex, compassMode) {
   throw new RangeError(`不明な計器の流儀です: ${compassMode}`);
 }
 
+export function compassNeedleVertices(headingIndex, compassMode) {
+  const radians = compassNeedleAngle(headingIndex, compassMode) * Math.PI / 180;
+  const rotate = (x, y) => ({
+    x: 100 + (x - 100) * Math.cos(radians) - (y - 100) * Math.sin(radians),
+    y: 100 + (x - 100) * Math.sin(radians) + (y - 100) * Math.cos(radians),
+  });
+  const center = { x: 100, y: 100 };
+  const tip = rotate(100, 38);
+  const tail = rotate(100, 162);
+  const right = rotate(106, 100);
+  const left = rotate(94, 100);
+  return { tip, tail, right, left, center,
+    pointingHalf: [tip, right, center, left],
+    oppositeHalf: [tail, left, center, right] };
+}
+
+export function planeRotationDeg(heading, baseDeg) {
+  const index = DIRECTIONS.findIndex(d => d.key === heading);
+  if (index < 0 || !Number.isFinite(baseDeg)) throw new RangeError('不明な機首の向きまたは基準角です');
+  return index * 45 - baseDeg;
+}
+
 export function createT4Example(compassMode = 'noseUp') {
   compassNeedleAngle(0, compassMode);
   const problem = { headingIndex: 1, relativeIndex: 2 };
@@ -60,18 +82,34 @@ export function createT4Example(compassMode = 'noseUp') {
 export function explainT4Solution(problem, compassMode) {
   const { towerDirection, position, heading } = solutionFor(problem.headingIndex, problem.relativeIndex);
   const northAngle = compassNeedleAngle(problem.headingIndex, compassMode);
-  const relativeAngle = problem.relativeIndex * 45;
-  const northPosition = ['上(北が機首の正面0°)', '右上(北が機首の右45°)', '右(北が機首の右90°)', '右下(北が機首の右135°)',
-    '下(北が機首の後ろ180°)', '左下(北が機首の左135°)', '左(北が機首の左90°)', '左上(北が機首の左45°)'][northAngle / 45];
+  const northPosition = ['上', '右上', '右', '右下', '下', '左下', '左', '左上'][northAngle / 45];
   const compassStep = compassMode === 'noseUp'
-    ? `1. 円盤は機首が上、針は北を指す。針が${northPosition} → 機首は${heading}。`
+    ? `1. 北を指す針が${northPosition} → 機首は${heading}。`
     : `1. コンパスの針の先が機首 → 機首は${heading}。`;
   const adfPosition = ['上', '右上', '右', '右下', '下', '左下', '左', '左上'][problem.relativeIndex];
   return [
     compassStep,
-    `2. ADFの針が${adfPosition}(相対${relativeAngle}°) → 塔は ${heading}+${relativeAngle}° = ${DIRECTIONS[towerDirection].key}。`,
+    `2. ADFの針は機首の${adfPosition} → 塔は${DIRECTIONS[towerDirection].key}。`,
     `3. 塔から見た自機は反対の${position}のマス。向きは機首のまま${heading}。`,
   ];
+}
+
+export function createT4Practice(rng, previous = null) {
+  return { phase: 'question', index: 0, answers: [], problem: generateT4Problem(rng, previous), feedback: null };
+}
+
+export function answerT4Practice(state, selection) {
+  if (state.phase !== 'question') throw new Error('練習の回答を受け付けていません');
+  const result = judgeT4(state.problem, selection);
+  const feedback = { selection: { ...selection }, solution: solutionFor(state.problem.headingIndex, state.problem.relativeIndex), correct: result.correct };
+  return { ...state, phase: 'explanation', answers: [...state.answers, feedback], feedback };
+}
+
+export function advanceT4Practice(state, rng) {
+  if (state.phase !== 'explanation') throw new Error('解説を見てから進んでください');
+  if (state.index === 2) return { ...state, phase: 'complete', problem: null, lastProblem: state.problem, feedback: null };
+  return { ...state, phase: 'question', index: state.index + 1,
+    problem: generateT4Problem(rng, state.problem), feedback: null };
 }
 
 export function previousT4Feedback(problem, selection) {

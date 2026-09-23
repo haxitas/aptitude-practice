@@ -105,3 +105,12 @@ test('T4の計器の流儀はnorthUp/noseUpだけを保存する', () => {
   assert.equal(bad.ok, false);
   assert.ok(bad.errors.compassMode);
 });
+
+test('T4の飛行機文字の基準角を設定で変更でき、範囲外を拒否する', () => {
+  const good = validateTestSettings('t4', raw('t4', { planeGlyphBaseDeg: 90 }), DEFAULTS.t4);
+  assert.equal(good.ok, true, JSON.stringify(good));
+  assert.equal(good.value.planeGlyphBaseDeg, 90);
+  const bad = validateTestSettings('t4', raw('t4', { planeGlyphBaseDeg: 360 }), DEFAULTS.t4);
+  assert.equal(bad.ok, false);
+  assert.ok(bad.errors.planeGlyphBaseDeg);
+});
