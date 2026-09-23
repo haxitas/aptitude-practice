@@ -139,6 +139,11 @@ export function shouldTimeoutT5(nowMs, questionDeadlineMs, overallDeadlineMs) {
   return nowMs >= questionDeadlineMs && questionDeadlineMs < overallDeadlineMs;
 }
 
+export function formatT5PreviousAnswer(correctAnswer, answer) {
+  const shownAnswer = answer === null ? 'なし' : `${answer}個`;
+  return `前の問題の正解: ${correctAnswer}個 / あなたの答え: ${shownAnswer} ${answer === correctAnswer ? '○' : '×'}`;
+}
+
 export function createT5Tally() {
   return { correct: 0, answered: 0, unanswered: 0, errors: [] };
 }

@@ -5,9 +5,16 @@ import { DEFAULTS } from '../js/core/settings.js';
 import {
   generateT5Problem, reshuffleT5Dots, shuffleIndexAt, shouldTimeoutT5,
   createT5Tally, recordT5Answer, recordT5Unanswered, summarizeT5, buildT5Record,
+  formatT5PreviousAnswer,
 } from '../js/logic/t5.js';
 
 const P = DEFAULTS.t5;
+
+test('前問表示は正解・誤答・未回答を区別する', () => {
+  assert.equal(formatT5PreviousAnswer(5, 5), '前の問題の正解: 5個 / あなたの答え: 5個 ○');
+  assert.equal(formatT5PreviousAnswer(5, 4), '前の問題の正解: 5個 / あなたの答え: 4個 ×');
+  assert.equal(formatT5PreviousAnswer(5, null), '前の問題の正解: 5個 / あなたの答え: なし ×');
+});
 
 test('T5 の既定値は承認済みの数値', () => {
   assert.deepEqual(P, {

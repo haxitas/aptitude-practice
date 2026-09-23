@@ -3,6 +3,7 @@
 import {
   generateT5Problem, reshuffleT5Dots, shuffleIndexAt, shouldTimeoutT5,
   pairDotPositions, interpolateDotPositions,
+  formatT5PreviousAnswer,
   createT5Tally, recordT5Answer, recordT5Unanswered, buildT5Record,
 } from '../logic/t5.js';
 import { createRng, randomSeed } from '../core/rng.js';
@@ -93,6 +94,7 @@ export function mount(root, ctx) {
         </div>
         <div class="t5-stage"><canvas data-ref="canvas" aria-label="点を数える円"></canvas></div>
         <div class="t5-buttons" data-ref="buttons"></div>
+        <p class="t5-previous" data-ref="previous" hidden></p>
       </section>`;
     const $ = name => root.querySelector(`[data-ref="${name}"]`);
     const canvas = $('canvas');
@@ -115,7 +117,9 @@ export function mount(root, ctx) {
       return movement ? interpolateDotPositions(movement.pairs, currentElapsed - movement.startedAt, params.dotMoveMs) : problem.dots;
     }
 
-    function nextQuestion(elapsed) {
+    function nextQuestion(elapsed, answer) {
+      $('previous').textContent = formatT5PreviousAnswer(problem.count, answer);
+      $('previous').hidden = false;
       problem = generateT5Problem(rng, params, problem);
       movement = null;
       questionNumber++;
@@ -131,7 +135,7 @@ export function mount(root, ctx) {
       tally = recordT5Answer(tally, Number(button.dataset.answer), problem.count);
       button.classList.add('is-pressed');
       pale.set(button, e.timeStamp);
-      nextQuestion(currentElapsed);
+      nextQuestion(currentElapsed, Number(button.dataset.answer));
     }
 
     function abort(message) {
@@ -166,7 +170,7 @@ export function mount(root, ctx) {
         const questionDeadline = questionStartMs + params.questionLimitSec * 1000;
         if (shouldTimeoutT5(elapsed, questionDeadline, overallDeadline)) {
           tally = recordT5Unanswered(tally);
-          nextQuestion(elapsed);
+          nextQuestion(elapsed, null);
         } else {
           const index = shuffleIndexAt(elapsed - questionStartMs, params);
           if (index > lastShuffleIndex) {

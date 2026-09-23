@@ -449,6 +449,7 @@ h1 { font-size: 1.6rem; margin: 0 0 16px; }
   cursor: pointer; transition: opacity 80ms linear;
 }
 .t5-number.is-pressed { opacity: 0.35; }
+.t5-previous { margin: 0; text-align: center; color: var(--muted); font-size: 0.85rem; }
 @media (max-width: 700px) {
   .t5-buttons { grid-template-columns: repeat(6, 1fr); }
   .t5-number { min-height: var(--tap); }
