@@ -9,6 +9,10 @@ const duration = () => number('durationSec', '制限時間', 10, 3600, { integer
 export const SETTING_FIELDS = Object.freeze({
   t1: Object.freeze([
     duration(),
+    { key: 'calculatorDuringTest', label: 'テスト中に電卓を表示', type: 'select', options: [
+      { value: 'true', label: '表示する', parsed: true },
+      { value: 'false', label: '表示しない', parsed: false },
+    ] },
     number('unitValueMin', '単位換算の最小値', 1, 100, { integer: true }),
     number('unitValueMax', '単位換算の最大値', 1, 100, { integer: true }),
     number('speedMin', '速さの最小値', 1, 100, { integer: true, unit: 'km/h' }),

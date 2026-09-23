@@ -29,6 +29,14 @@ test('T1 は最小値が最大値を超える組み合わせを保存しない',
   assert.match(result.errors.speedMax, /最小/);
 });
 
+test('T1 の電卓は既定で表示し、設定で非表示にできる', () => {
+  assert.equal(DEFAULTS.t1.calculatorDuringTest, true);
+  assert.ok(SETTING_FIELDS.t1.some(field => field.key === 'calculatorDuringTest'));
+  const hidden = validateTestSettings('t1', raw('t1', { calculatorDuringTest: false }), DEFAULTS.t1);
+  assert.equal(hidden.ok, true, JSON.stringify(hidden));
+  assert.equal(hidden.value.calculatorDuringTest, false);
+});
+
 test('T2 は一致を連続上限内で置けない組み合わせを保存しない', () => {
   const bad = validateTestSettings('t2', raw('t2', { durationSec: 120, intervalMs: 1000, matchRate: 0.9, maxConsecutiveMatches: 1 }), DEFAULTS.t2);
   assert.equal(bad.ok, false);

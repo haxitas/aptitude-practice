@@ -272,6 +272,8 @@ h1 { font-size: 1.6rem; margin: 0 0 16px; }
   padding: 8px max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
   user-select: none; -webkit-user-select: none;
 }
+.t1-main { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 300px); gap: 16px; align-items: center; width: min(100%, 1180px); margin: 0 auto; }
+.t1-calculator { align-self: center; }
 .t1-card {
   flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center;
   gap: 18px; width: min(100%, 820px); margin: 0 auto;
@@ -285,6 +287,26 @@ h1 { font-size: 1.6rem; margin: 0 0 16px; }
   font-weight: 800; cursor: pointer; transition: opacity 80ms linear;
 }
 .t1-choices button.is-pressed { opacity: 0.35; }
+
+/* ---- 電卓 ---- */
+.calculator-screen { max-width: 400px; }
+.calculator { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.calculator-display { min-height: 82px; padding: 4px 8px 8px; text-align: right; font-variant-numeric: tabular-nums; overflow: hidden; }
+.calculator-context { min-height: 1.4em; color: var(--muted); font-size: 0.82rem; white-space: nowrap; }
+.calculator-display output { display: block; font-size: clamp(1.4rem, 4vw, 2rem); font-weight: 700; overflow-wrap: anywhere; }
+.calculator-keys { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; }
+.calculator-keys button { min-width: 44px; min-height: 44px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; font-weight: 700; cursor: pointer; }
+.calculator-keys button:active { opacity: 0.65; }
+.calculator-keys .calculator-equals { grid-column: span 2; background: var(--accent); color: var(--accent-text); }
+@media (max-width: 700px) {
+  .t1-main { grid-template-columns: 1fr; gap: 12px; }
+  .t1-card { gap: 8px; }
+  .t1-question { min-height: 0; font-size: 1.3rem; }
+  .t1-choices button { min-height: 54px; }
+  .t1-calculator { width: min(100%, 350px); margin: 0 auto; }
+  .t1-calculator .calculator { padding: 8px; }
+  .t1-calculator .calculator-display { min-height: 60px; }
+}
 
 .small { font-size: 0.85rem; }
 

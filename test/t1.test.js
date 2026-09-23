@@ -12,6 +12,7 @@ const P = DEFAULTS.t1;
 test('T1 の既定値は承認済みの数値', () => {
   assert.deepEqual(P, {
     durationSec: 180,
+    calculatorDuringTest: true,
     answerFeedbackMs: 300,
     stallAbortMs: 1000,
     unitValueMin: 1,

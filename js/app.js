@@ -13,6 +13,7 @@ import * as t5 from './tests/t5.js';
 import * as t6 from './tests/t6.js';
 import * as history from './history.js';
 import * as settingsScreen from './settings.js';
+import * as calculatorScreen from './calculator.js';
 
 const SCREENS = { t1, t2, t3, t4, t5, t6 };
 
@@ -43,6 +44,7 @@ function renderMenu(settingsInfo) {
       <div class="menu-sub">
         <a class="btn" href="#/history">履歴</a>
         <a class="btn" href="#/settings">設定</a>
+        <a class="btn" href="#/calc">電卓</a>
       </div>
     </section>`;
   const $ = name => root.querySelector(`[data-ref="${name}"]`);
@@ -105,6 +107,8 @@ function render() {
     cleanup = history.mount(root, ctx) ?? null;
   } else if (route === 'settings') {
     cleanup = settingsScreen.mount(root, ctx) ?? null;
+  } else if (route === 'calc') {
+    cleanup = calculatorScreen.mount(root, ctx) ?? null;
   } else if (findTest(route)) {
     const screen = SCREENS[route];
     if (screen) cleanup = screen.mount(root, ctx) ?? null;

@@ -8,6 +8,7 @@ import { startTimer, formatDuration } from '../core/timer.js';
 import { appendRecord } from '../core/storage.js';
 import { renderResult } from '../core/result.js';
 import { findTest, formatDetail } from '../core/catalog.js';
+import { mountCalculator } from '../calculator.js';
 
 function formatChoice(value, unit) {
   return `${value}${unit}`;
@@ -35,6 +36,7 @@ export function mount(root, ctx) {
         <div class="actions">
           <button class="btn btn-primary btn-large" type="button" data-ref="start">開始</button>
           <a class="btn" href="#/">メニュー</a>
+          <a class="btn" href="#/calc">電卓</a>
         </div>
       </section>`;
     const $ = name => root.querySelector(`[data-ref="${name}"]`);
@@ -58,6 +60,7 @@ export function mount(root, ctx) {
           <span class="remaining" data-ref="remaining"></span>
           <button class="btn btn-quiet" type="button" data-ref="quit">途中終了</button>
         </div>
+        <div class="t1-main">
         <div class="t1-card">
           <p class="t1-kind" data-ref="kind"></p>
           <p class="t1-question" data-ref="question"></p>
@@ -68,10 +71,13 @@ export function mount(root, ctx) {
             <button type="button" data-index="3"></button>
           </div>
         </div>
+        ${params.calculatorDuringTest ? '<div class="t1-calculator" data-ref="calculator"></div>' : ''}
+        </div>
       </section>`;
     const $ = name => root.querySelector(`[data-ref="${name}"]`);
     const choiceButtons = [...root.querySelectorAll('[data-index]')];
     const kindLabels = { unit: '単位換算', speed: '速さ', meeting: '出会い', catchup: '追いつき', percentage: '割合', inversePercentage: '割合の逆算', price: '単価と合計', average: '平均', elapsed: '経過時間' };
+    const cleanupCalculator = params.calculatorDuringTest ? mountCalculator($('calculator')) : null;
 
     function drawProblem() {
       $('kind').textContent = kindLabels[problem.kind];
@@ -133,6 +139,7 @@ export function mount(root, ctx) {
           saveResult,
           onRetry: showStart,
         });
+        root.querySelector('.result .actions')?.insertAdjacentHTML('beforeend', '<a class="btn" href="#/calc">電卓</a>');
       },
     });
 
@@ -140,6 +147,7 @@ export function mount(root, ctx) {
       timer.stop();
       choiceButtons.forEach(button => button.removeEventListener('click', onAnswer));
       document.removeEventListener('visibilitychange', onVisibility);
+      cleanupCalculator?.();
     });
   }
 

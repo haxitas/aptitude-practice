@@ -5,6 +5,7 @@ import { readSettingsRaw } from './storage.js';
 export const DEFAULTS = Object.freeze({
   t1: Object.freeze({
     durationSec: 180,
+    calculatorDuringTest: true,
     answerFeedbackMs: 300,
     stallAbortMs: 1000,
     unitValueMin: 1,
