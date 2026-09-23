@@ -5,7 +5,7 @@ import {
   generateSequence, displayCount, createDisplayState, registerPress, createTally, settleDisplay, buildRecord,
 } from '../logic/t2.js';
 import { createRng, randomSeed } from '../core/rng.js';
-import { startTimer } from '../core/timer.js';
+import { startTimer, formatDuration } from '../core/timer.js';
 import { appendRecord } from '../core/storage.js';
 import { renderResult } from '../core/result.js';
 import { findTest, formatDetail } from '../core/catalog.js';
@@ -69,7 +69,7 @@ export function mount(root, ctx) {
     $('title').textContent = meta.name;
     $('desc').textContent =
       `左右の図形が同じときだけ「同じ」を押します(キーボードはスペースキー)。` +
-      `表示は ${params.intervalMs / 1000} 秒ごとに切り替わり、${(displayCount(params) * params.intervalMs) / 1000} 秒で終わります。`;
+      `表示は ${params.intervalMs / 1000} 秒ごとに切り替わり、制限時間は${formatDuration(params.durationSec)}です。`;
 
     // 設定が実現できるかを先に確かめる
     try {

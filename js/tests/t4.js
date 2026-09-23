@@ -3,17 +3,19 @@
 import {
   DIRECTIONS, generateT4Problem, createT4Selection, createT4Example,
   selectT4Position, selectT4Heading, canSubmitT4,
-  judgeT4, createT4Tally, recordT4Answer, buildT4Record,
+  judgeT4, previousT4Feedback, createT4Tally, recordT4Answer, buildT4Record,
 } from '../logic/t4.js';
 import { createRng, randomSeed } from '../core/rng.js';
-import { startTimer } from '../core/timer.js';
+import { startTimer, formatDuration } from '../core/timer.js';
 import { appendRecord } from '../core/storage.js';
 import { renderResult } from '../core/result.js';
 import { findTest, formatDetail } from '../core/catalog.js';
 
-function instrumentSvg(index, relative = false) {
+export function instrumentSvg(index, relative = false) {
   const angle = index * 45;
-  const labels = relative ? '' : DIRECTIONS.map((d, i) => {
+  const labels = relative ? `<text x="169" y="77" text-anchor="middle" class="t4-adf-mark">右90°</text>
+    <text x="100" y="175" text-anchor="middle" class="t4-adf-mark">後ろ180°</text>
+    <text x="31" y="77" text-anchor="middle" class="t4-adf-mark">左270°</text>` : DIRECTIONS.map((d, i) => {
     const a = i * 45 * Math.PI / 180;
     const x = 100 + Math.sin(a) * 75;
     const y = 100 - Math.cos(a) * 75;
@@ -55,6 +57,7 @@ export function mount(root, ctx) {
     let problem = example ? sample.problem : generateT4Problem(rng);
     let selection = createT4Selection();
     let tally = createT4Tally();
+    let lastFeedback = null;
     let paleUntil = -Infinity;
 
     root.innerHTML = `
@@ -64,17 +67,20 @@ export function mount(root, ctx) {
           <button class="btn btn-quiet" type="button" data-ref="quit">途中終了</button>
         </div>
         ${example ? `<p class="t4-example-note"><strong>例題 — 画面をタップして本番開始</strong><br>
-          機首N・ADFの針が右(相対90°)なので、塔は東。自機は塔の反対の<strong>西のマス</strong>、向きは機首と同じ<strong>N</strong>です。<br>
-          本番はマス→向き→決定。制限時間${params.durationSec}秒はタップから数えます。</p>` : ''}
+          1. ADFの針 → 塔は機首から見て右90°の方向。<br>
+          2. 機首NE + 相対90° = 塔の方位SE → 塔は自機から見てSEの方向。<br>
+          3. だから塔から見た自機は反対の<strong>NWのマス</strong>。向きは機首のまま<strong>NE</strong>。<br>
+          本番はマス→向き→決定。制限時間${formatDuration(params.durationSec)}はタップから数えます。</p>` : ''}
         <div class="t4-instruments">
-          <figure><figcaption>機首の方位</figcaption><div data-ref="compass"></div></figure>
-          <figure><figcaption>塔の相対方向</figcaption><div data-ref="adf"></div></figure>
+          <figure><figcaption>自機の機首の向き(コンパス)</figcaption><div data-ref="compass"></div></figure>
+          <figure><figcaption>塔はどちらにあるか(機首を上とした相対方向)</figcaption><div data-ref="adf"></div></figure>
         </div>
         <div class="t4-answer">
-          <div class="t4-map" data-ref="map" aria-label="自機の位置"></div>
-          <div class="t4-headings" data-ref="headings" aria-label="機首の向き"></div>
+          <div class="t4-answer-field"><p>自機の位置(中央が塔)</p><div class="t4-map" data-ref="map" aria-label="自機の位置"></div></div>
+          <div class="t4-answer-field"><p>自機の機首の向き</p><div class="t4-headings" data-ref="headings" aria-label="機首の向き"></div></div>
           <button class="btn btn-primary t4-submit" type="button" data-ref="submit" disabled>決定</button>
         </div>
+        <p class="t4-previous" data-ref="previous" aria-live="polite" hidden></p>
       </section>`;
     const $ = name => root.querySelector(`[data-ref="${name}"]`);
     const submit = $('submit');
@@ -122,6 +128,10 @@ export function mount(root, ctx) {
       $('adf').innerHTML = instrumentSvg(problem.relativeIndex, true);
       selection = example ? { ...sample.selection } : createT4Selection();
       updateSelection();
+      $('previous').hidden = !params.showPreviousAnswer || !lastFeedback || example;
+      if (!$('previous').hidden) {
+        $('previous').textContent = `前問の正解: ${lastFeedback.position}のマス / 向き ${lastFeedback.heading}　あなたの答え: ${lastFeedback.correct ? '○' : '×'}`;
+      }
     }
 
     function onPosition(e) {
@@ -136,6 +146,7 @@ export function mount(root, ctx) {
 
     function onSubmit(e) {
       if (!canSubmitT4(selection)) return;
+      lastFeedback = previousT4Feedback(problem, selection);
       tally = recordT4Answer(tally, judgeT4(problem, selection));
       paleUntil = e.timeStamp + params.answerFeedbackMs;
       submit.classList.add('is-pressed');

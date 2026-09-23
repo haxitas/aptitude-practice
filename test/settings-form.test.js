@@ -83,3 +83,14 @@ test('T6の操縦円の左右を検証し、それ以外の値は保存しない
   }
   assert.equal(validateTestSettings('t6',raw('t6',{stickSide:'center'}),DEFAULTS.t6).ok,false);
 });
+
+test('T4の前問表示はtrue/falseを保存し、不正値を拒否する', () => {
+  for (const [input, expected] of [['true', true], ['false', false]]) {
+    const result = validateTestSettings('t4', raw('t4', { showPreviousAnswer: input }), DEFAULTS.t4);
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal(result.value.showPreviousAnswer, expected);
+  }
+  const bad = validateTestSettings('t4', raw('t4', { showPreviousAnswer: 'maybe' }), DEFAULTS.t4);
+  assert.equal(bad.ok, false);
+  assert.ok(bad.errors.showPreviousAnswer);
+});

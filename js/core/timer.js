@@ -7,6 +7,13 @@ export function formatRemaining(ms) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
+export function formatDuration(sec) {
+  if (!Number.isInteger(sec) || sec <= 0) throw new RangeError('制限時間は正の整数秒で指定してください');
+  const minutes = Math.floor(sec / 60);
+  const seconds = sec % 60;
+  return `${minutes ? `${minutes}分` : ''}${seconds ? `${seconds}秒` : ''}`;
+}
+
 export function startTimer({ durationMs, onFrame, onEnd, remainingEl, startAt = null }) {
   let rafId = 0;
   let start = startAt;

@@ -7,7 +7,7 @@ import {
   createT3Tally, recordAnswer, recordUnanswered, buildT3Record,
 } from '../logic/t3.js';
 import { createRng, randomSeed } from '../core/rng.js';
-import { startTimer } from '../core/timer.js';
+import { startTimer, formatDuration } from '../core/timer.js';
 import { appendRecord } from '../core/storage.js';
 import { renderResult } from '../core/result.js';
 import { findTest, formatDetail } from '../core/catalog.js';
@@ -68,7 +68,7 @@ export function mount(root, ctx) {
     const $ = name => root.querySelector(`[data-ref="${name}"]`);
     $('title').textContent = meta.name;
     $('desc').textContent =
-      `3つは同時に進みます。制限時間は ${params.durationSec} 秒です。`;
+      `3つは同時に進みます。制限時間は${formatDuration(params.durationSec)}です。`;
     const startBtn = $('start');
 
     if (!synth || typeof globalThis.SpeechSynthesisUtterance !== 'function') {

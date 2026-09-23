@@ -42,9 +42,14 @@ export function generateT4Problem(rng, previous = null) {
 }
 
 export function createT4Example() {
-  const problem = { headingIndex: 0, relativeIndex: 2 };
+  const problem = { headingIndex: 1, relativeIndex: 2 };
   const { position, heading } = solutionFor(problem.headingIndex, problem.relativeIndex);
   return { problem, selection: { position, heading } };
+}
+
+export function previousT4Feedback(problem, selection) {
+  const { position, heading } = solutionFor(problem.headingIndex, problem.relativeIndex);
+  return { position, heading, correct: judgeT4(problem, selection).correct };
 }
 
 export function createT4Selection() {
@@ -90,6 +95,7 @@ export function summarizeT4(tally) {
     score: tally.correct,
     detail: {
       answered: tally.answered,
+      correct: tally.correct,
       positionOnlyCorrect: tally.positionOnlyCorrect,
       headingOnlyCorrect: tally.headingOnlyCorrect,
     },

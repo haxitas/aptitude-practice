@@ -44,7 +44,8 @@ export const TESTS = Object.freeze([
     name: 'テスト4 計器の読み取り',
     implemented: true,
     details: [
-      { key: 'answered', label: '回答' },
+      { key: 'answered', label: '回答数' },
+      { key: 'correct', label: '正答数' },
       { key: 'positionOnlyCorrect', label: '位置だけ正解' },
       { key: 'headingOnlyCorrect', label: '向きだけ正解' },
     ],

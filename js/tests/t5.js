@@ -6,7 +6,7 @@ import {
   createT5Tally, recordT5Answer, recordT5Unanswered, buildT5Record,
 } from '../logic/t5.js';
 import { createRng, randomSeed } from '../core/rng.js';
-import { startTimer } from '../core/timer.js';
+import { startTimer, formatDuration } from '../core/timer.js';
 import { appendRecord } from '../core/storage.js';
 import { renderResult } from '../core/result.js';
 import { findTest, formatDetail } from '../core/catalog.js';
@@ -57,7 +57,7 @@ export function mount(root, ctx) {
       <section class="screen">
         <h1 data-ref="title"></h1>
         <p>円の中の点を数え、3〜13の数字で答えます。点の数は同じまま、位置が1秒ごとに変わります。</p>
-        <p>1問は <span data-ref="questionLimit"></span> 秒、全体は <span data-ref="duration"></span> 秒です。</p>
+        <p>1問は <span data-ref="questionLimit"></span> 秒、全体は <span data-ref="duration"></span>です。</p>
         <div class="actions">
           <button class="btn btn-primary btn-large" type="button" data-ref="start">開始</button>
           <a class="btn" href="#/">メニュー</a>
@@ -66,7 +66,7 @@ export function mount(root, ctx) {
     const $ = name => root.querySelector(`[data-ref="${name}"]`);
     $('title').textContent = meta.name;
     $('questionLimit').textContent = String(params.questionLimitSec);
-    $('duration').textContent = String(params.durationSec);
+    $('duration').textContent = formatDuration(params.durationSec);
     $('start').addEventListener('click', startPlay);
     $('start').focus();
   }

@@ -7,7 +7,7 @@ import {
   createT6State, stepT6State, buildT6Record,
 } from '../logic/t6.js';
 import { createRng, randomSeed } from '../core/rng.js';
-import { startTimer } from '../core/timer.js';
+import { startTimer, formatDuration } from '../core/timer.js';
 import { appendRecord, readSettingsRaw, saveSettings } from '../core/storage.js';
 import { renderResult } from '../core/result.js';
 import { findTest, formatDetail } from '../core/catalog.js';
@@ -240,12 +240,12 @@ export function mount(root, ctx) {
       <h1 data-ref="title"></h1>
       <p>矢印キー、または操縦用の円を指・マウスで動かして機体を操縦します。横画面では左右ボタンで円の側を選べます。縦画面ではトンネルが上、操縦円が下です。</p>
       <p>半円、回転する3枚羽根、扇形、縁の小穴の開口を通り抜けます。</p>
-      <p class="muted">衝突すると速度が半分になり、安全な開口方向へ押し戻されます。制限時間は <span data-ref="duration"></span> 秒です。</p>
+      <p class="muted">衝突すると速度が半分になり、安全な開口方向へ押し戻されます。制限時間は <span data-ref="duration"></span>です。</p>
       <p class="notice notice-error" data-ref="layoutError" hidden></p>
       <button class="btn btn-primary btn-large" type="button" data-ref="start">開始</button>
     </section>`);
     root.querySelector('[data-ref="title"]').textContent = meta.name;
-    root.querySelector('[data-ref="duration"]').textContent = String(params.durationSec);
+    root.querySelector('[data-ref="duration"]').textContent = formatDuration(params.durationSec);
     const startBtn = root.querySelector('[data-ref="start"]');
     const checkSize = () => {
       const error = root.querySelector('[data-ref="layoutError"]');

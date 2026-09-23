@@ -401,9 +401,12 @@ h1 { font-size: 1.6rem; margin: 0 0 16px; }
 .t4-dial { fill: var(--surface); stroke: var(--border); stroke-width: 3; }
 .t4-instrument text { fill: currentColor; font-size: 12px; font-weight: 700; }
 .t4-instrument .t4-nose { font-size: 15px; fill: var(--muted); }
+.t4-instrument .t4-adf-mark { font-size: 11px; fill: var(--text); paint-order: stroke; stroke: var(--surface); stroke-width: 3px; }
 .t4-needle line { stroke: #d33232; stroke-width: 6; stroke-linecap: round; }
 .t4-needle path, .t4-hub { fill: #d33232; }
 .t4-answer { display: grid; grid-template-columns: minmax(210px, 280px) minmax(260px, 1fr); gap: 14px; max-width: 820px; margin: 12px auto 0; align-items: center; }
+.t4-answer-field > p { margin: 0 0 6px; font-size: 0.9rem; font-weight: 700; text-align: center; }
+.t4-previous { max-width: 820px; margin: 8px auto 0; font-size: 0.85rem; color: var(--muted); text-align: center; }
 .t4-map { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; aspect-ratio: 1; }
 .t4-choice, .t4-tower {
   min-width: var(--tap); min-height: var(--tap); border: 1px solid var(--border); border-radius: 10px;

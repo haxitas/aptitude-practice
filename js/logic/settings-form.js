@@ -56,7 +56,13 @@ export const SETTING_FIELDS = Object.freeze({
     number('speechAnswerLimitMs', '回答時間', 0, 600000, { integer: true, unit: 'ms', hint: '0は時間制限なし' }),
     number('speechNextDelayMs', '次の組までの時間', 0, 10000, { integer: true, unit: 'ms' }),
   ]),
-  t4: Object.freeze([duration()]),
+  t4: Object.freeze([
+    duration(),
+    { key: 'showPreviousAnswer', label: '前の問題の正解を表示', type: 'select', options: [
+      { value: 'true', label: '表示する', parsed: true },
+      { value: 'false', label: '表示しない', parsed: false },
+    ] },
+  ]),
   t5: Object.freeze([
     duration(),
     number('minDots', '点の最小個数', 1, 13, { integer: true, unit: '個' }),
@@ -69,7 +75,7 @@ export const SETTING_FIELDS = Object.freeze({
   ]),
   t6: Object.freeze([
     duration(),
-    { key: 'stickSide', label: '横画面の操縦円の側', type: 'select', options: [{ value: 'right', label: '右' }, { value: 'left', label: '左' }] },
+    { key: 'stickSide', label: '横画面の操縦円の側', type: 'select', hint: '縦画面では操縦円は下に配置されます', options: [{ value: 'right', label: '右' }, { value: 'left', label: '左' }] },
     number('moveSpeed', '機体の移動速度', 0.1, 10, { step: 0.1, unit: 'u/s' }),
     number('collisionSpeedFactor', '衝突時の速度倍率', 0.01, 1, { step: 0.01 }),
     number('initialSpeed', '初速', 0.1, 10, { step: 0.1, unit: 'u/s' }),
@@ -104,7 +110,8 @@ export function canPlaceT5Fallback(count, params) {
 
 function parseField(field, input) {
   if (field.type === 'select') {
-    return field.options.some(option => option.value === input) ? { value: input } : { error: '右または左を選んでください' };
+    const selected = field.options.find(option => option.value === input);
+    return selected ? { value: selected.parsed ?? selected.value } : { error: '選択肢から選んでください' };
   }
   if (field.type === 'list') {
     const text = Array.isArray(input) ? input.join(',') : String(input ?? '').trim();

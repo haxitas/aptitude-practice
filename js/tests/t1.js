@@ -4,7 +4,7 @@ import {
   generateT1Problem, judgeT1, createT1Tally, recordT1Answer, buildT1Record,
 } from '../logic/t1.js';
 import { createRng, randomSeed } from '../core/rng.js';
-import { startTimer } from '../core/timer.js';
+import { startTimer, formatDuration } from '../core/timer.js';
 import { appendRecord } from '../core/storage.js';
 import { renderResult } from '../core/result.js';
 import { findTest, formatDetail } from '../core/catalog.js';
@@ -31,7 +31,7 @@ export function mount(root, ctx) {
       <section class="screen">
         <h1 data-ref="title"></h1>
         <p>単位換算、速さ、出会い、追いつき、割合、割合の逆算、単価と合計、平均、経過時間の9種類を4択で答えます。</p>
-        <p>回答するとすぐ次の問題へ進みます。制限時間は <span data-ref="duration"></span> 秒です。</p>
+        <p>回答するとすぐ次の問題へ進みます。制限時間は <span data-ref="duration"></span>です。</p>
         <div class="actions">
           <button class="btn btn-primary btn-large" type="button" data-ref="start">開始</button>
           <a class="btn" href="#/">メニュー</a>
@@ -39,7 +39,7 @@ export function mount(root, ctx) {
       </section>`;
     const $ = name => root.querySelector(`[data-ref="${name}"]`);
     $('title').textContent = meta.name;
-    $('duration').textContent = String(params.durationSec);
+    $('duration').textContent = formatDuration(params.durationSec);
     $('start').addEventListener('click', startPlay);
     $('start').focus();
   }

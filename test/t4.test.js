@@ -7,19 +7,30 @@ import {
   createT4Example,
   createT4Selection, selectT4Position, selectT4Heading, canSubmitT4,
   judgeT4, createT4Tally, recordT4Answer, summarizeT4, buildT4Record,
+  previousT4Feedback,
 } from '../js/logic/t4.js';
+import { findTest, formatDetail } from '../js/core/catalog.js';
+import { instrumentSvg } from '../js/tests/t4.js';
 
 const P = DEFAULTS.t4;
 
-test('例題は機首N・相対90度、正解は西のマス・向きN', () => {
+test('例題は機首NE・相対90度、塔SE・自機NW・向きNE', () => {
   const example = createT4Example();
-  assert.deepEqual(example.problem, { headingIndex: 0, relativeIndex: 2 });
-  assert.deepEqual(example.selection, { position: 'W', heading: 'N' });
+  assert.deepEqual(example.problem, { headingIndex: 1, relativeIndex: 2 });
+  assert.deepEqual(example.selection, { position: 'NW', heading: 'NE' });
+  assert.equal(solutionFor(1, 2).towerDirection, 3);
   assert.equal(judgeT4(example.problem, example.selection).correct, true);
 });
 
+test('計器の針はindex×45度で描き、ADFに右・後ろ・左の目盛りがある', () => {
+  assert.match(instrumentSvg(1), /rotate\(45 100 100\)/);
+  const adf = instrumentSvg(2, true);
+  assert.match(adf, /rotate\(90 100 100\)/);
+  for (const mark of ['右90°', '後ろ180°', '左270°']) assert.ok(adf.includes(mark));
+});
+
 test('T4 の既定値は承認済みの数値', () => {
-  assert.deepEqual(P, { durationSec: 180, answerFeedbackMs: 300 });
+  assert.deepEqual(P, { durationSec: 180, answerFeedbackMs: 300, showPreviousAnswer: true });
 });
 
 test('方位は N から時計回りの8方向', () => {
@@ -86,6 +97,14 @@ test('位置と向きを別々に判定する', () => {
   assert.deepEqual(judgeT4(q, { position: 'E', heading: 'N' }), { positionCorrect: false, headingCorrect: true, correct: false });
 });
 
+test('前問の表示は正解のマス・向きと、自分の正誤を返す', () => {
+  const q = { headingIndex: 1, relativeIndex: 2 };
+  assert.deepEqual(previousT4Feedback(q, { position: 'NW', heading: 'NE' }),
+    { position: 'NW', heading: 'NE', correct: true });
+  assert.deepEqual(previousT4Feedback(q, { position: 'SE', heading: 'NE' }),
+    { position: 'NW', heading: 'NE', correct: false });
+});
+
 test('採点は両方正解だけ、内訳は位置だけ・向きだけ', () => {
   let tally = createT4Tally();
   tally = recordT4Answer(tally, { positionCorrect: true, headingCorrect: true, correct: true });
@@ -94,7 +113,7 @@ test('採点は両方正解だけ、内訳は位置だけ・向きだけ', () =>
   tally = recordT4Answer(tally, { positionCorrect: false, headingCorrect: false, correct: false });
   assert.deepEqual(summarizeT4(tally), {
     score: 1,
-    detail: { answered: 4, positionOnlyCorrect: 1, headingOnlyCorrect: 1 },
+    detail: { answered: 4, correct: 1, positionOnlyCorrect: 1, headingOnlyCorrect: 1 },
   });
 });
 
@@ -104,8 +123,14 @@ test('記録はSPEC §4の形で、その回の設定を複製する', () => {
   const record = buildT4Record({ date, tally, settings: P });
   assert.deepEqual(record, {
     id: `${date}-t4`, test: 't4', date, score: 2,
-    detail: { answered: 4, positionOnlyCorrect: 1, headingOnlyCorrect: 1 },
-    settings: { durationSec: 180, answerFeedbackMs: 300 },
+    detail: { answered: 4, correct: 2, positionOnlyCorrect: 1, headingOnlyCorrect: 1 },
+    settings: { durationSec: 180, answerFeedbackMs: 300, showPreviousAnswer: true },
   });
   assert.notEqual(record.settings, P);
+});
+
+test('結果と履歴のT4内訳は4列で、古い記録の正答数は—', () => {
+  const fields = findTest('t4').details;
+  assert.deepEqual(fields.map(field => field.label), ['回答数', '正答数', '位置だけ正解', '向きだけ正解']);
+  assert.equal(formatDetail(fields[1], undefined), '—');
 });

@@ -89,7 +89,7 @@ export function mount(root, ctx) {
     const help = document.createElement('span');
     help.id = `${id}-help`;
     help.className = 'setting-help';
-    help.textContent = field.type === 'select' ? '縦画面では操縦円は下に配置されます' : `${field.min}〜${field.max}${field.unit ? ` ${field.unit}` : ''}${field.hint ? ` / ${field.hint}` : ''}`;
+    help.textContent = field.type === 'select' ? (field.hint ?? '') : `${field.min}〜${field.max}${field.unit ? ` ${field.unit}` : ''}${field.hint ? ` / ${field.hint}` : ''}`;
     const error = document.createElement('span');
     error.id = `${id}-error`;
     error.className = 'setting-error';
