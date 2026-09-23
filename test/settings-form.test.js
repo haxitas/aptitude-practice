@@ -55,6 +55,8 @@ test('T3 は2桁の個数と誤答差の整数・重複を検証する', () => {
 });
 
 test('T5 は個数の順序と点の大きさ・最小間隔の組み合わせを検証する', () => {
+  assert.equal(DEFAULTS.t5.questionLimitSec, 0);
+  assert.equal(validateTestSettings('t5', raw('t5', { questionLimitSec: 0 }), DEFAULTS.t5).ok, true);
   const order = validateTestSettings('t5', raw('t5', { minDots: 10, maxDots: 5 }), DEFAULTS.t5);
   assert.equal(order.ok, false);
   assert.match(order.errors.maxDots, /最小/);

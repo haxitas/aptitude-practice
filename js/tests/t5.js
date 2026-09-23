@@ -57,8 +57,8 @@ export function mount(root, ctx) {
     root.innerHTML = `
       <section class="screen">
         <h1 data-ref="title"></h1>
-        <p>円の中の点を数え、3〜13の数字で答えます。点の数は同じまま、位置が1秒ごとに変わります。</p>
-        <p>1問は <span data-ref="questionLimit"></span> 秒、全体は <span data-ref="duration"></span>です。</p>
+        <p>円の中の点を数え、3〜13の数字で答えます。点の数は同じまま、開始直後から位置が1秒ごとに変わります。</p>
+        <p><span data-ref="questionLimit"></span> 全体は <span data-ref="duration"></span>です。</p>
         <div class="actions">
           <button class="btn btn-primary btn-large" type="button" data-ref="start">開始</button>
           <a class="btn" href="#/">メニュー</a>
@@ -66,7 +66,9 @@ export function mount(root, ctx) {
       </section>`;
     const $ = name => root.querySelector(`[data-ref="${name}"]`);
     $('title').textContent = meta.name;
-    $('questionLimit').textContent = String(params.questionLimitSec);
+    $('questionLimit').textContent = params.questionLimitSec === 0
+      ? '1問の時間制限はなく、答えるまで次に進みません。'
+      : `1問は${params.questionLimitSec}秒で、過ぎると未回答で次へ進みます。`;
     $('duration').textContent = formatDuration(params.durationSec);
     $('start').addEventListener('click', startPlay);
     $('start').focus();
@@ -118,8 +120,9 @@ export function mount(root, ctx) {
     }
 
     function nextQuestion(elapsed, answer) {
-      $('previous').textContent = formatT5PreviousAnswer(problem.count, answer);
-      $('previous').hidden = false;
+      const previousText = formatT5PreviousAnswer(problem.count, answer);
+      $('previous').textContent = previousText ?? '';
+      $('previous').hidden = previousText === null;
       problem = generateT5Problem(rng, params, problem);
       movement = null;
       questionNumber++;
@@ -130,7 +133,7 @@ export function mount(root, ctx) {
 
     function onAnswer(e) {
       const deadline = questionStartMs + params.questionLimitSec * 1000;
-      if (currentElapsed >= deadline) return;
+      if (params.questionLimitSec > 0 && currentElapsed >= deadline) return;
       const button = e.currentTarget;
       tally = recordT5Answer(tally, Number(button.dataset.answer), problem.count);
       button.classList.add('is-pressed');
@@ -167,8 +170,7 @@ export function mount(root, ctx) {
         }
         lastFrameTs = ts;
         currentElapsed = elapsed;
-        const questionDeadline = questionStartMs + params.questionLimitSec * 1000;
-        if (shouldTimeoutT5(elapsed, questionDeadline, overallDeadline)) {
+        if (shouldTimeoutT5(elapsed, questionStartMs, params, overallDeadline)) {
           tally = recordT5Unanswered(tally);
           nextQuestion(elapsed, null);
         } else {

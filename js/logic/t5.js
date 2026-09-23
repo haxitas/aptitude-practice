@@ -131,17 +131,19 @@ export function interpolateDotPositions(pairs, elapsedMs, durationMs) {
 
 export function shuffleIndexAt(elapsedMs, p) {
   if (!Number.isFinite(elapsedMs) || elapsedMs < 0) throw new RangeError('経過時間は0以上の有限値で指定してください');
-  return Math.floor(elapsedMs / p.shuffleIntervalMs);
+  return Math.floor(elapsedMs / p.shuffleIntervalMs) + 1;
 }
 
 // 全体終了と同時なら全体終了を優先し、表示中の問題を未回答に数えない。
-export function shouldTimeoutT5(nowMs, questionDeadlineMs, overallDeadlineMs) {
+export function shouldTimeoutT5(nowMs, questionStartMs, p, overallDeadlineMs) {
+  if (p.questionLimitSec === 0) return false;
+  const questionDeadlineMs = questionStartMs + p.questionLimitSec * 1000;
   return nowMs >= questionDeadlineMs && questionDeadlineMs < overallDeadlineMs;
 }
 
 export function formatT5PreviousAnswer(correctAnswer, answer) {
-  const shownAnswer = answer === null ? 'なし' : `${answer}個`;
-  return `前の問題の正解: ${correctAnswer}個 / あなたの答え: ${shownAnswer} ${answer === correctAnswer ? '○' : '×'}`;
+  if (answer === null) return null;
+  return `前の問題の正解: ${correctAnswer}個 / あなたの答え: ${answer}個 ${answer === correctAnswer ? '○' : '×'}`;
 }
 
 export function createT5Tally() {

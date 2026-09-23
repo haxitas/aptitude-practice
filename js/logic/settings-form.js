@@ -73,7 +73,7 @@ export const SETTING_FIELDS = Object.freeze({
     number('maxDots', '点の最大個数', 1, 13, { integer: true, unit: '個' }),
     number('shuffleIntervalMs', '位置の切り替え間隔', 50, 10000, { integer: true, unit: 'ms' }),
     number('dotMoveMs', '点のスライド時間', 0, 10000, { integer: true, unit: 'ms' }),
-    number('questionLimitSec', '1問の制限時間', 1, 300, { integer: true, unit: '秒' }),
+    number('questionLimitSec', '1問の制限時間', 0, 300, { integer: true, unit: '秒', hint: '0は時間制限なし' }),
     number('dotRadiusRatio', '点の半径', 0.005, 0.1, { step: 0.005 }),
     number('dotMinDistanceRatio', '点の最小間隔', 0.01, 0.5, { step: 0.01 }),
   ]),

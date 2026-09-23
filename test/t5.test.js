@@ -10,10 +10,10 @@ import {
 
 const P = DEFAULTS.t5;
 
-test('前問表示は正解・誤答・未回答を区別する', () => {
+test('前問表示は回答した場合だけ作り、正誤を区別する', () => {
   assert.equal(formatT5PreviousAnswer(5, 5), '前の問題の正解: 5個 / あなたの答え: 5個 ○');
   assert.equal(formatT5PreviousAnswer(5, 4), '前の問題の正解: 5個 / あなたの答え: 4個 ×');
-  assert.equal(formatT5PreviousAnswer(5, null), '前の問題の正解: 5個 / あなたの答え: なし ×');
+  assert.equal(formatT5PreviousAnswer(5, null), null);
 });
 
 test('T5 の既定値は承認済みの数値', () => {
@@ -23,7 +23,7 @@ test('T5 の既定値は承認済みの数値', () => {
     maxDots: 13,
     shuffleIntervalMs: 1000,
     dotMoveMs: 400,
-    questionLimitSec: 10,
+    questionLimitSec: 0,
     dotRadiusRatio: 0.025,
     dotMinDistanceRatio: 0.12,
     placementAttemptLimit: 200,
@@ -111,17 +111,24 @@ test('位置の入れ替えは個数を変えず、別の配置にする', () =>
   assertValidLayout(next);
 });
 
-test('位置は問題開始から1000msごとの番号で切り替える', () => {
-  assert.equal(shuffleIndexAt(999, P), 0);
-  assert.equal(shuffleIndexAt(1000, P), 1);
-  assert.equal(shuffleIndexAt(9999, P), 9);
+test('問題開始0msですぐ1回目、1000msで2回目、2000msで3回目を始める', () => {
+  assert.equal(shuffleIndexAt(0, P), 1);
+  assert.equal(shuffleIndexAt(999, P), 1);
+  assert.equal(shuffleIndexAt(1000, P), 2);
+  assert.equal(shuffleIndexAt(2000, P), 3);
 });
 
-test('1問10秒で時間切れ。ただし全体終了と同時なら問題を未回答に数えない', () => {
-  assert.equal(shouldTimeoutT5(9999, 10000, 180000), false);
-  assert.equal(shouldTimeoutT5(10000, 10000, 180000), true);
-  assert.equal(shouldTimeoutT5(180000, 180000, 180000), false);
-  assert.equal(shouldTimeoutT5(180001, 180000, 180000), false);
+test('1問無制限なら60秒たっても未回答にせず、全体終了で待ち問題を数えない', () => {
+  assert.equal(shouldTimeoutT5(60000, 0, P, 180000), false);
+  assert.equal(shouldTimeoutT5(180000, 0, P, 180000), false);
+});
+
+test('設定を10秒にすれば時間切れ。ただし全体終了と同時なら数えない', () => {
+  const limited = { ...P, questionLimitSec: 10 };
+  assert.equal(shouldTimeoutT5(9999, 0, limited, 180000), false);
+  assert.equal(shouldTimeoutT5(10000, 0, limited, 180000), true);
+  assert.equal(shouldTimeoutT5(180000, 170000, limited, 180000), false);
+  assert.equal(shouldTimeoutT5(180001, 170000, limited, 180000), false);
 });
 
 test('採点は正答数、内訳は回答・未回答・回答した問題の平均誤差', () => {

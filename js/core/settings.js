@@ -74,7 +74,7 @@ export const DEFAULTS = Object.freeze({
     maxDots: 13,
     shuffleIntervalMs: 1000,
     dotMoveMs: 400,
-    questionLimitSec: 10,
+    questionLimitSec: 0, // 0 は1問の制限時間なし
     dotRadiusRatio: 0.025,
     dotMinDistanceRatio: 0.12,
     placementAttemptLimit: 200,
