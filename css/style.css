@@ -147,6 +147,15 @@ h1 { font-size: 1.6rem; margin: 0 0 16px; }
 .result-details dd, .stats dd { margin: 0; font-weight: 600; }
 
 /* ---- 履歴 ---- */
+.history-overview { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); gap: 12px; }
+.history-overview-card { display: block; min-width: 0; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); text-decoration: none; }
+.history-overview-card h2 { margin: 0 0 6px; font-size: 1rem; }
+.history-overview-card p { margin: 0; color: var(--muted); }
+.history-overview-stats { display: grid; grid-template-columns: 1fr auto; gap: 0 10px; margin: 0; font-size: 0.88rem; font-variant-numeric: tabular-nums; }
+.history-overview-stats dt { color: var(--muted); }
+.history-overview-stats dd { margin: 0; text-align: right; font-weight: 600; }
+.history-overview-card canvas { display: block; width: 100%; height: 54px; margin-top: 6px; }
+.history-back { margin: 0 0 14px; }
 .field { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; font-weight: 600; }
 .field select {
   min-height: var(--tap);
@@ -189,6 +198,7 @@ h1 { font-size: 1.6rem; margin: 0 0 16px; }
   gap: 12px;
   margin-top: 12px;
 }
+.setting-presets { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .setting-field { display: flex; flex-direction: column; }
 .setting-field label { font-weight: 600; }
 .setting-field input, .setting-field select, .json-copy textarea {

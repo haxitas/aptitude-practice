@@ -1,5 +1,6 @@
 import { generateDotPositions } from './t5.js';
 import { lapCandidates } from './t1.js';
+import { T6_COLOR_OPTIONS } from '../core/settings.js';
 
 const number = (key, label, min, max, options = {}) => ({ key, label, min, max, type: 'number', ...options });
 const list = (key, label, min, max, options = {}) => ({ key, label, min, max, type: 'list', ...options });
@@ -79,6 +80,8 @@ export const SETTING_FIELDS = Object.freeze({
   ]),
   t6: Object.freeze([
     duration(),
+    { key: 'obstacleColor', label: '障害物の塗り', type: 'select', options: T6_COLOR_OPTIONS.obstacle.map(color => ({ value: color.name, label: color.label })) },
+    { key: 'obstacleEdgeColor', label: '開口部の縁', type: 'select', options: T6_COLOR_OPTIONS.edge.map(color => ({ value: color.name, label: color.label })) },
     { key: 'stickSide', label: '横画面の操縦円の側', type: 'select', hint: '縦画面では操縦円は下に配置されます', options: [{ value: 'right', label: '右' }, { value: 'left', label: '左' }] },
     number('moveSpeed', '機体の移動速度', 0.1, 10, { step: 0.1, unit: 'u/s' }),
     number('collisionSpeedFactor', '衝突時の速度倍率', 0.01, 1, { step: 0.01 }),

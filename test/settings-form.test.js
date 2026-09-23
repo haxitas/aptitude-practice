@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { SETTING_FIELDS, validateTestSettings, resetTestOverrides, canPlaceT5Fallback } from '../js/logic/settings-form.js';
-import { DEFAULTS, resolveSettings } from '../js/core/settings.js';
+import { DEFAULTS, resolveSettings, T6_COLOR_OPTIONS, T6_COLOR_PRESETS } from '../js/core/settings.js';
 
 function raw(testId, changes = {}) {
   return Object.fromEntries(Object.entries({ ...DEFAULTS[testId], ...changes }).map(([key, value]) => [
@@ -121,6 +121,29 @@ test('T6の操縦円の左右を検証し、それ以外の値は保存しない
     assert.equal(result.value.stickSide,side);
   }
   assert.equal(validateTestSettings('t6',raw('t6',{stickSide:'center'}),DEFAULTS.t6).ok,false);
+});
+
+test('T6の障害物色と縁色は各4種類だけ保存し、おすすめ3組は有効', () => {
+  assert.equal(T6_COLOR_OPTIONS.obstacle.length, 4);
+  assert.equal(T6_COLOR_OPTIONS.edge.length, 4);
+  assert.equal(T6_COLOR_PRESETS.length, 3);
+  assert.ok(SETTING_FIELDS.t6.some(field => field.key === 'obstacleColor'));
+  assert.ok(SETTING_FIELDS.t6.some(field => field.key === 'obstacleEdgeColor'));
+  for (const preset of T6_COLOR_PRESETS) {
+    const result = validateTestSettings('t6', raw('t6', preset), DEFAULTS.t6);
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal(result.value.obstacleColor, preset.obstacleColor);
+    assert.equal(result.value.obstacleEdgeColor, preset.obstacleEdgeColor);
+  }
+  for (const change of [{ obstacleColor: 'unknown' }, { obstacleEdgeColor: 'unknown' }]) {
+    const result = validateTestSettings('t6', raw('t6', change), DEFAULTS.t6);
+    assert.equal(result.ok, false);
+    assert.ok(result.errors[Object.keys(change)[0]]);
+  }
+  const legacy = resolveSettings({ t6: { obstacleColor: 'unknown', obstacleEdgeColor: 'unknown' } });
+  assert.equal(legacy.settings.t6.obstacleColor, DEFAULTS.t6.obstacleColor);
+  assert.equal(legacy.settings.t6.obstacleEdgeColor, DEFAULTS.t6.obstacleEdgeColor);
+  assert.ok(legacy.warnings.includes('t6.obstacleColor'));
 });
 
 test('T4の計器の流儀はnorthUp/noseUpだけを保存する', () => {

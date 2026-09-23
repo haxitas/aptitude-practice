@@ -1,3 +1,5 @@
+import { summarize, recentRecords } from '../core/stats.js';
+
 function niceStep(value) {
   if (!(Number.isFinite(value) && value > 0)) return 1;
   const power = 10 ** Math.floor(Math.log10(value));
@@ -63,4 +65,24 @@ export function makeHistoryModel(records, testId, defaults, limit) {
     .slice(0, limit)
     .map(record => ({ ...record, customSettings: recordUsesCustomSettings(record.settings, defaults) }));
   return { tableRecords, chartRecords: [...tableRecords].reverse() };
+}
+
+export function makeHistoryOverview(records, tests, averageCount = 5, sparkCount = 10) {
+  return tests.map(test => {
+    const summary = summarize(records, test.id, averageCount);
+    return {
+      id: test.id,
+      name: test.name,
+      ...summary,
+      sparkScores: recentRecords(records, test.id, sparkCount).reverse().map(record => record.score),
+    };
+  });
+}
+
+export function parseHistoryRoute(hash, ids) {
+  if (hash === '#/history') return { kind: 'overview' };
+  const match = /^#\/history\/([^/]+)$/.exec(hash);
+  return match && ids.includes(match[1])
+    ? { kind: 'detail', testId: match[1] }
+    : { kind: 'overview' };
 }

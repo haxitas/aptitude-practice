@@ -21,6 +21,8 @@ const approx = (actual, expected, epsilon = 1e-9) => {
 test('T6 の既定値は承認済みの数値', () => {
   assert.deepEqual(P, {
     durationSec: 180,
+    obstacleColor: 'blue',
+    obstacleEdgeColor: 'cyan',
     moveSpeed: 1,
     collisionSpeedFactor: 0.5,
     initialSpeed: 0.8,

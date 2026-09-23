@@ -2,7 +2,7 @@ import { TESTS } from './core/catalog.js';
 import {
   readResults, readSettingsRaw, saveSettings, appendImportedRecords, clearResults,
 } from './core/storage.js';
-import { DEFAULTS } from './core/settings.js';
+import { DEFAULTS, T6_COLOR_PRESETS } from './core/settings.js';
 import { SETTING_FIELDS, validateTestSettings, resetTestOverrides } from './logic/settings-form.js';
 import { makeExportData, parseImportJson, mergeImportedRecords } from './logic/records-transfer.js';
 
@@ -111,6 +111,24 @@ export function mount(root, ctx) {
     const grid = document.createElement('div');
     grid.className = 'settings-grid';
     for (const field of SETTING_FIELDS[test.id]) grid.append(fieldElement(test.id, field, ctx.settings[test.id]));
+    if (test.id === 't6') {
+      const presets = document.createElement('div');
+      presets.className = 'setting-presets';
+      presets.append(document.createTextNode('おすすめの配色 '));
+      for (const preset of T6_COLOR_PRESETS) {
+        const button = document.createElement('button');
+        button.className = 'btn';
+        button.type = 'button';
+        button.textContent = preset.name;
+        button.addEventListener('click', () => {
+          form.elements.namedItem('obstacleColor').value = preset.obstacleColor;
+          form.elements.namedItem('obstacleEdgeColor').value = preset.obstacleEdgeColor;
+          form.requestSubmit();
+        });
+        presets.append(button);
+      }
+      form.append(presets);
+    }
     const actions = document.createElement('div');
     actions.className = 'actions';
     const save = document.createElement('button');

@@ -1,11 +1,10 @@
-// 履歴画面: テストを選び、直近の記録を新しい順に表で出す。最高点・直近平均・回数も出す。
-// グラフと「既定値と違う回の印」は Phase4。
+// 履歴一覧と、テスト別の直近20回の詳細。
 
 import { TESTS, findTest, formatDetail } from './core/catalog.js';
 import { readResults } from './core/storage.js';
 import { summarize } from './core/stats.js';
 import { DEFAULTS, DISPLAY } from './core/settings.js';
-import { makeChartLayout, makeHistoryModel } from './logic/history.js';
+import { makeChartLayout, makeHistoryModel, makeHistoryOverview, parseHistoryRoute } from './logic/history.js';
 
 function formatDate(iso) {
   const d = new Date(iso);
@@ -49,15 +48,89 @@ function dateLabelIndexes(length) {
   return [...indexes];
 }
 
-let lastSelected = 't2'; // 画面を出し直しても選んだテストを覚えておく
+function drawSparkline(canvas, scores) {
+  const width = Math.max(1, Math.round(canvas.getBoundingClientRect().width));
+  const height = 54;
+  const ratio = Math.max(1, globalThis.devicePixelRatio || 1);
+  canvas.width = Math.round(width * ratio);
+  canvas.height = Math.round(height * ratio);
+  const context = canvas.getContext('2d');
+  context.setTransform(ratio, 0, 0, ratio, 0, 0);
+  const max = Math.max(1, ...scores);
+  const x = index => scores.length === 1 ? width / 2 : 5 + (width - 10) * index / (scores.length - 1);
+  const y = score => height - 5 - score / max * (height - 10);
+  context.strokeStyle = canvasColor(canvas, '--chart-line');
+  context.fillStyle = canvasColor(canvas, '--chart-point');
+  context.lineWidth = 2;
+  context.beginPath();
+  scores.forEach((score, index) => index ? context.lineTo(x(index), y(score)) : context.moveTo(x(index), y(score)));
+  context.stroke();
+  scores.forEach((score, index) => {
+    context.beginPath();
+    context.arc(x(index), y(score), 3, 0, Math.PI * 2);
+    context.fill();
+  });
+}
 
-export function mount(root, ctx) {
+function mountOverview(root, records, error) {
+  root.innerHTML = '<section class="screen history"><h1>履歴</h1><p class="notice notice-error" data-ref="error" hidden></p><div class="history-overview" data-ref="overview"></div><div class="actions"><a class="btn" href="#/">メニュー</a></div></section>';
+  if (error) {
+    const notice = root.querySelector('[data-ref="error"]');
+    notice.textContent = `成績データを読めません: ${error}`;
+    notice.hidden = false;
+  }
+  const entries = makeHistoryOverview(records, TESTS, DISPLAY.recentAvgCount, DISPLAY.historySparkRows);
+  const canvases = [];
+  for (const item of entries) {
+    const card = document.createElement('a');
+    card.className = 'history-overview-card';
+    card.href = `#/history/${item.id}`;
+    const title = document.createElement('h2');
+    title.textContent = item.name;
+    card.append(title);
+    if (!item.count) {
+      card.append(cell('p', '記録なし'));
+    } else {
+      const stats = document.createElement('dl');
+      stats.className = 'history-overview-stats';
+      for (const [label, value] of [
+        ['最高点', item.best], ['前回', item.last], ['回数', `${item.count}回`],
+        ['直近5回の平均', item.recentAvg.toFixed(1)],
+      ]) stats.append(cell('dt', label), cell('dd', String(value)));
+      card.append(stats);
+      const canvas = document.createElement('canvas');
+      canvas.setAttribute('aria-label', `直近${item.sparkScores.length}回の点数推移`);
+      card.append(canvas);
+      canvases.push({ canvas, scores: item.sparkScores });
+    }
+    root.querySelector('[data-ref="overview"]').append(card);
+  }
+  const redraw = () => canvases.forEach(({ canvas, scores }) => drawSparkline(canvas, scores));
+  const observer = new ResizeObserver(redraw);
+  observer.observe(root.querySelector('[data-ref="overview"]'));
+  const colorScheme = matchMedia('(prefers-color-scheme: dark)');
+  colorScheme.addEventListener?.('change', redraw);
+  redraw();
+  return () => {
+    observer.disconnect();
+    colorScheme.removeEventListener?.('change', redraw);
+  };
+}
+
+export function mount(root, ctx, hash = location.hash) {
+  const route = parseHistoryRoute(hash, TESTS.map(test => test.id));
+  if (route.kind === 'overview' && hash !== '#/history') {
+    ctx.navigate('#/history');
+    return null;
+  }
+  const results = readResults(ctx.store);
+  const records = results.ok ? results.records : [];
+  if (route.kind === 'overview') return mountOverview(root, records, results.ok ? null : results.message);
+  const test = findTest(route.testId);
   root.innerHTML = `
     <section class="screen history">
-      <h1>履歴</h1>
-      <label class="field">テスト
-        <select data-ref="select"></select>
-      </label>
+      <h1 data-ref="title"></h1>
+      <div class="actions history-back"><a class="btn" href="#/history">一覧へ戻る</a></div>
       <p class="notice notice-error" data-ref="error" hidden></p>
       <dl class="stats" data-ref="stats"></dl>
       <div class="history-chart-wrap" data-ref="chartWrap">
@@ -75,22 +148,11 @@ export function mount(root, ctx) {
       <div class="actions"><a class="btn" href="#/">メニュー</a></div>
     </section>`;
   const $ = name => root.querySelector(`[data-ref="${name}"]`);
-
-  const select = $('select');
-  for (const t of TESTS) {
-    const o = document.createElement('option');
-    o.value = t.id;
-    o.textContent = t.implemented ? t.name : `${t.name}(準備中)`;
-    select.append(o);
-  }
-  select.value = lastSelected;
-
-  const results = readResults(ctx.store);
+  $('title').textContent = `${test.name}の履歴`;
   if (!results.ok) {
     $('error').textContent = `成績データを読めません: ${results.message}`;
     $('error').hidden = false;
   }
-  const records = results.ok ? results.records : [];
   const canvas = $('chart');
   let chartLayout = null;
 
@@ -161,9 +223,6 @@ export function mount(root, ctx) {
   }
 
   function show() {
-    const test = findTest(select.value);
-    lastSelected = test.id;
-
     const s = summarize(records, test.id);
     const stats = $('stats');
     stats.replaceChildren();
@@ -193,7 +252,6 @@ export function mount(root, ctx) {
     $('empty').hidden = rows.length > 0;
   }
 
-  select.addEventListener('change', show);
   canvas.addEventListener('pointerdown', event => {
     if (!chartLayout?.points.length) return;
     const rect = canvas.getBoundingClientRect();

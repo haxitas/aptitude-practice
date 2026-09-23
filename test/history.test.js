@@ -5,6 +5,8 @@ import {
   makeChartLayout,
   recordUsesCustomSettings,
   makeHistoryModel,
+  makeHistoryOverview,
+  parseHistoryRoute,
 } from '../js/logic/history.js';
 
 const BOX = Object.freeze({ left: 48, right: 16, top: 16, bottom: 36, preferredTickCount: 5 });
@@ -25,6 +27,27 @@ test('点数の目盛り: 空・0点・同点でも有限で0から上へ広が�
     assert.equal(ticks.values[0], 0);
     assert.ok(ticks.values.every(Number.isFinite));
   }
+});
+
+test('履歴一覧: 0件・1件・6テストを集計し、直近10回だけ小グラフへ渡す', () => {
+  const tests = Array.from({ length: 6 }, (_, i) => ({ id: `t${i + 1}`, name: `テスト${i + 1}` }));
+  const records = [rec(0, 7, {}, 't1'), ...Array.from({ length: 12 }, (_, i) => rec(i, i, {}, 't2'))];
+  const overview = makeHistoryOverview(records, tests, 5, 10);
+  assert.equal(overview.length, 6);
+  assert.deepEqual(overview[0], { id: 't1', name: 'テスト1', best: 7, last: 7, count: 1, recentAvg: 7, sparkScores: [7] });
+  assert.deepEqual(overview[1].sparkScores, [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+  assert.equal(overview[1].best, 11);
+  assert.equal(overview[1].last, 11);
+  assert.equal(overview[1].recentAvg, 9);
+  assert.deepEqual(overview[2], { id: 't3', name: 'テスト3', best: null, last: null, count: 0, recentAvg: null, sparkScores: [] });
+});
+
+test('履歴のハッシュ: 一覧・詳細を区別し、知らないIDは一覧に戻す', () => {
+  const ids = ['t1', 't2', 't3', 't4', 't5', 't6'];
+  assert.deepEqual(parseHistoryRoute('#/history', ids), { kind: 'overview' });
+  assert.deepEqual(parseHistoryRoute('#/history/t2', ids), { kind: 'detail', testId: 't2' });
+  assert.deepEqual(parseHistoryRoute('#/history/t9', ids), { kind: 'overview' });
+  assert.deepEqual(parseHistoryRoute('#/history/t2/extra', ids), { kind: 'overview' });
 });
 
 test('座標: 0件は空、1件は横中央、0点は描画領域の下端', () => {

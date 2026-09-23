@@ -2,6 +2,27 @@
 // 設定画面は Phase4。ここでは読み込みと合成だけを行い、apt_settings は書き換えない。
 import { readSettingsRaw } from './storage.js';
 
+export const T6_COLOR_OPTIONS = Object.freeze({
+  obstacle: Object.freeze([
+    Object.freeze({ name: 'slate', label: '濃い灰', value: '#596579' }),
+    Object.freeze({ name: 'blue', label: '青', value: '#3267b8' }),
+    Object.freeze({ name: 'plum', label: '赤紫', value: '#a54270' }),
+    Object.freeze({ name: 'forest', label: '深緑', value: '#27765b' }),
+  ]),
+  edge: Object.freeze([
+    Object.freeze({ name: 'white', label: '白', value: '#f5f8ff' }),
+    Object.freeze({ name: 'yellow', label: '黄', value: '#ffe171' }),
+    Object.freeze({ name: 'cyan', label: '水色', value: '#89e8ff' }),
+    Object.freeze({ name: 'orange', label: '橙', value: '#ffbc78' }),
+  ]),
+});
+
+export const T6_COLOR_PRESETS = Object.freeze([
+  Object.freeze({ name: '標準', obstacleColor: 'blue', obstacleEdgeColor: 'cyan' }),
+  Object.freeze({ name: '高コントラスト', obstacleColor: 'slate', obstacleEdgeColor: 'white' }),
+  Object.freeze({ name: '暖色', obstacleColor: 'plum', obstacleEdgeColor: 'yellow' }),
+]);
+
 export const DEFAULTS = Object.freeze({
   t1: Object.freeze({
     durationSec: 180,
@@ -84,6 +105,8 @@ export const DEFAULTS = Object.freeze({
   }),
   t6: Object.freeze({
     durationSec: 180,
+    obstacleColor: 'blue',
+    obstacleEdgeColor: 'cyan',
     moveSpeed: 1, // トンネル断面の内部単位/秒
     collisionSpeedFactor: 0.5,
     initialSpeed: 0.8, // トンネル半径を1とする内部単位/秒
@@ -123,6 +146,7 @@ export const DEFAULTS = Object.freeze({
 // 画面の表示件数など(利用者が変える値ではない)
 export const DISPLAY = Object.freeze({
   historyRows: 20, // 履歴の表に出す直近の回数(SPEC §7)
+  historySparkRows: 10,
   recentAvgCount: 5, // 直近平均に使う回数(SPEC §7)
   historyChartHeight: 260,
   historyChartLeft: 48,
@@ -153,6 +177,10 @@ export function resolveSettings(saved) {
     for (const [key, def] of Object.entries(defs)) {
       if (key in src) {
         if (testId === 't6' && key === 'holeSlotCount' && src[key] !== 4) {
+          out[key] = def;
+          warnings.push(`${testId}.${key}`);
+        } else if (testId === 't6' && (key === 'obstacleColor' || key === 'obstacleEdgeColor')
+          && !T6_COLOR_OPTIONS[key === 'obstacleColor' ? 'obstacle' : 'edge'].some(color => color.name === src[key])) {
           out[key] = def;
           warnings.push(`${testId}.${key}`);
         } else if (sameType(def, src[key])) {

@@ -11,6 +11,7 @@ import { startTimer, formatDuration } from '../core/timer.js';
 import { appendRecord, readSettingsRaw, saveSettings } from '../core/storage.js';
 import { renderResult } from '../core/result.js';
 import { findTest, formatDetail } from '../core/catalog.js';
+import { T6_COLOR_OPTIONS } from '../core/settings.js';
 
 const DEG = Math.PI / 180;
 const AIRCRAFT_SIZE_RATIO = 0.055;
@@ -183,8 +184,8 @@ function drawScene(ctx, layout, state, p, stickInput) {
   for (const obstacle of visible) {
     const scale = projectScale(p.perspectiveFocal, obstacle.z);
     const radius = tunnelRadius * scale;
-    ctx.fillStyle = '#e25048';
-    ctx.strokeStyle = '#ffe5a1';
+    ctx.fillStyle = T6_COLOR_OPTIONS.obstacle.find(color => color.name === p.obstacleColor)?.value ?? T6_COLOR_OPTIONS.obstacle[0].value;
+    ctx.strokeStyle = T6_COLOR_OPTIONS.edge.find(color => color.name === p.obstacleEdgeColor)?.value ?? T6_COLOR_OPTIONS.edge[0].value;
     ctx.lineWidth = Math.max(1.5, 4 * scale);
     if (obstacle.type === 'half') drawHalf(ctx, obstacle, cx, cy, radius);
     else if (obstacle.type === 'blades') drawBlades(ctx, obstacle, cx, cy, radius, p.bladeHubRadius, p.bladeOpeningDeg);

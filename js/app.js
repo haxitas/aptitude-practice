@@ -103,8 +103,8 @@ function render() {
 
   if (route === '') {
     renderMenu(settingsInfo);
-  } else if (route === 'history') {
-    cleanup = history.mount(root, ctx) ?? null;
+  } else if (route === 'history' || route.startsWith('history/')) {
+    cleanup = history.mount(root, ctx, location.hash) ?? null;
   } else if (route === 'settings') {
     cleanup = settingsScreen.mount(root, ctx) ?? null;
   } else if (route === 'calc') {
