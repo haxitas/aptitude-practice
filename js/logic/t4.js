@@ -52,9 +52,7 @@ export function compassNeedleAngle(headingIndex, compassMode) {
 
 export function createT4Example(compassMode = 'noseUp') {
   compassNeedleAngle(0, compassMode);
-  const problem = compassMode === 'noseUp'
-    ? { headingIndex: 6, relativeIndex: 0 }
-    : { headingIndex: 1, relativeIndex: 2 };
+  const problem = { headingIndex: 1, relativeIndex: 2 };
   const { position, heading } = solutionFor(problem.headingIndex, problem.relativeIndex);
   return { problem, selection: { position, heading } };
 }
@@ -63,15 +61,15 @@ export function explainT4Solution(problem, compassMode) {
   const { towerDirection, position, heading } = solutionFor(problem.headingIndex, problem.relativeIndex);
   const northAngle = compassNeedleAngle(problem.headingIndex, compassMode);
   const relativeAngle = problem.relativeIndex * 45;
-  const northPosition = ['真上(0°)', '右斜め前45°', '右90°', '右斜め後ろ135°',
-    '後ろ180°', '左斜め後ろ225°', '左270°', '左斜め前315°'][northAngle / 45];
+  const northPosition = ['上(北が機首の正面0°)', '右上(北が機首の右45°)', '右(北が機首の右90°)', '右下(北が機首の右135°)',
+    '下(北が機首の後ろ180°)', '左下(北が機首の左135°)', '左(北が機首の左90°)', '左上(北が機首の左45°)'][northAngle / 45];
   const compassStep = compassMode === 'noseUp'
-    ? `1. 針は北。北は機首の${northPosition}にある → 機首は${heading}。`
-    : `1. 北が上。飛行機形の針は${heading}を指す → 機首は${heading}。`;
-  const adfStep = relativeAngle === 0 ? 'ADFの針は真上(相対0°)' : `ADFの針は相対${relativeAngle}°`;
+    ? `1. 円盤は機首が上、針は北を指す。針が${northPosition} → 機首は${heading}。`
+    : `1. コンパスの針の先が機首 → 機首は${heading}。`;
+  const adfPosition = ['上', '右上', '右', '右下', '下', '左下', '左', '左上'][problem.relativeIndex];
   return [
     compassStep,
-    `2. ${adfStep}。機首${heading} + 相対${relativeAngle}° = 塔の方位${DIRECTIONS[towerDirection].key}。`,
+    `2. ADFの針が${adfPosition}(相対${relativeAngle}°) → 塔は ${heading}+${relativeAngle}° = ${DIRECTIONS[towerDirection].key}。`,
     `3. 塔から見た自機は反対の${position}のマス。向きは機首のまま${heading}。`,
   ];
 }

@@ -14,14 +14,13 @@ import { instrumentSvg } from '../js/tests/t4.js';
 
 const P = DEFAULTS.t4;
 
-test('流儀ごとの例題は正解と一致し、既定は機首が上', () => {
+test('例題は流儀にかかわらず機首NE・ADF右90度・自機NW/NE', () => {
   const nose = createT4Example('noseUp');
-  assert.deepEqual(nose.problem, { headingIndex: 6, relativeIndex: 0 });
-  assert.deepEqual(nose.selection, { position: 'E', heading: 'W' });
   const north = createT4Example('northUp');
   assert.deepEqual(north.problem, { headingIndex: 1, relativeIndex: 2 });
   assert.deepEqual(north.selection, { position: 'NW', heading: 'NE' });
-  assert.deepEqual(createT4Example(), nose);
+  assert.deepEqual(nose, north);
+  assert.deepEqual(createT4Example(), north);
   for (const example of [nose, north]) assert.equal(judgeT4(example.problem, example.selection).correct, true);
 });
 
@@ -58,14 +57,14 @@ test('左の計器は流儀ごとに文字・機首印・針先を変え、ADF�
 });
 
 test('導き方は流儀ごとに機首の読み方を変え、塔と自機の正解は共通', () => {
-  const nose = explainT4Solution({ headingIndex: 6, relativeIndex: 0 }, 'noseUp');
+  const nose = explainT4Solution({ headingIndex: 1, relativeIndex: 2 }, 'noseUp');
   assert.equal(nose.length, 3);
-  assert.match(nose[0], /北.*右90°.*機首.*W/);
-  assert.match(nose[1], /W.*0°.*W/);
-  assert.match(nose[2], /Eのマス.*W/);
+  assert.match(nose[0], /機首が上.*針は北.*左上.*左45°.*機首はNE/);
+  assert.match(nose[1], /ADFの針が右\(相対90°\).*塔は NE\+90° = SE/);
+  assert.match(nose[2], /NWのマス.*NE/);
   const north = explainT4Solution({ headingIndex: 1, relativeIndex: 2 }, 'northUp');
-  assert.match(north[0], /北が上.*NE/);
-  assert.match(north[1], /NE.*90°.*SE/);
+  assert.match(north[0], /コンパスの針の先が機首.*NE/);
+  assert.match(north[1], /ADFの針が右\(相対90°\).*塔は NE\+90° = SE/);
   assert.match(north[2], /NWのマス.*NE/);
 });
 
