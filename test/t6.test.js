@@ -30,6 +30,7 @@ test('T6 の既定値は承認済みの数値', () => {
     obstacleSpacing: 2.4,
     firstObstacleDistance: 5,
     bladeOpeningDeg: 60,
+    bladeOpeningCounts: [1, 2, 3],
     bladeHubRadius: 0.18,
     bladeInitialAngularSpeedDegSec: 30,
     bladeAngularAccelerationDegSec2: 0.15,
@@ -199,6 +200,27 @@ test('3枚羽根は現在の回転角を衝突判定に使う', () => {
   assert.equal(isObstacleSafe({ type: 'blades', rotationDeg: 60 }, p, P), false);
 });
 
+test('羽根の開口1・2・3個は等間隔で、1個なら他の角度と中心は衝突', () => {
+  const at = deg => ({ x: Math.cos(deg * Math.PI / 180) * 0.6, y: Math.sin(deg * Math.PI / 180) * 0.6 });
+  for (const count of [1, 2, 3]) {
+    for (let i = 0; i < count; i++) assert.equal(isBladeOpeningSafe(at(i * 360 / count), 0, P, count), true);
+    assert.equal(isBladeOpeningSafe(at(30), 0, P, count), false);
+    assert.equal(isBladeOpeningSafe({ x: 0, y: 0 }, 0, P, count), false);
+  }
+  for (const angle of [60, 120, 180, 240, 300]) assert.equal(isBladeOpeningSafe(at(angle), 0, P, 1), false);
+});
+
+test('多数シードで羽根の開口数1・2・3がすべて出る', () => {
+  const counts = new Map([[1, 0], [2, 0], [3, 0]]);
+  for (let seed = 1; seed <= 500; seed++) {
+    const obstacle = createObstacle(createRng(seed), 6, seed, P);
+    if (obstacle.type === 'blades') counts.set(obstacle.openingCount, (counts.get(obstacle.openingCount) ?? 0) + 1);
+  }
+  assert.deepEqual([...counts.keys()].sort((a, b) => a - b), [1, 2, 3]);
+  const total = [...counts.values()].reduce((a, b) => a + b, 0);
+  for (const count of counts.values()) assert.ok(count > total * 0.2 && count < total * 0.45, JSON.stringify([...counts]));
+});
+
 test('扇形は90°の内側だけ安全で、辺・中心は衝突', () => {
   const at = (deg, radius = 0.6) => ({
     x: Math.cos(deg * Math.PI / 180) * radius,
@@ -216,6 +238,20 @@ test('315°の扇形は0°/360°をまたいだ内側だけ安全', () => {
   assert.equal(isSectorOpeningSafe(at(10), 315, P), false);
   assert.equal(isSectorOpeningSafe(at(270), 315, P), false); // 辺
   assert.equal(isSectorOpeningSafe(at(0), 315, P), false); // 反対側の辺
+});
+
+test('扇形は両方向に回転し、0°/360°をまたぎ、以前安全な位置も塞がる', () => {
+  const at = deg => ({ x: Math.cos(deg * Math.PI / 180) * 0.6, y: Math.sin(deg * Math.PI / 180) * 0.6 });
+  const cw = { id: 1, type: 'sector', z: 5, openCenterDeg: 315, rotationDirection: 1 };
+  const ccw = { ...cw, rotationDirection: -1 };
+  assert.equal(isObstacleSafe(cw, at(350), P), true);
+  assert.equal(isObstacleSafe(cw, at(290), P), true);
+  const turned = advanceObstacle(cw, 0, 0, 2, P);
+  assert.ok(turned.openCenterDeg > 0 && turned.openCenterDeg < 90);
+  assert.equal(isObstacleSafe(turned, at(290), P), false);
+  const reverse = advanceObstacle(ccw, 0, 0, 2, P);
+  assert.ok(reverse.openCenterDeg < 315);
+  assert.equal(isObstacleSafe(reverse, at(270), P), true);
 });
 
 test('小穴は穴の中だけ安全で、縁・外・穴にしていない位置は衝突', () => {
@@ -288,18 +324,19 @@ test('障害物生成は同じシードで同じになり、初期配置は一�
 });
 
 test('多数シードで4種類・半円4方向・羽根2回転方向・扇形4方向が出る', () => {
-  const types = new Set(), sides = new Set(), directions = new Set(), sectors = new Set();
+  const types = new Set(), sides = new Set(), directions = new Set(), sectors = new Set(), sectorDirections = new Set();
   for (let seed = 1; seed <= 500; seed++) {
     const obstacle = createObstacle(createRng(seed), 6, seed, P);
     types.add(obstacle.type);
     if (obstacle.type === 'half') sides.add(obstacle.blockedSide);
     else if (obstacle.type === 'blades') directions.add(obstacle.rotationDirection);
-    else if (obstacle.type === 'sector') sectors.add(obstacle.openCenterDeg);
+    else if (obstacle.type === 'sector') { sectors.add(obstacle.openCenterDeg); sectorDirections.add(obstacle.rotationDirection); }
   }
   assert.deepEqual([...types].sort(), ['blades', 'half', 'holes', 'sector']);
   assert.deepEqual([...sides].sort(), ['down', 'left', 'right', 'up']);
   assert.deepEqual([...directions].sort((a, b) => a - b), [-1, 1]);
   assert.deepEqual([...sectors].sort((a, b) => a - b), [45, 135, 225, 315]);
+  assert.deepEqual([...sectorDirections].sort((a, b) => a - b), [-1, 1]);
 });
 
 test('回転する羽根は経過時間と回転方向で角度が変わる', () => {

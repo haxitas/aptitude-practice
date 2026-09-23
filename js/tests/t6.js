@@ -28,17 +28,16 @@ function drawHalf(ctx, obstacle, cx, cy, radius) {
   ctx.restore();
 }
 
-function drawBlades(ctx, obstacle, cx, cy, radius, hubRatio) {
-  for (let i = 0; i < 3; i++) {
-    const center = obstacle.rotationDeg + 60 + i * 120;
-    const start = -(center + 30) * DEG;
-    const end = -(center - 30) * DEG;
-    ctx.beginPath();
+function drawBlades(ctx, obstacle, cx, cy, radius, hubRatio, openingDeg) {
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+  for (let i = 0; i < obstacle.openingCount; i++) {
+    const center = obstacle.rotationDeg + i * 360 / obstacle.openingCount;
     ctx.moveTo(cx, cy);
-    ctx.arc(cx, cy, radius, start, end);
+    ctx.arc(cx, cy, radius, -(center + openingDeg / 2) * DEG, -(center - openingDeg / 2) * DEG);
     ctx.closePath();
-    ctx.fill();
   }
+  ctx.fill('evenodd');
   ctx.beginPath();
   ctx.arc(cx, cy, radius * hubRatio, 0, Math.PI * 2);
   ctx.fill();
@@ -152,12 +151,11 @@ function drawScene(ctx, layout, state, p, stickInput) {
   for (const obstacle of visible) {
     const scale = projectScale(p.perspectiveFocal, obstacle.z);
     const radius = tunnelRadius * scale;
-    const near = Math.max(0.2, Math.min(1, 1.2 - obstacle.z / p.farZ));
-    ctx.fillStyle = `rgba(226, 80, 72, ${0.48 + near * 0.42})`;
-    ctx.strokeStyle = `rgba(255, 205, 190, ${0.55 + near * 0.4})`;
+    ctx.fillStyle = '#e25048';
+    ctx.strokeStyle = '#ffcdbe';
     ctx.lineWidth = Math.max(1, 2.5 * scale);
     if (obstacle.type === 'half') drawHalf(ctx, obstacle, cx, cy, radius);
-    else if (obstacle.type === 'blades') drawBlades(ctx, obstacle, cx, cy, radius, p.bladeHubRadius);
+    else if (obstacle.type === 'blades') drawBlades(ctx, obstacle, cx, cy, radius, p.bladeHubRadius, p.bladeOpeningDeg);
     else if (obstacle.type === 'sector') drawSector(ctx, obstacle, cx, cy, radius, p.sectorOpeningDeg);
     else drawHoles(ctx, obstacle, cx, cy, radius, p);
     ctx.beginPath();
@@ -239,7 +237,7 @@ export function mount(root, ctx) {
     root.innerHTML = shell(`<section class="t6-start">
       <h1 data-ref="title"></h1>
       <p>矢印キー、または操縦用の円を指・マウスで動かして機体を操縦します。横画面では左右ボタンで円の側を選べます。縦画面ではトンネルが上、操縦円が下です。</p>
-      <p>半円、回転する3枚羽根、扇形、縁の小穴の開口を通り抜けます。</p>
+      <p>半円、回転する羽根(開口1〜3個)、回転する扇形、縁の小穴の開口を通り抜けます。</p>
       <p class="muted">衝突すると速度が半分になり、安全な開口方向へ押し戻されます。制限時間は <span data-ref="duration"></span>です。</p>
       <p class="notice notice-error" data-ref="layoutError" hidden></p>
       <button class="btn btn-primary btn-large" type="button" data-ref="start">開始</button>

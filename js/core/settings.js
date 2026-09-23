@@ -92,6 +92,7 @@ export const DEFAULTS = Object.freeze({
     obstacleSpacing: 2.4,
     firstObstacleDistance: 5,
     bladeOpeningDeg: 60,
+    bladeOpeningCounts: Object.freeze([1, 2, 3]),
     bladeHubRadius: 0.18,
     bladeInitialAngularSpeedDegSec: 30,
     bladeAngularAccelerationDegSec2: 0.15,

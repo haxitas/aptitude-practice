@@ -85,6 +85,7 @@ export const SETTING_FIELDS = Object.freeze({
     number('obstacleSpacing', '障害物の間隔', 0.2, 20, { step: 0.1, unit: 'u' }),
     number('firstObstacleDistance', '最初の障害物まで', 0.2, 30, { step: 0.1, unit: 'u' }),
     number('bladeOpeningDeg', '羽根の開口角', 1, 119, { step: 1, unit: '°' }),
+    list('bladeOpeningCounts', '羽根の開口数候補', 1, 3, { integer: true, hint: '1〜3をカンマ区切り' }),
     number('bladeHubRadius', '羽根の中心円半径', 0.01, 0.9, { step: 0.01 }),
     number('bladeInitialAngularSpeedDegSec', '羽根の初期回転速度', 0, 720, { step: 1, unit: '°/s' }),
     number('bladeAngularAccelerationDegSec2', '羽根の回転加速度', 0, 100, { step: 0.01, unit: '°/s²' }),

@@ -129,12 +129,12 @@ export function isHalfOpeningSafe(position, blockedSide) {
   return dot < 0; // 直径上は障害物の縁なので衝突
 }
 
-export function isBladeOpeningSafe(position, rotationDeg, p) {
+export function isBladeOpeningSafe(position, rotationDeg, p, openingCount = 3) {
   const { radius, angleDeg } = toPolar(position);
   if (radius <= p.bladeHubRadius) return false; // 中心円の縁も衝突
   const halfOpening = p.bladeOpeningDeg / 2;
-  for (let i = 0; i < 3; i++) {
-    const center = normalizeAngleDeg(rotationDeg + i * 120);
+  for (let i = 0; i < openingCount; i++) {
+    const center = normalizeAngleDeg(rotationDeg + i * 360 / openingCount);
     if (angularDistanceDeg(angleDeg, center) < halfOpening - ANGLE_EPSILON_DEG) return true; // 開口の端は衝突
   }
   return false;
@@ -165,7 +165,7 @@ export function isHoleOpeningSafe(position, obstacle, p) {
 
 export function isObstacleSafe(obstacle, position, p) {
   if (obstacle.type === 'half') return isHalfOpeningSafe(position, obstacle.blockedSide);
-  if (obstacle.type === 'blades') return isBladeOpeningSafe(position, obstacle.rotationDeg, p);
+  if (obstacle.type === 'blades') return isBladeOpeningSafe(position, obstacle.rotationDeg, p, obstacle.openingCount ?? 3);
   if (obstacle.type === 'sector') return isSectorOpeningSafe(position, obstacle.openCenterDeg, p);
   if (obstacle.type === 'holes') return isHoleOpeningSafe(position, obstacle, p);
   throw new RangeError(`不明な障害物です: ${obstacle.type}`);
@@ -202,8 +202,8 @@ export function safeDirection(obstacle, position, p) {
   const angle = toPolar(position).angleDeg;
   let center = normalizeAngleDeg(obstacle.rotationDeg);
   let best = angularDistanceDeg(angle, center);
-  for (let i = 1; i < 3; i++) {
-    const candidate = normalizeAngleDeg(obstacle.rotationDeg + i * 120);
+  for (let i = 1; i < (obstacle.openingCount ?? 3); i++) {
+    const candidate = normalizeAngleDeg(obstacle.rotationDeg + i * 360 / (obstacle.openingCount ?? 3));
     const distance = angularDistanceDeg(angle, candidate);
     if (distance < best) {
       best = distance;
@@ -245,12 +245,14 @@ export function createObstacle(rng, z, id, p) {
       id, type: 'blades', z,
       rotationDeg: rng() * 360,
       rotationDirection: rng() < 0.5 ? -1 : 1,
+      openingCount: p.bladeOpeningCounts[Math.floor(rng() * p.bladeOpeningCounts.length)],
     };
   }
   if (typeIndex === 2) {
     return {
       id, type: 'sector', z,
       openCenterDeg: SECTOR_CENTERS[Math.floor(rng() * SECTOR_CENTERS.length)],
+      rotationDirection: rng() < 0.5 ? -1 : 1,
     };
   }
   const slots = Array.from({ length: p.holeSlotCount }, (_, i) => i);
@@ -274,11 +276,12 @@ export function createInitialObstacles(rng, p) {
 
 export function advanceObstacle(obstacle, distanceDelta, elapsedSec, dtSec, p) {
   const next = { ...obstacle, z: obstacle.z - distanceDelta };
-  if (obstacle.type === 'blades') {
+  if (obstacle.type === 'blades' || obstacle.type === 'sector') {
     const end = elapsedSec + dtSec;
     const turn = p.bladeInitialAngularSpeedDegSec * dtSec
       + 0.5 * p.bladeAngularAccelerationDegSec2 * (end * end - elapsedSec * elapsedSec);
-    next.rotationDeg = normalizeAngleDeg(obstacle.rotationDeg + obstacle.rotationDirection * turn);
+    if (obstacle.type === 'blades') next.rotationDeg = normalizeAngleDeg(obstacle.rotationDeg + obstacle.rotationDirection * turn);
+    else next.openCenterDeg = normalizeAngleDeg(obstacle.openCenterDeg + obstacle.rotationDirection * turn);
   }
   return next;
 }

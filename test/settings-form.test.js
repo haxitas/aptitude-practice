@@ -68,6 +68,17 @@ test('T6 は速度と小穴の個数・重なり・範囲を検証する', () =>
   assert.match(outside.errors.holeRadius, /トンネル/);
 });
 
+test('T6の羽根の開口数候補は1〜3の重複しない整数だけ保存する', () => {
+  const field = SETTING_FIELDS.t6.find(item => item.key === 'bladeOpeningCounts');
+  assert.ok(field);
+  const valid = validateTestSettings('t6', raw('t6', { bladeOpeningCounts: '1,3' }), DEFAULTS.t6);
+  assert.equal(valid.ok, true, JSON.stringify(valid));
+  assert.deepEqual(valid.value.bladeOpeningCounts, [1, 3]);
+  for (const invalid of ['1,1', '0,2', '2,4', '1.5,2']) {
+    assert.equal(validateTestSettings('t6', raw('t6', { bladeOpeningCounts: invalid }), DEFAULTS.t6).ok, false);
+  }
+});
+
 test('テストごとの既定値戻しは対象の上書きだけを除き、元を変えない', () => {
   const saved = { t1: { durationSec: 60 }, t2: { durationSec: 30 } };
   const result = resetTestOverrides(saved, 't1');
