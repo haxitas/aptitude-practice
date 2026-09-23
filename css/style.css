@@ -400,7 +400,7 @@ h1 { font-size: 1.6rem; margin: 0 0 16px; }
 .t4-instruments figure { margin: 0; text-align: center; font-weight: 700; }
 .t4-instrument { display: block; width: min(100%, 28vh, 240px); margin: 4px auto 0; color: var(--text); }
 .t4-dial { fill: var(--surface); stroke: var(--border); stroke-width: 3; }
-.t4-guide { stroke: var(--border); stroke-width: 1; opacity: 0.38; }
+.t4-guide { stroke: var(--border); stroke-width: 1.5; opacity: 0.7; }
 .t4-instrument text { fill: currentColor; font-size: 12px; font-weight: 700; }
 .t4-instrument .t4-nose { font-size: 15px; fill: var(--muted); }
 .t4-compass-red { fill: #d33232; stroke: #972222; stroke-width: 1; }

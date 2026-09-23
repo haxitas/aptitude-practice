@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { createRng } from '../js/core/rng.js';
 import { DEFAULTS } from '../js/core/settings.js';
 import {
@@ -14,6 +15,11 @@ import { findTest, formatDetail } from '../js/core/catalog.js';
 import { instrumentSvg, planeSvg } from '../js/tests/t4.js';
 
 const P = DEFAULTS.t4;
+
+test('8等分の補助線は両配色の境界色を使い、従来より濃い', () => {
+  const css = readFileSync(new URL('../css/style.css', import.meta.url), 'utf8');
+  assert.match(css, /\.t4-guide\s*\{[^}]*stroke:\s*var\(--border\);[^}]*stroke-width:\s*1\.5;[^}]*opacity:\s*0\.7;/);
+});
 
 test('例題は流儀にかかわらず機首NE・ADF右90度・自機NW/NE', () => {
   const nose = createT4Example('noseUp');
