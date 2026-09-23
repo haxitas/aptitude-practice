@@ -3,7 +3,7 @@
 import {
   DIRECTIONS, generateT4Problem, createT4Selection, createT4Example,
   selectT4Position, selectT4Heading, canSubmitT4,
-  judgeT4, previousT4Feedback, compassNeedleVertices, planeRotationDeg,
+  judgeT4, compassNeedleVertices, planeRotationDeg,
   createT4Practice, answerT4Practice, advanceT4Practice, explainT4Solution,
   createT4Tally, recordT4Answer, buildT4Record,
 } from '../logic/t4.js';
@@ -13,9 +13,15 @@ import { appendRecord } from '../core/storage.js';
 import { renderResult } from '../core/result.js';
 import { findTest, formatDetail } from '../core/catalog.js';
 
+export function planeSvg(heading) {
+  return `<svg class="t4-plane" viewBox="0 0 100 100" aria-hidden="true" style="transform: rotate(${planeRotationDeg(heading)}deg)">
+    <path d="M50 5 L56 37 L82 52 L82 60 L57 53 L56 75 L66 82 L66 87 L50 82 L34 87 L34 82 L44 75 L43 53 L18 60 L18 52 L44 37 Z"/>
+  </svg>`;
+}
+
 export function instrumentSvg(index, relative = false, compassMode = 'noseUp') {
   const angle = index * 45;
-  const labels = !relative && compassMode === 'northUp' ? DIRECTIONS.map((d, i) => {
+  const labels = !relative ? DIRECTIONS.map((d, i) => {
     const a = i * 45 * Math.PI / 180;
     const x = 100 + Math.sin(a) * 75;
     const y = 100 - Math.cos(a) * 75;
@@ -28,14 +34,13 @@ export function instrumentSvg(index, relative = false, compassMode = 'noseUp') {
     : (() => {
       const shape = compassNeedleVertices(index, compassMode);
       return `<polygon class="t4-compass-pale" points="${points(shape.oppositeHalf)}"/>
-        <polygon class="t4-compass-red" points="${points(shape.pointingHalf)}"/>
-        ${compassMode === 'noseUp' ? `<text x="${shape.tip.x}" y="${shape.tip.y - 8}" text-anchor="middle" class="t4-north-label">北</text>` : ''}`;
+        <polygon class="t4-compass-red" points="${points(shape.pointingHalf)}"/>`;
     })();
   return `<svg class="t4-instrument" viewBox="0 0 200 200" role="img" aria-label="${relative ? '相対方位計' : 'コンパス'}">
     <circle cx="100" cy="100" r="92" class="t4-dial"/>
     ${guide}
     ${labels}
-    ${relative || compassMode === 'noseUp' ? '<text x="100" y="25" text-anchor="middle" class="t4-nose">▲</text>' : ''}
+    ${relative ? '<text x="100" y="25" text-anchor="middle" class="t4-nose">▲</text>' : compassMode === 'noseUp' ? '<path class="t4-nose" d="M100 1 L94 13 L106 13 Z"/>' : ''}
     ${needle}
     <circle cx="100" cy="100" r="6" class="t4-hub"/>
   </svg>`;
@@ -81,8 +86,6 @@ export function mount(root, ctx) {
     let problem = example ? sample.problem : isPractice ? practice.problem : generateT4Problem(rng);
     let selection = createT4Selection();
     let tally = createT4Tally();
-    let lastFeedback = null;
-    let lastExplanation = [];
     let paleUntil = -Infinity;
 
     root.innerHTML = `
@@ -106,7 +109,6 @@ export function mount(root, ctx) {
         ${example ? '<div class="actions t4-start-actions"><button class="btn" type="button" data-ref="practiceStart">練習問題を解く</button><button class="btn btn-primary" type="button" data-ref="start">始める</button></div>' : ''}
         ${explaining ? `<div class="t4-practice-feedback" data-ref="practiceFeedback"></div>
           <div class="actions"><button class="btn btn-primary" type="button" data-ref="next">${practice.index === 2 ? '結果へ' : '次へ'}</button></div>` : ''}
-        <p class="t4-previous" data-ref="previous" aria-live="polite" hidden></p>
       </section>`;
     const $ = name => root.querySelector(`[data-ref="${name}"]`);
     const submit = $('submit');
@@ -151,11 +153,7 @@ export function mount(root, ctx) {
         b.textContent = b.dataset.position === selection.position && selection.heading
           ? '' : DIRECTIONS.find(d => d.key === b.dataset.position).label;
         if (selected && selection.heading) {
-          const plane = document.createElement('span');
-          plane.className = 't4-plane';
-          plane.textContent = '✈';
-          plane.style.transform = `rotate(${planeRotationDeg(selection.heading, params.planeGlyphBaseDeg)}deg)`;
-          b.append(plane);
+          b.innerHTML = planeSvg(selection.heading);
         }
       });
       headingButtons.forEach(b => b.classList.toggle('is-selected', b.dataset.heading === selection.heading));
@@ -169,11 +167,6 @@ export function mount(root, ctx) {
         ? { position: practice.feedback.solution.position, heading: practice.feedback.solution.heading }
         : createT4Selection();
       updateSelection();
-      $('previous').hidden = mode !== 'test' || !params.showPreviousAnswer || !lastFeedback;
-      if (!$('previous').hidden) {
-        const answer = `前問の正解: ${lastFeedback.position}のマス / 向き ${lastFeedback.heading}　あなたの答え: ${lastFeedback.correct ? '○' : '×'}`;
-        $('previous').textContent = [answer, ...lastExplanation].join('\n');
-      }
     }
 
     function onPosition(e) {
@@ -188,8 +181,6 @@ export function mount(root, ctx) {
 
     function onSubmit(e) {
       if (!canSubmitT4(selection)) return;
-      lastFeedback = previousT4Feedback(problem, selection);
-      lastExplanation = lastFeedback.correct ? [] : explainT4Solution(problem, params.compassMode);
       tally = recordT4Answer(tally, judgeT4(problem, selection));
       paleUntil = e.timeStamp + params.answerFeedbackMs;
       submit.classList.add('is-pressed');

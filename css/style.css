@@ -403,7 +403,6 @@ h1 { font-size: 1.6rem; margin: 0 0 16px; }
 .t4-guide { stroke: var(--border); stroke-width: 1; opacity: 0.38; }
 .t4-instrument text { fill: currentColor; font-size: 12px; font-weight: 700; }
 .t4-instrument .t4-nose { font-size: 15px; fill: var(--muted); }
-.t4-instrument .t4-north-label { font-size: 13px; fill: var(--text); paint-order: stroke; stroke: var(--surface); stroke-width: 3px; }
 .t4-compass-red { fill: #d33232; stroke: #972222; stroke-width: 1; }
 .t4-compass-pale { fill: #e8eaee; stroke: #777e89; stroke-width: 1; }
 .t4-adf-needle line { stroke: #1969ba; stroke-width: 6; stroke-linecap: round; }
@@ -411,7 +410,6 @@ h1 { font-size: 1.6rem; margin: 0 0 16px; }
 .t4-hub { fill: #5e6774; }
 .t4-answer { display: grid; grid-template-columns: minmax(210px, 280px) minmax(260px, 1fr); gap: 14px; max-width: 820px; margin: 12px auto 0; align-items: center; }
 .t4-answer-field > p { margin: 0 0 6px; font-size: 0.9rem; font-weight: 700; text-align: center; }
-.t4-previous { max-width: 820px; margin: 8px auto 0; font-size: 0.85rem; color: var(--muted); text-align: center; white-space: pre-line; }
 .t4-map { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; aspect-ratio: 1; }
 .t4-choice, .t4-tower {
   min-width: var(--tap); min-height: var(--tap); border: 1px solid var(--border); border-radius: 10px;
@@ -420,7 +418,7 @@ h1 { font-size: 1.6rem; margin: 0 0 16px; }
 }
 .t4-choice { cursor: pointer; transition: opacity 80ms linear, outline-color 80ms linear; }
 .t4-choice.is-selected { outline: 4px solid var(--accent); outline-offset: -4px; }
-.t4-plane { display: inline-block; font-size: 2rem; line-height: 1; transform-origin: center; }
+.t4-plane { display: block; width: 2rem; height: 2rem; fill: currentColor; transform-origin: center; }
 .t4-tower { background: var(--warn-bg); color: var(--warn-text); font-size: 1rem; }
 .t4-headings { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .t4-heading { min-height: 58px; font-size: 1rem; }

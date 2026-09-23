@@ -66,10 +66,10 @@ export function compassNeedleVertices(headingIndex, compassMode) {
     oppositeHalf: [tail, left, center, right] };
 }
 
-export function planeRotationDeg(heading, baseDeg) {
+export function planeRotationDeg(heading) {
   const index = DIRECTIONS.findIndex(d => d.key === heading);
-  if (index < 0 || !Number.isFinite(baseDeg)) throw new RangeError('不明な機首の向きまたは基準角です');
-  return index * 45 - baseDeg;
+  if (index < 0) throw new RangeError('不明な機首の向きです');
+  return index * 45;
 }
 
 export function createT4Example(compassMode = 'noseUp') {
@@ -110,11 +110,6 @@ export function advanceT4Practice(state, rng) {
   if (state.index === 2) return { ...state, phase: 'complete', problem: null, lastProblem: state.problem, feedback: null };
   return { ...state, phase: 'question', index: state.index + 1,
     problem: generateT4Problem(rng, state.problem), feedback: null };
-}
-
-export function previousT4Feedback(problem, selection) {
-  const { position, heading } = solutionFor(problem.headingIndex, problem.relativeIndex);
-  return { position, heading, correct: judgeT4(problem, selection).correct };
 }
 
 export function createT4Selection() {

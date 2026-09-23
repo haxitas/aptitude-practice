@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { validateTestSettings, resetTestOverrides, canPlaceT5Fallback } from '../js/logic/settings-form.js';
+import { SETTING_FIELDS, validateTestSettings, resetTestOverrides, canPlaceT5Fallback } from '../js/logic/settings-form.js';
 import { DEFAULTS } from '../js/core/settings.js';
 
 function raw(testId, changes = {}) {
@@ -84,17 +84,6 @@ test('T6の操縦円の左右を検証し、それ以外の値は保存しない
   assert.equal(validateTestSettings('t6',raw('t6',{stickSide:'center'}),DEFAULTS.t6).ok,false);
 });
 
-test('T4の前問表示はtrue/falseを保存し、不正値を拒否する', () => {
-  for (const [input, expected] of [['true', true], ['false', false]]) {
-    const result = validateTestSettings('t4', raw('t4', { showPreviousAnswer: input }), DEFAULTS.t4);
-    assert.equal(result.ok, true, JSON.stringify(result));
-    assert.equal(result.value.showPreviousAnswer, expected);
-  }
-  const bad = validateTestSettings('t4', raw('t4', { showPreviousAnswer: 'maybe' }), DEFAULTS.t4);
-  assert.equal(bad.ok, false);
-  assert.ok(bad.errors.showPreviousAnswer);
-});
-
 test('T4の計器の流儀はnorthUp/noseUpだけを保存する', () => {
   for (const mode of ['northUp', 'noseUp']) {
     const result = validateTestSettings('t4', raw('t4', { compassMode: mode }), DEFAULTS.t4);
@@ -106,11 +95,10 @@ test('T4の計器の流儀はnorthUp/noseUpだけを保存する', () => {
   assert.ok(bad.errors.compassMode);
 });
 
-test('T4の飛行機文字の基準角を設定で変更でき、範囲外を拒否する', () => {
-  const good = validateTestSettings('t4', raw('t4', { planeGlyphBaseDeg: 90 }), DEFAULTS.t4);
-  assert.equal(good.ok, true, JSON.stringify(good));
-  assert.equal(good.value.planeGlyphBaseDeg, 90);
-  const bad = validateTestSettings('t4', raw('t4', { planeGlyphBaseDeg: 360 }), DEFAULTS.t4);
-  assert.equal(bad.ok, false);
-  assert.ok(bad.errors.planeGlyphBaseDeg);
+test('T4の不要な基準角・前問表示は設定項目にも保存値にも入らない', () => {
+  const fields = SETTING_FIELDS.t4.map(field => field.key);
+  assert.deepEqual(fields, ['durationSec', 'compassMode']);
+  const result = validateTestSettings('t4', raw('t4', { planeGlyphBaseDeg: 90, showPreviousAnswer: 'true' }), DEFAULTS.t4);
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.deepEqual(result.value, { durationSec: DEFAULTS.t4.durationSec, compassMode: DEFAULTS.t4.compassMode });
 });

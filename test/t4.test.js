@@ -7,11 +7,11 @@ import {
   createT4Example,
   createT4Selection, selectT4Position, selectT4Heading, canSubmitT4,
   judgeT4, createT4Tally, recordT4Answer, summarizeT4, buildT4Record,
-  previousT4Feedback, compassNeedleAngle, compassNeedleVertices, planeRotationDeg,
+  compassNeedleAngle, compassNeedleVertices, planeRotationDeg,
   createT4Practice, answerT4Practice, advanceT4Practice, explainT4Solution,
 } from '../js/logic/t4.js';
 import { findTest, formatDetail } from '../js/core/catalog.js';
-import { instrumentSvg } from '../js/tests/t4.js';
+import { instrumentSvg, planeSvg } from '../js/tests/t4.js';
 
 const P = DEFAULTS.t4;
 
@@ -39,9 +39,25 @@ test('流儀ごとの針角度は8方位で逆向きになり、不正入力を�
   }
   assert.throws(() => compassNeedleAngle(-1, 'northUp'));
   assert.throws(() => compassNeedleAngle(1, 'other'));
+  for (const [mode, values] of [
+    ['noseUp', [[0, 0], [6, 90], [1, 315]]],
+    ['northUp', [[0, 0], [6, 270], [1, 45]]],
+  ]) for (const [index, expected] of values) assert.equal(compassNeedleAngle(index, mode), expected);
 });
 
-test('左の計器は流儀ごとに方位文字と北印を変え、ADFは尖った針のまま', () => {
+test('固定文字盤は両流儀・全機首で同じ8文字と座標を持ち、針先の北文字はない', () => {
+  const labels = svg => [...svg.matchAll(/<text x="([^"]+)" y="([^"]+)" text-anchor="middle" dominant-baseline="central">([^<]+)<\/text>/g)]
+    .map(([, x, y, key]) => [key, x, y]);
+  const baseline = labels(instrumentSvg(0, false, 'northUp'));
+  assert.deepEqual(baseline.map(([key]) => key), DIRECTIONS.map(d => d.key));
+  for (const mode of ['northUp', 'noseUp']) for (let i = 0; i < 8; i++) {
+    const svg = instrumentSvg(i, false, mode);
+    assert.deepEqual(labels(svg), baseline);
+    assert.doesNotMatch(svg, /t4-north-label|>北<\/text>/);
+  }
+});
+
+test('左の計器は流儀ごとに機首印を変え、ADFは尖った針のまま', () => {
   const north = instrumentSvg(1, false, 'northUp');
   assert.match(north, /class="t4-compass-red"/);
   assert.match(north, /class="t4-compass-pale"/);
@@ -49,8 +65,9 @@ test('左の計器は流儀ごとに方位文字と北印を変え、ADFは尖�
   assert.doesNotMatch(north, /class="t4-nose"/);
   const nose = instrumentSvg(1, false, 'noseUp');
   assert.match(nose, /class="t4-nose"/);
-  assert.match(nose, /class="t4-north-label"/);
-  assert.doesNotMatch(nose, />NE<\/text>/);
+  assert.match(nose, /<path class="t4-nose" d="M100 1 L94 13 L106 13 Z"\/>/);
+  assert.doesNotMatch(nose, /<text x="100" y="25" text-anchor="middle" class="t4-nose"/);
+  assert.match(nose, />NE<\/text>/);
   const adf = instrumentSvg(2, true);
   assert.match(adf, /rotate\(90 100 100\)/);
   assert.match(adf, /class="t4-adf-needle"/);
@@ -74,11 +91,18 @@ test('コンパスの針は両流儀の全8方位で中心を通り、先端と�
   }
 });
 
-test('選んだ向きの飛行機は基準45度から8方位へ45度刻みで回る', () => {
-  assert.equal(planeRotationDeg('N', 45), -45);
-  assert.equal(planeRotationDeg('E', 45), 45);
-  for (let i = 0; i < 8; i++) assert.equal(planeRotationDeg(DIRECTIONS[i].key, 45), i * 45 - 45);
-  assert.throws(() => planeRotationDeg('BAD', 45));
+test('飛行機SVGの機首は上が0度で、8方位に45度刻みで回る', () => {
+  assert.equal(planeRotationDeg('N'), 0);
+  for (let i = 0; i < 8; i++) {
+    const heading = DIRECTIONS[i].key;
+    assert.equal(planeRotationDeg(heading), i * 45);
+    const svg = planeSvg(heading);
+    assert.match(svg, new RegExp(`rotate\\(${i * 45}deg\\)`));
+    assert.match(svg, /<svg[^>]*class="t4-plane"/);
+    assert.match(svg, /<path\b/);
+    assert.doesNotMatch(svg, /✈/);
+  }
+  assert.throws(() => planeRotationDeg('BAD'));
 });
 
 test('練習は回答→解説→次問を3回繰り返して終了し、やり直しで最初に戻る', () => {
@@ -123,7 +147,7 @@ test('導き方は流儀ごとに機首の読み方を変え、塔と自機の�
 });
 
 test('T4 の既定値は承認済みの数値', () => {
-  assert.deepEqual(P, { durationSec: 180, answerFeedbackMs: 300, showPreviousAnswer: true, compassMode: 'noseUp', planeGlyphBaseDeg: 45 });
+  assert.deepEqual(P, { durationSec: 180, answerFeedbackMs: 300, compassMode: 'noseUp' });
 });
 
 test('方位は N から時計回りの8方向', () => {
@@ -190,14 +214,6 @@ test('位置と向きを別々に判定する', () => {
   assert.deepEqual(judgeT4(q, { position: 'E', heading: 'N' }), { positionCorrect: false, headingCorrect: true, correct: false });
 });
 
-test('前問の表示は正解のマス・向きと、自分の正誤を返す', () => {
-  const q = { headingIndex: 1, relativeIndex: 2 };
-  assert.deepEqual(previousT4Feedback(q, { position: 'NW', heading: 'NE' }),
-    { position: 'NW', heading: 'NE', correct: true });
-  assert.deepEqual(previousT4Feedback(q, { position: 'SE', heading: 'NE' }),
-    { position: 'NW', heading: 'NE', correct: false });
-});
-
 test('採点は両方正解だけ、内訳は位置だけ・向きだけ', () => {
   let tally = createT4Tally();
   tally = recordT4Answer(tally, { positionCorrect: true, headingCorrect: true, correct: true });
@@ -217,7 +233,7 @@ test('記録はSPEC §4の形で、その回の設定を複製する', () => {
   assert.deepEqual(record, {
     id: `${date}-t4`, test: 't4', date, score: 2,
     detail: { answered: 4, correct: 2, positionOnlyCorrect: 1, headingOnlyCorrect: 1 },
-    settings: { durationSec: 180, answerFeedbackMs: 300, showPreviousAnswer: true, compassMode: 'noseUp', planeGlyphBaseDeg: 45 },
+    settings: { durationSec: 180, answerFeedbackMs: 300, compassMode: 'noseUp' },
   });
   assert.notEqual(record.settings, P);
 });
