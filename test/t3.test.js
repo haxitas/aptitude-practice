@@ -10,6 +10,7 @@ import {
   createAudioState, startAudioSet, stepAudio, audioEnded, answerAudio,
   createT3Tally, recordAnswer, recordUnanswered, summarizeT3, buildT3Record,
 } from '../js/logic/t3.js';
+import { t3ShapeFeedback, t3CalcFeedback, t3AudioFeedback } from '../js/logic/t3.js';
 
 const P = DEFAULTS.t3;
 
@@ -389,4 +390,27 @@ test('記録: SPEC §4 の形で、その回の T3 設定をすべて入れる',
   assert.equal(r.score, 1);
   assert.deepEqual(r.settings, { ...P });
   assert.notEqual(r.settings, P);
+});
+
+// ---- 即時判定 ----
+
+test('即時判定: 図形は正しい向きを記号と言葉で出す', () => {
+  const right = { items: [], answer: 'right' };
+  assert.deepEqual(t3ShapeFeedback(right, true), { kind: 'correct', text: '○ 正解' });
+  assert.deepEqual(t3ShapeFeedback(right, false), { kind: 'wrong', text: '× 正解は ▶(右向き)' });
+  assert.deepEqual(t3ShapeFeedback({ items: [], answer: 'left' }, false), { kind: 'wrong', text: '× 正解は ◀(左向き)' });
+});
+
+test('即時判定: 計算は正しい答えの数を出す', () => {
+  const q = { answer: 17, choices: [16, 17, 19, 27], correctIndex: 1, terms: [] };
+  assert.deepEqual(t3CalcFeedback(q, true), { kind: 'correct', text: '○ 正解' });
+  assert.deepEqual(t3CalcFeedback(q, false), { kind: 'wrong', text: '× 正解は 17' });
+});
+
+test('即時判定: 音声は重複ありなら重複した語、なしなら「重複なし」', () => {
+  const dup = { words: ['Alfa', 'Sierra', 'Delta', 'Romeo', 'Alfa'], hasDuplicate: true };
+  const none = { words: ['Alfa', 'Bravo', 'Charlie', 'Delta', 'Echo'], hasDuplicate: false };
+  assert.deepEqual(t3AudioFeedback(dup, true), { kind: 'correct', text: '○ 正解' });
+  assert.deepEqual(t3AudioFeedback(dup, false), { kind: 'wrong', text: '× 重複あり(Alfa)' });
+  assert.deepEqual(t3AudioFeedback(none, false), { kind: 'wrong', text: '× 重複なし' });
 });

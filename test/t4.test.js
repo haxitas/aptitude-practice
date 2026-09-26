@@ -13,6 +13,7 @@ import {
 } from '../js/logic/t4.js';
 import { findTest, formatDetail } from '../js/core/catalog.js';
 import { instrumentSvg, planeSvg } from '../js/tests/t4.js';
+import { t4Feedback } from '../js/logic/t4.js';
 
 const P = DEFAULTS.t4;
 
@@ -248,4 +249,22 @@ test('結果と履歴のT4内訳は4列で、古い記録の正答数は—', ()
   const fields = findTest('t4').details;
   assert.deepEqual(fields.map(field => field.label), ['回答数', '正答数', '位置だけ正解', '向きだけ正解']);
   assert.equal(formatDetail(fields[1], undefined), '—');
+});
+
+// ---- 即時判定 ----
+
+test('即時判定: 位置・向きとも正解なら1行だけ', () => {
+  // 機首N・針が右 → 自機は西のマス・向きN
+  const problem = { headingIndex: 0, relativeIndex: 2 };
+  assert.deepEqual(t4Feedback(problem, { position: 'W', heading: 'N' }), { kind: 'correct', text: '○ 位置・向きとも正解' });
+});
+
+test('即時判定: 不正解は位置と向きの○×と、正しいマス・向きを返す', () => {
+  const problem = { headingIndex: 0, relativeIndex: 2 };
+  assert.deepEqual(t4Feedback(problem, { position: 'W', heading: 'S' }),
+    { kind: 'wrong', text: '位置 ○ ・ 向き ×', solution: { position: 'W', heading: 'N' } });
+  assert.deepEqual(t4Feedback(problem, { position: 'E', heading: 'N' }),
+    { kind: 'wrong', text: '位置 × ・ 向き ○', solution: { position: 'W', heading: 'N' } });
+  assert.deepEqual(t4Feedback(problem, { position: 'E', heading: 'S' }),
+    { kind: 'wrong', text: '位置 × ・ 向き ×', solution: { position: 'W', heading: 'N' } });
 });

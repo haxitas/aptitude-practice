@@ -1,5 +1,6 @@
 // テスト1 計算: 9種類の問題生成、典型誤答の4択、判定、採点。DOMには触れない。
 import { randInt, shuffle } from '../core/rng.js';
+import { correctFeedback, wrongFeedback } from '../core/feedback.js';
 
 export const PROBLEM_KINDS = Object.freeze(['unit', 'speed', 'meeting', 'catchup', 'percentage', 'inversePercentage', 'price', 'average', 'elapsed']);
 
@@ -201,6 +202,11 @@ export function generateT1Problem(rng, p, previous = null, forcedKind = null) {
 
 export function judgeT1(problem, choiceIndex) {
   return problem.choices[choiceIndex] === problem.answer;
+}
+
+// 即時判定: 不正解のときは単位つきの正解を出す
+export function t1Feedback(problem, correct) {
+  return correct ? correctFeedback() : wrongFeedback(`${problem.answer}${problem.unit}`);
 }
 
 export function createT1Tally() {

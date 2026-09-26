@@ -99,9 +99,11 @@ export function mount(root, ctx) {
     return wrap;
   }
 
-  for (const test of TESTS) {
+  // 共通(即時判定)を先頭に、開いた状態で出す
+  for (const test of [{ id: 'common', name: '共通(即時判定)' }, ...TESTS]) {
     const details = document.createElement('details');
     details.className = 'settings-test';
+    if (test.id === 'common') details.open = true;
     const summary = document.createElement('summary');
     summary.textContent = test.name;
     details.append(summary);

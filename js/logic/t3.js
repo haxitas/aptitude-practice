@@ -1,5 +1,6 @@
 // テスト3 マルチタスク: 図形・計算・音声の問題の生成、判定、音声タスクの進行、採点。DOM に触れない。
 import { randInt, shuffle } from '../core/rng.js';
+import { correctFeedback, wrongFeedback } from '../core/feedback.js';
 
 // SPEC §6 の26語(綴りは SPEC のとおり)
 export const NATO_WORDS = Object.freeze([
@@ -213,6 +214,25 @@ export function answerAudio(state, now, saysDuplicate) {
     correct: saysDuplicate === state.set.hasDuplicate,
     state: { ...state, phase: 'waiting', waitFrom: now },
   };
+}
+
+// ---- 即時判定 ----
+
+export function t3ShapeFeedback(problem, correct) {
+  if (correct) return correctFeedback();
+  return wrongFeedback(problem.answer === 'left' ? '◀(左向き)' : '▶(右向き)');
+}
+
+export function t3CalcFeedback(problem, correct) {
+  return correct ? correctFeedback() : wrongFeedback(String(problem.answer));
+}
+
+// 音声: 正しい答えが「重複あり」なら、2回出た語も添える
+export function t3AudioFeedback(set, correct) {
+  if (correct) return correctFeedback();
+  if (!set.hasDuplicate) return { kind: 'wrong', text: '× 重複なし' };
+  const word = set.words.find((w, i) => set.words.indexOf(w) !== i);
+  return { kind: 'wrong', text: `× 重複あり(${word})` };
 }
 
 // ---- 採点 ----

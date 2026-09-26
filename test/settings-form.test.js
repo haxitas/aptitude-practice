@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { SETTING_FIELDS, validateTestSettings, resetTestOverrides, canPlaceT5Fallback } from '../js/logic/settings-form.js';
 import { DEFAULTS, resolveSettings, T6_COLOR_OPTIONS, T6_COLOR_PRESETS } from '../js/core/settings.js';
+import { withInstantFeedback } from '../js/logic/settings-form.js';
 
 function raw(testId, changes = {}) {
   return Object.fromEntries(Object.entries({ ...DEFAULTS[testId], ...changes }).map(([key, value]) => [
@@ -163,4 +164,22 @@ test('T4の不要な基準角・前問表示は設定項目にも保存値にも
   const result = validateTestSettings('t4', raw('t4', { planeGlyphBaseDeg: 90, showPreviousAnswer: 'true' }), DEFAULTS.t4);
   assert.equal(result.ok, true, JSON.stringify(result));
   assert.deepEqual(result.value, { durationSec: DEFAULTS.t4.durationSec, compassMode: DEFAULTS.t4.compassMode });
+});
+
+// ---- 即時判定 ----
+
+test('即時判定: 設定画面の共通項目は、オン/オフと表示時間を検証する', () => {
+  const ok = validateTestSettings('common', { instantFeedback: 'true', feedbackMs: '1200' }, {});
+  assert.deepEqual(ok, { ok: true, value: { instantFeedback: true, feedbackMs: 1200 }, errors: {} });
+  const off = validateTestSettings('common', { instantFeedback: 'false', feedbackMs: '800' }, {});
+  assert.equal(off.value.instantFeedback, false);
+  assert.equal(validateTestSettings('common', { instantFeedback: 'yes', feedbackMs: '1200' }, {}).ok, false);
+  assert.equal(validateTestSettings('common', { instantFeedback: 'true', feedbackMs: '0' }, {}).ok, false);
+});
+
+test('即時判定: スイッチは common だけを書き換え、ほかのテストの保存値は残す', () => {
+  const saved = { t2: { durationSec: 60 }, common: { feedbackMs: 900 } };
+  assert.deepEqual(withInstantFeedback(saved, true), { t2: { durationSec: 60 }, common: { feedbackMs: 900, instantFeedback: true } });
+  assert.deepEqual(withInstantFeedback(null, false), { common: { instantFeedback: false } });
+  assert.deepEqual(saved, { t2: { durationSec: 60 }, common: { feedbackMs: 900 } });
 });

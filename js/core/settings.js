@@ -24,6 +24,11 @@ export const T6_COLOR_PRESETS = Object.freeze([
 ]);
 
 export const DEFAULTS = Object.freeze({
+  // 全テスト共通(2026-09-27 ユーザーの判断で追加)
+  common: Object.freeze({
+    instantFeedback: false, // 即時判定モード(テスト1〜5で、答えるたびに正誤を出す)
+    feedbackMs: 1200, // 判定を出しておく時間(テスト4は次の決定まで出し続ける)
+  }),
   t1: Object.freeze({
     durationSec: 180,
     calculatorDuringTest: true,

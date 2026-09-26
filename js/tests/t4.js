@@ -6,8 +6,9 @@ import {
   selectT4Position, selectT4Heading, canSubmitT4,
   judgeT4, compassNeedleVertices, planeRotationDeg,
   createT4Practice, answerT4Practice, advanceT4Practice, explainT4Solution,
-  createT4Tally, recordT4Answer, buildT4Record,
+  createT4Tally, recordT4Answer, buildT4Record, t4Feedback,
 } from '../logic/t4.js';
+import { createFeedbackSlot, feedbackSlotHtml, instantFeedbackBadge, recordSettingsWithFeedback } from '../core/feedback.js';
 import { createRng, randomSeed } from '../core/rng.js';
 import { startTimer, formatDuration } from '../core/timer.js';
 import { appendRecord } from '../core/storage.js';
@@ -47,8 +48,32 @@ export function instrumentSvg(index, relative = false, compassMode = 'noseUp') {
   </svg>`;
 }
 
+// 即時判定の不正解で出す小さな3×3のイラスト。中央が塔で、正しいマスに正しい向きの飛行機を描く
+function solutionMiniMap(solution) {
+  const map = document.createElement('div');
+  map.className = 't4-mini-map';
+  map.setAttribute('role', 'img');
+  map.setAttribute('aria-label', `正解: ${solution.position}のマス・向き${solution.heading}`);
+  for (let row = 0; row < 3; row++) {
+    for (let col = 0; col < 3; col++) {
+      const cell = document.createElement('div');
+      cell.className = 't4-mini-cell';
+      if (row === 1 && col === 1) {
+        cell.classList.add('is-tower');
+        cell.textContent = '塔';
+      } else if (DIRECTIONS.find(d => d.row === row && d.col === col).key === solution.position) {
+        cell.classList.add('is-answer');
+        cell.innerHTML = planeSvg(solution.heading);
+      }
+      map.append(cell);
+    }
+  }
+  return map;
+}
+
 export function mount(root, ctx) {
   const params = ctx.settings.t4;
+  const common = ctx.settings.common;
   const meta = findTest('t4');
   let teardown = null;
 
@@ -93,6 +118,7 @@ export function mount(root, ctx) {
       <section class="t4-play">
         <div class="topbar">
           <span class="remaining" data-ref="remaining"></span>
+          ${mode === 'test' ? instantFeedbackBadge(common) : ''}
           <button class="btn btn-quiet" type="button" data-ref="quit">途中終了</button>
         </div>
         ${example ? `<p class="t4-example-note"><strong>例題</strong><br>
@@ -106,6 +132,7 @@ export function mount(root, ctx) {
           <div class="t4-answer-field"><p>自機の位置(中央が塔)</p><div class="t4-map" data-ref="map" aria-label="自機の位置"></div></div>
           <div class="t4-answer-field"><p>自機の機首の向き</p><div class="t4-headings" data-ref="headings" aria-label="機首の向き"></div></div>
           ${!example && !explaining ? '<button class="btn btn-primary t4-submit" type="button" data-ref="submit" disabled>決定</button>' : ''}
+          ${mode === 'test' && common.instantFeedback ? feedbackSlotHtml('feedback', 't4-feedback') : ''}
         </div>
         ${example ? '<div class="actions t4-start-actions"><button class="btn" type="button" data-ref="practiceStart">練習問題を解く</button><button class="btn btn-primary" type="button" data-ref="start">始める</button></div>' : ''}
         ${explaining ? `<div class="t4-practice-feedback" data-ref="practiceFeedback"></div>
@@ -113,6 +140,9 @@ export function mount(root, ctx) {
       </section>`;
     const $ = name => root.querySelector(`[data-ref="${name}"]`);
     const submit = $('submit');
+    // テスト4の判定は、イラストを読む時間が要るため次の決定まで出し続ける
+    const feedback = mode === 'test' && common.instantFeedback
+      ? createFeedbackSlot($('feedback'), { durationMs: common.feedbackMs, sticky: true }) : null;
     if (example) $('exampleSteps').textContent = explainT4Solution(sample.problem, params.compassMode).join('\n');
 
     for (let row = 0; row < 3; row++) {
@@ -183,6 +213,10 @@ export function mount(root, ctx) {
     function onSubmit(e) {
       if (!canSubmitT4(selection)) return;
       tally = recordT4Answer(tally, judgeT4(problem, selection));
+      if (feedback) {
+        const message = t4Feedback(problem, selection);
+        feedback.show(message, e.timeStamp, message.solution ? solutionMiniMap(message.solution) : null);
+      }
       paleUntil = e.timeStamp + params.answerFeedbackMs;
       submit.classList.add('is-pressed');
       problem = generateT4Problem(rng, problem);
@@ -255,7 +289,7 @@ export function mount(root, ctx) {
         if (ts >= paleUntil) submit.classList.remove('is-pressed');
       },
       onEnd() {
-        const record = buildT4Record({ date: new Date().toISOString(), tally, settings: params });
+        const record = buildT4Record({ date: new Date().toISOString(), tally, settings: recordSettingsWithFeedback(params, common) });
         const saveResult = appendRecord(ctx.store, record);
         setPhase(null);
         renderResult(root, {

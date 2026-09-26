@@ -3,9 +3,10 @@
 import {
   generateT5Problem, reshuffleT5Dots, shuffleIndexAt, shouldTimeoutT5,
   pairDotPositions, interpolateDotPositions,
-  formatT5PreviousAnswer,
+  t5PreviousAnswerText,
   createT5Tally, recordT5Answer, recordT5Unanswered, buildT5Record,
 } from '../logic/t5.js';
+import { instantFeedbackBadge, recordSettingsWithFeedback } from '../core/feedback.js';
 import { createRng, randomSeed } from '../core/rng.js';
 import { startTimer, formatDuration } from '../core/timer.js';
 import { appendRecord } from '../core/storage.js';
@@ -42,6 +43,7 @@ function drawDots(canvas, problem, p) {
 
 export function mount(root, ctx) {
   const params = ctx.settings.t5;
+  const common = ctx.settings.common;
   const meta = findTest('t5');
   let teardown = null;
 
@@ -91,6 +93,7 @@ export function mount(root, ctx) {
       <section class="t5-play">
         <div class="topbar">
           <span class="remaining" data-ref="remaining"></span>
+          ${instantFeedbackBadge(common)}
           <strong data-ref="question"></strong>
           <button class="btn btn-quiet" type="button" data-ref="quit">途中終了</button>
         </div>
@@ -120,7 +123,8 @@ export function mount(root, ctx) {
     }
 
     function nextQuestion(elapsed, answer) {
-      const previousText = formatT5PreviousAnswer(problem.count, answer);
+      // 前の問題の正解は、即時判定がオンのときだけ出す
+      const previousText = t5PreviousAnswerText(problem.count, answer, common.instantFeedback);
       $('previous').textContent = previousText ?? '';
       $('previous').hidden = previousText === null;
       problem = generateT5Problem(rng, params, problem);
@@ -191,7 +195,7 @@ export function mount(root, ctx) {
         }
       },
       onEnd() {
-        const record = buildT5Record({ date: new Date().toISOString(), tally, settings: params });
+        const record = buildT5Record({ date: new Date().toISOString(), tally, settings: recordSettingsWithFeedback(params, common) });
         const saveResult = appendRecord(ctx.store, record);
         setPhase(null);
         renderResult(root, {

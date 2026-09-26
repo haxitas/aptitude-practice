@@ -7,6 +7,7 @@ import {
   createT5Tally, recordT5Answer, recordT5Unanswered, summarizeT5, buildT5Record,
   formatT5PreviousAnswer,
 } from '../js/logic/t5.js';
+import { t5PreviousAnswerText } from '../js/logic/t5.js';
 
 const P = DEFAULTS.t5;
 
@@ -163,4 +164,13 @@ test('記録はSPEC §4の形で、その回の設定を複製する', () => {
   assert.deepEqual(record.detail, { answered: 2, unanswered: 1, meanError: 1 });
   assert.deepEqual(record.settings, P);
   assert.notEqual(record.settings, P);
+});
+
+// ---- 即時判定 ----
+
+test('即時判定: 前の問題の正解はオンのときだけ、今までと同じ形で出す', () => {
+  assert.equal(t5PreviousAnswerText(7, 7, true), '前の問題の正解: 7個 / あなたの答え: 7個 ○');
+  assert.equal(t5PreviousAnswerText(7, 8, true), '前の問題の正解: 7個 / あなたの答え: 8個 ×');
+  assert.equal(t5PreviousAnswerText(7, 8, false), null);
+  assert.equal(t5PreviousAnswerText(7, null, true), null);
 });

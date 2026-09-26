@@ -5,7 +5,9 @@ import {
   pickVoice, generateShapeProblem, judgeShape, generateCalcProblem, judgeCalc, formatCalc,
   generateAudioSet, createAudioState, startAudioSet, stepAudio, audioEnded, answerAudio,
   createT3Tally, recordAnswer, recordUnanswered, buildT3Record,
+  t3ShapeFeedback, t3CalcFeedback, t3AudioFeedback,
 } from '../logic/t3.js';
+import { createFeedbackSlot, feedbackSlotHtml, instantFeedbackBadge, recordSettingsWithFeedback } from '../core/feedback.js';
 import { createRng, randomSeed } from '../core/rng.js';
 import { startTimer, formatDuration } from '../core/timer.js';
 import { appendRecord } from '../core/storage.js';
@@ -36,6 +38,7 @@ function voiceLabel(pick, lang) {
 
 export function mount(root, ctx) {
   const params = ctx.settings.t3;
+  const common = ctx.settings.common;
   const meta = findTest('t3');
   let teardown = null;
 
@@ -110,6 +113,7 @@ export function mount(root, ctx) {
       <section class="t3-play">
         <div class="topbar">
           <span class="remaining" data-ref="remaining"></span>
+          ${instantFeedbackBadge(common)}
           <span class="muted small t3-voice" data-ref="voice"></span>
           <button class="btn btn-quiet" type="button" data-ref="quit">途中終了</button>
         </div>
@@ -121,6 +125,7 @@ export function mount(root, ctx) {
               <button class="t3-btn" type="button" data-dir="left" aria-label="左向き">◀</button>
               <button class="t3-btn" type="button" data-dir="right" aria-label="右向き">▶</button>
             </div>
+            ${common.instantFeedback ? feedbackSlotHtml('shapeFeedback') : ''}
           </div>
           <div class="t3-panel t3-calc-task">
             <div class="t3-calc-expr" data-ref="expr"></div>
@@ -130,6 +135,7 @@ export function mount(root, ctx) {
               <button class="t3-btn" type="button" data-idx="2"></button>
               <button class="t3-btn" type="button" data-idx="3"></button>
             </div>
+            ${common.instantFeedback ? feedbackSlotHtml('calcFeedback') : ''}
           </div>
           <div class="t3-panel t3-audio-task">
             <div class="t3-audio-status" data-ref="audioStatus"></div>
@@ -137,6 +143,7 @@ export function mount(root, ctx) {
               <button class="t3-btn" type="button" data-dup="yes" disabled>重複あり</button>
               <button class="t3-btn" type="button" data-dup="no" disabled>重複なし</button>
             </div>
+            ${common.instantFeedback ? feedbackSlotHtml('audioFeedback') : ''}
           </div>
         </div>
       </section>`;
@@ -149,6 +156,11 @@ export function mount(root, ctx) {
     const dupBtns = [...root.querySelectorAll('[data-dup]')];
     const audioStatus = $('audioStatus');
     const speechError = $('speechError');
+    // 3つの枠それぞれに独立して判定を出す
+    const slot = ref => (common.instantFeedback ? createFeedbackSlot($(ref), { durationMs: common.feedbackMs }) : null);
+    const shapeFeedback = slot('shapeFeedback');
+    const calcFeedback = slot('calcFeedback');
+    const audioFeedback = slot('audioFeedback');
 
     let tally = createT3Tally();
     let shapeQ = null;
@@ -220,13 +232,17 @@ export function mount(root, ctx) {
 
     function onDir(e) {
       const btn = e.currentTarget;
-      tally = recordAnswer(tally, 'shape', judgeShape(shapeQ, btn.dataset.dir));
+      const correct = judgeShape(shapeQ, btn.dataset.dir);
+      tally = recordAnswer(tally, 'shape', correct);
+      shapeFeedback?.show(t3ShapeFeedback(shapeQ, correct), e.timeStamp);
       markPressed(btn, e.timeStamp);
       nextShape();
     }
     function onChoice(e) {
       const btn = e.currentTarget;
-      tally = recordAnswer(tally, 'calc', judgeCalc(calcQ, Number(btn.dataset.idx)));
+      const correct = judgeCalc(calcQ, Number(btn.dataset.idx));
+      tally = recordAnswer(tally, 'calc', correct);
+      calcFeedback?.show(t3CalcFeedback(calcQ, correct), e.timeStamp);
       markPressed(btn, e.timeStamp);
       nextCalc();
     }
@@ -234,6 +250,7 @@ export function mount(root, ctx) {
       const btn = e.currentTarget;
       const r = answerAudio(audio, e.timeStamp, btn.dataset.dup === 'yes');
       if (!r.accepted) return;
+      audioFeedback?.show(t3AudioFeedback(audio.set, r.correct), e.timeStamp);
       audio = r.state;
       tally = recordAnswer(tally, 'audio', r.correct);
       markPressed(btn, e.timeStamp);
@@ -255,6 +272,7 @@ export function mount(root, ctx) {
       }
       lastFrameTs = ts;
       runAudio(ts);
+      for (const f of [shapeFeedback, calcFeedback, audioFeedback]) f?.tick(ts);
       for (const [btn, t] of pale) {
         if (ts - t >= params.answerFeedbackMs) {
           btn.classList.remove('is-pressed');
@@ -265,7 +283,7 @@ export function mount(root, ctx) {
 
     function onEnd() {
       // 終了時刻に残っていた問題・読み上げ中や回答待ちの組は数えない
-      const record = buildT3Record({ date: new Date().toISOString(), tally, settings: params });
+      const record = buildT3Record({ date: new Date().toISOString(), tally, settings: recordSettingsWithFeedback(params, common) });
       setPhase(null);
       const saveResult = appendRecord(ctx.store, record);
       renderResult(root, {

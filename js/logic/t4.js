@@ -1,4 +1,5 @@
 // テスト4 計器の読み取り: 問題生成、方位計算、選択状態、採点。DOMには触れない。
+import { correctFeedback } from '../core/feedback.js';
 
 export const DIRECTIONS = Object.freeze([
   Object.freeze({ key: 'N', label: '↑', row: 0, col: 1 }),
@@ -136,6 +137,19 @@ export function judgeT4(problem, selection) {
   const positionCorrect = selection.position === solution.position;
   const headingCorrect = selection.heading === solution.heading;
   return { positionCorrect, headingCorrect, correct: positionCorrect && headingCorrect };
+}
+
+// 即時判定: 正解は1行、不正解は位置と向きの○×と、イラストに描く正しいマス・向き
+export function t4Feedback(problem, selection) {
+  const result = judgeT4(problem, selection);
+  if (result.correct) return { ...correctFeedback(), text: '○ 位置・向きとも正解' };
+  const mark = ok => (ok ? '○' : '×');
+  const { position, heading } = solutionFor(problem.headingIndex, problem.relativeIndex);
+  return {
+    kind: 'wrong',
+    text: `位置 ${mark(result.positionCorrect)} ・ 向き ${mark(result.headingCorrect)}`,
+    solution: { position, heading },
+  };
 }
 
 export function createT4Tally() {

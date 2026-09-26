@@ -531,3 +531,63 @@ h1 { font-size: 1.6rem; margin: 0 0 16px; }
   touch-action: none;
   cursor: crosshair;
 }
+
+/* ---- 即時判定(2026-09-27 追加) ---- */
+.instant-toggle-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 0 0 14px; }
+.instant-toggle { display: inline-flex; align-items: center; gap: 10px; min-height: var(--tap); font-weight: 800; cursor: pointer; }
+.instant-toggle input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.instant-toggle-track {
+  position: relative; width: 52px; height: 30px; border-radius: 999px;
+  background: var(--border); transition: background 120ms linear;
+}
+.instant-toggle-track::after {
+  content: ''; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%;
+  background: var(--surface); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35); transition: transform 120ms linear;
+}
+.instant-toggle input:checked + .instant-toggle-track { background: var(--accent); }
+.instant-toggle input:checked + .instant-toggle-track::after { transform: translateX(22px); }
+.instant-toggle input:focus-visible + .instant-toggle-track { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+.feedback-badge {
+  font-size: 0.75rem; font-weight: 800; white-space: nowrap; padding: 2px 8px;
+  border: 1px solid var(--accent); border-radius: 999px; color: var(--accent);
+}
+/* 判定の枠は高さを確保しておき、問題やボタンに重ねない。押す操作は下へ通す */
+.feedback-slot {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  min-height: 2.4rem; pointer-events: none;
+}
+.feedback {
+  margin: 0; padding: 3px 14px; border-radius: 999px; font-weight: 800; text-align: center;
+  font-size: clamp(0.95rem, 2.2vw, 1.15rem);
+}
+.feedback-correct { background: var(--ok-bg); color: var(--ok-text); }
+.feedback-wrong { background: var(--error-bg); color: var(--error-text); }
+.feedback-miss { background: var(--warn-bg); color: var(--warn-text); }
+
+.t2-play.has-feedback { --shape-size: min(40vw, calc(100vh - 240px)); }
+@supports (height: 100dvh) {
+  .t2-play.has-feedback { --shape-size: min(40vw, calc(100dvh - 240px)); }
+}
+.t2-play.has-feedback .t2-bottom { flex-direction: column; align-items: center; gap: 4px; }
+
+.t3-panel .feedback-slot { min-height: 1.9rem; }
+.t3-panel .feedback { font-size: clamp(0.85rem, 1.8vw, 1rem); padding: 2px 10px; }
+
+.t4-feedback { grid-column: 1; grid-row: 2; }
+.t4-mini-map { display: grid; grid-template-columns: repeat(3, 26px); grid-template-rows: repeat(3, 26px); gap: 2px; }
+.t4-mini-cell {
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border); border-radius: 4px; background: var(--surface); font-size: 0.7rem; font-weight: 800;
+}
+.t4-mini-cell.is-tower { background: var(--warn-bg); color: var(--warn-text); }
+.t4-mini-cell.is-answer { outline: 2px solid var(--ok-text); outline-offset: -2px; }
+.t4-mini-cell .t4-plane { width: 20px; height: 20px; }
+@media (max-width: 620px) {
+  .t4-feedback { grid-column: 1; grid-row: auto; }
+}
+
+.history-label {
+  display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 0.8rem; font-weight: 800;
+  background: var(--info-bg); color: var(--info-text); white-space: nowrap;
+}

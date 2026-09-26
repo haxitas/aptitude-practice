@@ -58,12 +58,21 @@ export function recordUsesCustomSettings(recordSettings, defaults) {
   return Object.entries(defaults).some(([key, value]) => !(key in recordSettings) || !sameSetting(recordSettings[key], value));
 }
 
+// 即時判定モードで行った回か。既定値との違い(※)とは別に扱い、キーのない古い記録は false
+export function recordUsedInstantFeedback(record) {
+  return record?.settings?.instantFeedback === true;
+}
+
 export function makeHistoryModel(records, testId, defaults, limit) {
   const tableRecords = records
     .filter(record => record?.test === testId)
     .sort((a, b) => timeOf(b) - timeOf(a))
     .slice(0, limit)
-    .map(record => ({ ...record, customSettings: recordUsesCustomSettings(record.settings, defaults) }));
+    .map(record => ({
+      ...record,
+      customSettings: recordUsesCustomSettings(record.settings, defaults),
+      instantFeedback: recordUsedInstantFeedback(record),
+    }));
   return { tableRecords, chartRecords: [...tableRecords].reverse() };
 }
 

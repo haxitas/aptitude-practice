@@ -1,4 +1,5 @@
 // テスト2 同一図形の検出: 系列の生成・1回ごとの判定・採点。DOM に触れない。
+import { correctFeedback, missFeedback } from '../core/feedback.js';
 
 // SPEC の △ ★ ○ □ ◇ ☆ に対応する。描画は js/tests/t2.js(SVG)
 export const SHAPES = Object.freeze(['triangle', 'starFilled', 'circle', 'square', 'diamond', 'starOutline']);
@@ -119,6 +120,18 @@ export function settleDisplay(tally, isMatch, state) {
     t.falseAlarms++;
   }
   return t;
+}
+
+// ---- 即時判定 ----
+
+// 押した直後: 一致なら正解、不一致なら誤押し
+export function t2PressFeedback(isMatch) {
+  return isMatch ? correctFeedback() : { kind: 'wrong', text: '× 一致していません' };
+}
+
+// 表示が切り替わる瞬間: 一致を押さずに見送ったときだけ見逃しを出す
+export function t2MissFeedback(isMatch, state) {
+  return isMatch && !state.pressed ? missFeedback() : null;
 }
 
 // ---- 採点 ----

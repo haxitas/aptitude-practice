@@ -3,7 +3,9 @@
 
 import {
   generateSequence, displayCount, createDisplayState, registerPress, createTally, settleDisplay, buildRecord,
+  t2PressFeedback, t2MissFeedback,
 } from '../logic/t2.js';
+import { createFeedbackSlot, feedbackSlotHtml, instantFeedbackBadge, recordSettingsWithFeedback } from '../core/feedback.js';
 import { createRng, randomSeed } from '../core/rng.js';
 import { startTimer, formatDuration } from '../core/timer.js';
 import { appendRecord } from '../core/storage.js';
@@ -43,6 +45,7 @@ function isSpace(e) {
 
 export function mount(root, ctx) {
   const params = ctx.settings.t2;
+  const common = ctx.settings.common;
   const meta = findTest('t2');
   let teardown = null; // いま表示している段階の後片付け
 
@@ -89,9 +92,10 @@ export function mount(root, ctx) {
     const N = seq.length;
 
     root.innerHTML = `
-      <section class="t2-play">
+      <section class="t2-play${common.instantFeedback ? ' has-feedback' : ''}">
         <div class="topbar">
           <span class="remaining" data-ref="remaining"></span>
+          ${instantFeedbackBadge(common)}
           <button class="btn btn-quiet" type="button" data-ref="quit">途中終了</button>
         </div>
         <div class="t2-shapes">
@@ -99,6 +103,7 @@ export function mount(root, ctx) {
           <div class="t2-shape" role="img" data-ref="right"></div>
         </div>
         <div class="t2-bottom">
+          ${common.instantFeedback ? feedbackSlotHtml() : ''}
           <button class="t2-same" type="button" data-ref="same">同じ</button>
         </div>
       </section>`;
@@ -106,6 +111,7 @@ export function mount(root, ctx) {
     const leftEl = $('left');
     const rightEl = $('right');
     const sameBtn = $('same');
+    const feedback = common.instantFeedback ? createFeedbackSlot($('feedback'), { durationMs: common.feedbackMs }) : null;
 
     let cur = -1; // いま表示している番号
     let frameTs = 0; // その表示を描いたフレームの時刻
@@ -134,6 +140,7 @@ export function mount(root, ctx) {
       ds = r.state;
       lastPressTs = ts;
       setPale(true);
+      feedback?.show(t2PressFeedback(seq[cur].match), ts);
     }
 
     // 描画が止まって表示が1つ以上飛んだ回は、非表示のときと同じく中断して保存しない
@@ -149,14 +156,19 @@ export function mount(root, ctx) {
           abortStalled();
           return;
         }
-        // 前の表示の判定を確定してから次を描く
-        if (cur >= 0) tally = settleDisplay(tally, seq[cur].match, ds);
+        // 前の表示の判定を確定してから次を描く。一致を見送っていたら、切り替わる瞬間に見逃しを出す
+        if (cur >= 0) {
+          const miss = t2MissFeedback(seq[cur].match, ds);
+          if (miss) feedback?.show(miss, ts);
+          tally = settleDisplay(tally, seq[cur].match, ds);
+        }
         cur = i;
         ds = createDisplayState();
         drawShape(leftEl, seq[i].left);
         drawShape(rightEl, seq[i].right);
         frameTs = ts;
       }
+      feedback?.tick(ts);
       // いまの表示で押したか、押してから最低時間がたっていなければ薄いまま
       setPale(ds.pressed || ts - lastPressTs < params.pressFeedbackMs);
     }
@@ -168,7 +180,7 @@ export function mount(root, ctx) {
         return;
       }
       tally = settleDisplay(tally, seq[cur].match, ds);
-      const record = buildRecord({ date: new Date().toISOString(), tally, settings: params });
+      const record = buildRecord({ date: new Date().toISOString(), tally, settings: recordSettingsWithFeedback(params, common) });
       const saveResult = appendRecord(ctx.store, record);
       setPhase(null); // 入力の受け付けを外す
       renderResult(root, {

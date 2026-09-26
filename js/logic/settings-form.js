@@ -8,6 +8,13 @@ const list = (key, label, min, max, options = {}) => ({ key, label, min, max, ty
 const duration = () => number('durationSec', '制限時間', 10, 3600, { integer: true, unit: '秒' });
 
 export const SETTING_FIELDS = Object.freeze({
+  common: Object.freeze([
+    { key: 'instantFeedback', label: '即時判定', type: 'select', hint: 'テスト1〜5で、答えるたびに正誤を表示します', options: [
+      { value: 'false', label: 'オフ', parsed: false },
+      { value: 'true', label: 'オン', parsed: true },
+    ] },
+    number('feedbackMs', '判定の表示時間', 100, 10000, { integer: true, unit: 'ms', hint: 'テスト4は次の決定まで表示' }),
+  ]),
   t1: Object.freeze([
     duration(),
     { key: 'calculatorDuringTest', label: 'テスト中に電卓を表示', type: 'select', options: [
@@ -187,6 +194,12 @@ export function validateTestSettings(testId, raw, defaults) {
     if (value.holeRingRadius > value.aircraftMaxRadius) errors.holeRingRadius = '小穴の中心を機体が届く範囲にしてください';
   }
   return { ok: Object.keys(errors).length === 0, value, errors };
+}
+
+// ホームの即時判定スイッチ: common.instantFeedback だけを書き換える
+export function withInstantFeedback(saved, on) {
+  const base = saved ?? {};
+  return { ...base, common: { ...(base.common ?? {}), instantFeedback: on === true } };
 }
 
 export function resetTestOverrides(saved, testId) {

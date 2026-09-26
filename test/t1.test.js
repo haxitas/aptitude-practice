@@ -6,6 +6,7 @@ import {
   PROBLEM_KINDS, lapMinutes, makeT1Choices, generateT1Problem, judgeT1,
   createT1Tally, recordT1Answer, summarizeT1, buildT1Record,
 } from '../js/logic/t1.js';
+import { t1Feedback } from '../js/logic/t1.js';
 
 const P = DEFAULTS.t1;
 
@@ -180,4 +181,13 @@ test('記録はSPEC §4の形で、その回の設定を複製する', () => {
   assert.deepEqual(record.detail, { answered: 3, accuracy: 67 });
   assert.deepEqual(record.settings, P);
   assert.notEqual(record.settings, P);
+});
+
+// ---- 即時判定 ----
+
+test('即時判定: 正解は「○ 正解」、不正解は単位つきの正解を出す', () => {
+  const problem = { answer: 36, unit: '分', choices: [36, 6, 360, 3.6], correctIndex: 0 };
+  assert.deepEqual(t1Feedback(problem, true), { kind: 'correct', text: '○ 正解' });
+  assert.deepEqual(t1Feedback(problem, false), { kind: 'wrong', text: '× 正解は 36分' });
+  assert.deepEqual(t1Feedback({ ...problem, answer: 120, unit: '' }, false), { kind: 'wrong', text: '× 正解は 120' });
 });

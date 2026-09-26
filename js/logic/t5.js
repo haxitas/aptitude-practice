@@ -146,6 +146,11 @@ export function formatT5PreviousAnswer(correctAnswer, answer) {
   return `前の問題の正解: ${correctAnswer}個 / あなたの答え: ${answer}個 ${answer === correctAnswer ? '○' : '×'}`;
 }
 
+// 前の問題の正解は、即時判定がオンのときだけ出す(文言は formatT5PreviousAnswer のまま)
+export function t5PreviousAnswerText(correctAnswer, answer, instantFeedback) {
+  return instantFeedback ? formatT5PreviousAnswer(correctAnswer, answer) : null;
+}
+
 export function createT5Tally() {
   return { correct: 0, answered: 0, unanswered: 0, errors: [] };
 }

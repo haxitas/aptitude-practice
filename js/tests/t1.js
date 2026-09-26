@@ -1,8 +1,9 @@
 // テスト1 計算: 4択表示、回答、時間管理、保存。
 
 import {
-  generateT1Problem, judgeT1, createT1Tally, recordT1Answer, buildT1Record,
+  generateT1Problem, judgeT1, t1Feedback, createT1Tally, recordT1Answer, buildT1Record,
 } from '../logic/t1.js';
+import { createFeedbackSlot, feedbackSlotHtml, instantFeedbackBadge, recordSettingsWithFeedback } from '../core/feedback.js';
 import { createRng, randomSeed } from '../core/rng.js';
 import { startTimer, formatDuration } from '../core/timer.js';
 import { appendRecord } from '../core/storage.js';
@@ -16,6 +17,7 @@ function formatChoice(value, unit) {
 
 export function mount(root, ctx) {
   const params = ctx.settings.t1;
+  const common = ctx.settings.common;
   const meta = findTest('t1');
   let teardown = null;
 
@@ -58,6 +60,7 @@ export function mount(root, ctx) {
       <section class="t1-play">
         <div class="topbar">
           <span class="remaining" data-ref="remaining"></span>
+          ${instantFeedbackBadge(common)}
           <button class="btn btn-quiet" type="button" data-ref="quit">途中終了</button>
         </div>
         <div class="t1-main">
@@ -70,6 +73,7 @@ export function mount(root, ctx) {
             <button type="button" data-index="2"></button>
             <button type="button" data-index="3"></button>
           </div>
+          ${common.instantFeedback ? feedbackSlotHtml() : ''}
         </div>
         ${params.calculatorDuringTest ? '<div class="t1-calculator" data-ref="calculator"></div>' : ''}
         </div>
@@ -78,6 +82,7 @@ export function mount(root, ctx) {
     const choiceButtons = [...root.querySelectorAll('[data-index]')];
     const kindLabels = { unit: '単位換算', speed: '速さ', meeting: '出会い', catchup: '追いつき', percentage: '割合', inversePercentage: '割合の逆算', price: '単価と合計', average: '平均', elapsed: '経過時間' };
     const cleanupCalculator = params.calculatorDuringTest ? mountCalculator($('calculator')) : null;
+    const feedback = common.instantFeedback ? createFeedbackSlot($('feedback'), { durationMs: common.feedbackMs }) : null;
 
     function drawProblem() {
       $('kind').textContent = kindLabels[problem.kind];
@@ -91,6 +96,7 @@ export function mount(root, ctx) {
       const button = e.currentTarget;
       const correct = judgeT1(problem, Number(button.dataset.index));
       tally = recordT1Answer(tally, correct);
+      feedback?.show(t1Feedback(problem, correct), e.timeStamp);
       button.classList.add('is-pressed');
       pale.set(button, e.timeStamp);
       problem = generateT1Problem(rng, params, problem);
@@ -121,6 +127,7 @@ export function mount(root, ctx) {
           return;
         }
         lastFrameTs = ts;
+        feedback?.tick(ts);
         for (const [button, pressedAt] of pale) {
           if (ts - pressedAt >= params.answerFeedbackMs) {
             button.classList.remove('is-pressed');
@@ -129,7 +136,7 @@ export function mount(root, ctx) {
         }
       },
       onEnd() {
-        const record = buildT1Record({ date: new Date().toISOString(), tally, settings: params });
+        const record = buildT1Record({ date: new Date().toISOString(), tally, settings: recordSettingsWithFeedback(params, common) });
         const saveResult = appendRecord(ctx.store, record);
         setPhase(null);
         renderResult(root, {

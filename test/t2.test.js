@@ -6,6 +6,7 @@ import {
   SHAPES, displayCount, matchCount, maxFeasibleMatches, generateSequence,
   createDisplayState, registerPress, createTally, settleDisplay, score, summarizeTally, buildRecord,
 } from '../js/logic/t2.js';
+import { t2PressFeedback, t2MissFeedback } from '../js/logic/t2.js';
 
 const P = DEFAULTS.t2;
 
@@ -174,4 +175,19 @@ test('生成: 一致0回・一致確率1(k が十分大きい)でも作れる', 
   const all = generateSequence({ durationSec: 10, intervalMs: 1000, matchRate: 1, maxConsecutiveMatches: 10 }, createRng(3));
   assert.equal(all.every(d => d.match), true);
   for (let i = 1; i < all.length; i++) assert.notEqual(all[i].left, all[i - 1].left);
+});
+
+// ---- 即時判定 ----
+
+test('即時判定: 一致で押せば「○ 正解」、不一致で押せば「× 一致していません」', () => {
+  assert.deepEqual(t2PressFeedback(true), { kind: 'correct', text: '○ 正解' });
+  assert.deepEqual(t2PressFeedback(false), { kind: 'wrong', text: '× 一致していません' });
+});
+
+test('即時判定: 一致を押さずに見送ったときだけ「△ 見逃し」', () => {
+  const pressed = registerPress(createDisplayState(), 300).state;
+  assert.deepEqual(t2MissFeedback(true, createDisplayState()), { kind: 'miss', text: '△ 見逃し' });
+  assert.equal(t2MissFeedback(true, pressed), null);
+  assert.equal(t2MissFeedback(false, createDisplayState()), null);
+  assert.equal(t2MissFeedback(false, pressed), null);
 });
