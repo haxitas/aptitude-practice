@@ -37,8 +37,7 @@ export function mount(root, ctx) {
         <p>回答するとすぐ次の問題へ進みます。制限時間は <span data-ref="duration"></span>です。</p>
         <div class="actions">
           <button class="btn btn-primary btn-large" type="button" data-ref="start">開始</button>
-          <a class="btn" href="#/">メニュー</a>
-          <a class="btn" href="#/calc">電卓</a>
+          <a class="btn" href="#/">ホーム</a>
         </div>
       </section>`;
     const $ = name => root.querySelector(`[data-ref="${name}"]`);

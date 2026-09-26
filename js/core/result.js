@@ -1,4 +1,4 @@
-// 共通の結果画面: 点数・内訳・保存の結果・「もう一度」「メニュー」
+// 共通の結果画面: 点数・内訳・保存の結果・「もう一度」「ホーム」
 // 静的な枠は HTML で書き、値はすべて textContent で入れる。
 
 // details: [{ label, value }](value は表示用の文字列)
@@ -12,7 +12,7 @@ export function renderResult(root, { testName, score, details, saveResult, onRet
       <p class="notice" data-ref="save"></p>
       <div class="actions">
         <button class="btn btn-primary" type="button" data-ref="retry">もう一度</button>
-        <a class="btn" href="#/">メニュー</a>
+        <a class="btn" href="#/">ホーム</a>
       </div>
     </section>`;
   const $ = name => root.querySelector(`[data-ref="${name}"]`);

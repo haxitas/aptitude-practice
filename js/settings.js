@@ -52,7 +52,7 @@ export function mount(root, ctx) {
           </div>
         </div>
       </section>
-      <div class="actions"><a class="btn" href="#/">メニュー</a></div>
+      <div class="actions"><a class="btn" href="#/">ホーム</a></div>
     </section>`;
   const $ = name => root.querySelector(`[data-ref="${name}"]`);
   const notice = $('notice');

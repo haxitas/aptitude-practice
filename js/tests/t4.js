@@ -234,7 +234,7 @@ export function mount(root, ctx) {
 
     if (example) {
       $('remaining').textContent = '例題';
-      $('quit').textContent = 'メニュー';
+      $('quit').textContent = 'ホーム';
       drawProblem();
       $('quit').addEventListener('click', () => { setPhase(null); ctx.navigate('#/'); });
       $('start').addEventListener('click', () => showBoard('test', performance.now()));

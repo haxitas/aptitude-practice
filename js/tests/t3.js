@@ -65,7 +65,7 @@ export function mount(root, ctx) {
         <p class="notice notice-error" data-ref="error" hidden></p>
         <div class="actions">
           <button class="btn btn-primary btn-large" type="button" data-ref="start">開始</button>
-          <a class="btn" href="#/">メニュー</a>
+          <a class="btn" href="#/">ホーム</a>
         </div>
       </section>`;
     const $ = name => root.querySelector(`[data-ref="${name}"]`);
@@ -91,7 +91,7 @@ export function mount(root, ctx) {
     // iOS では、最初の読み上げをユーザーの操作の中で始めないと音が出ない。
     // そのため、この click の処理の中で同期的に1語目の speak() まで進める。
     const onStart = e => {
-      if (e.target.closest('a')) return; // メニューへの移動では開始しない
+      if (e.target.closest('a')) return; // ホームへの移動では開始しない
       startPlay();
     };
     root.addEventListener('click', onStart);

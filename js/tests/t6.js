@@ -243,7 +243,7 @@ export function mount(root, ctx) {
       <div class="topbar t6-topbar">
         <span class="remaining" data-ref="remaining">準備</span>
         <button class="btn btn-quiet" type="button" data-ref="side"></button>
-        <button class="btn btn-quiet" type="button" data-ref="quit">${intro ? 'メニュー' : '途中終了'}</button>
+        <button class="btn btn-quiet" type="button" data-ref="quit">${intro ? 'ホーム' : '途中終了'}</button>
         <span class="t6-live" data-ref="live">矢印キー / 操縦円</span>
       </div>
       <p class="notice notice-error t6-message" data-ref="message" hidden></p>

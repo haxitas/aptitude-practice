@@ -73,7 +73,7 @@ function drawSparkline(canvas, scores) {
 }
 
 function mountOverview(root, records, error) {
-  root.innerHTML = '<section class="screen history"><h1>履歴</h1><p class="notice notice-error" data-ref="error" hidden></p><div class="history-overview" data-ref="overview"></div><div class="actions"><a class="btn" href="#/">メニュー</a></div></section>';
+  root.innerHTML = '<section class="screen history"><h1>履歴</h1><p class="notice notice-error" data-ref="error" hidden></p><div class="history-overview" data-ref="overview"></div><div class="actions"><a class="btn" href="#/">ホーム</a></div></section>';
   if (error) {
     const notice = root.querySelector('[data-ref="error"]');
     notice.textContent = `成績データを読めません: ${error}`;
@@ -145,7 +145,7 @@ export function mount(root, ctx, hash = location.hash) {
         </table>
       </div>
       <p class="muted" data-ref="empty" hidden>まだ記録がありません</p>
-      <div class="actions"><a class="btn" href="#/">メニュー</a></div>
+      <div class="actions"><a class="btn" href="#/">ホーム</a></div>
     </section>`;
   const $ = name => root.querySelector(`[data-ref="${name}"]`);
   $('title').textContent = `${test.name}の履歴`;

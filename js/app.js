@@ -54,7 +54,6 @@ function renderMenu(settingsInfo) {
       <div class="menu-sub">
         <a class="btn" href="#/history">履歴</a>
         <a class="btn" href="#/settings">設定</a>
-        <a class="btn" href="#/calc">電卓</a>
       </div>
     </section>`;
   const $ = name => root.querySelector(`[data-ref="${name}"]`);
@@ -112,7 +111,7 @@ function renderPending(title) {
     <section class="screen">
       <h1 data-ref="title"></h1>
       <p>準備中です。</p>
-      <div class="actions"><a class="btn" href="#/">メニュー</a></div>
+      <div class="actions"><a class="btn" href="#/">ホーム</a></div>
     </section>`;
   root.querySelector('[data-ref="title"]').textContent = title;
 }

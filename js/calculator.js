@@ -55,6 +55,6 @@ export function mountCalculator(root) {
 }
 
 export function mount(root) {
-  root.innerHTML = '<section class="screen calculator-screen"><h1>電卓</h1><div data-ref="calculator"></div><div class="actions"><a class="btn" href="#/">メニュー</a></div></section>';
+  root.innerHTML = '<section class="screen calculator-screen"><h1>電卓</h1><div data-ref="calculator"></div><div class="actions"><a class="btn" href="#/">ホーム</a></div></section>';
   return mountCalculator(root.querySelector('[data-ref="calculator"]'));
 }
