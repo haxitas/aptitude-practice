@@ -17,6 +17,24 @@ const DEG = Math.PI / 180;
 const AIRCRAFT_SIZE_RATIO = 0.055;
 const MIN_AIRCRAFT_SIZE_PX = 8;
 
+// 自機の形(機首が上、原点 (0,0) が機体の位置=当たり判定の点)。
+// spanUnits は左右の翼端の間(この形では x=-60〜60)。scaleX/scaleY で横と縦を別の倍率に縮める。
+// widthFactor は以前の機体の横幅(size × 2.9)で、翼幅をこれに合わせて見え方と難しさを変えない。
+const AIRCRAFT_SHAPE = Object.freeze({
+  d: 'M0 -78 C6 -72 9 -60 9 -44 L9 -20 L60 24 L60 38 L12 14 L11 30 L22 38 L22 50 L8 52 L0 56 '
+    + 'L-8 52 L-22 50 L-22 38 L-11 30 L-12 14 L-60 38 L-60 24 L-9 -20 L-9 -44 C-9 -60 -6 -72 0 -78 Z',
+  spanUnits: 120,
+  scaleX: 0.46,
+  scaleY: 0.36,
+  widthFactor: 2.9,
+  color: '#eaf1fb',
+  pushColor: '#ffcc4d',
+  shadowColor: 'rgba(0, 0, 0, 0.55)',
+  shadowBlurRatio: 0.6,
+  minShadowBlurPx: 4,
+});
+let aircraftPath = null; // Path2D は描画のときに1回だけ作る
+
 function drawHalf(ctx, obstacle, cx, cy, radius) {
   ctx.save();
   ctx.beginPath();
@@ -108,23 +126,18 @@ function drawAircraft(ctx, layout, position, pushing) {
   const x = layout.tunnel.centerX + position.x * layout.tunnel.radius;
   const y = layout.tunnel.centerY - position.y * layout.tunnel.radius;
   const size = Math.max(MIN_AIRCRAFT_SIZE_PX, layout.tunnel.radius * AIRCRAFT_SIZE_RATIO);
+  const s = AIRCRAFT_SHAPE;
+  if (aircraftPath === null) aircraftPath = new Path2D(s.d);
+  // 翼幅が size × widthFactor になるように、形の単位あたりの大きさを決める
+  const unit = (size * s.widthFactor) / (s.spanUnits * s.scaleX);
   ctx.save();
   ctx.translate(x, y);
-  ctx.fillStyle = pushing ? '#ffcc4d' : '#69b7ff';
-  ctx.strokeStyle = '#f4f8ff';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(0, -size * 1.25);
-  ctx.lineTo(size * 0.45, -size * 0.1);
-  ctx.lineTo(size * 1.45, size * 0.45);
-  ctx.lineTo(size * 0.28, size * 0.35);
-  ctx.lineTo(0, size * 1.05);
-  ctx.lineTo(-size * 0.28, size * 0.35);
-  ctx.lineTo(-size * 1.45, size * 0.45);
-  ctx.lineTo(-size * 0.45, -size * 0.1);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
+  // 障害物と重なっても機体が見えるように、薄い暗い影を付ける
+  ctx.shadowColor = s.shadowColor;
+  ctx.shadowBlur = Math.max(s.minShadowBlurPx, size * s.shadowBlurRatio);
+  ctx.fillStyle = pushing ? s.pushColor : s.color;
+  ctx.scale(unit * s.scaleX, unit * s.scaleY);
+  ctx.fill(aircraftPath);
   ctx.restore();
 }
 
