@@ -125,8 +125,8 @@ export const DEFAULTS = Object.freeze({
     bladeHubRadius: 0.18,
     bladeInitialAngularSpeedDegSec: 30,
     bladeAngularAccelerationDegSec2: 0.15,
-    collisionPushMs: 350,
-    collisionPushDistance: 0.28,
+    collisionPushMs: 350, // 衝突したときの巻き戻しにかける時間
+    collisionPullbackDistance: 0.5, // 衝突したときに進行を巻き戻す距離(障害物の間隔は2.4。2026-09-27 ユーザーの判断で横の押し戻しから変更)
     aircraftMaxRadius: 0.86,
     canvasMarginPx: 8,
     stickRadiusRatio: 0.14,

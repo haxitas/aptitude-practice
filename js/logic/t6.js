@@ -288,11 +288,13 @@ export function advanceObstacle(obstacle, distanceDelta, elapsedSec, dtSec, p) {
   return next;
 }
 
-export function recycleObstacles(obstacles, rng, p) {
+// 機体の面を過ぎた障害物を奥で作り直す。
+// holdGhosts(巻き戻しの間)は、ぶつかった透過の障害物をその場に残す
+export function recycleObstacles(obstacles, rng, p, holdGhosts = false) {
   const active = obstacles.filter(o => o.z > p.collisionZ);
   let farthest = Math.max(p.farZ - p.obstacleSpacing, ...active.map(o => o.z));
   return obstacles.map(o => {
-    if (o.z > p.collisionZ) return o;
+    if (o.z > p.collisionZ || (holdGhosts && o.ghost)) return o;
     farthest += p.obstacleSpacing;
     return createObstacle(rng, farthest, o.id, p);
   });
@@ -316,22 +318,19 @@ export function createT6State(rng, p) {
   };
 }
 
-function movePosition(state, input, dtSec, p) {
-  if (!state.pushback) {
-    return {
-      position: moveAircraft(state.position, input, dtSec, p),
-      pushback: null,
-    };
-  }
-  const elapsedMs = Math.min(p.collisionPushMs, state.pushback.elapsedMs + dtSec * 1000);
-  const k = elapsedMs / p.collisionPushMs;
-  const position = {
-    x: state.pushback.from.x + (state.pushback.to.x - state.pushback.from.x) * k,
-    y: state.pushback.from.y + (state.pushback.to.y - state.pushback.from.y) * k,
-  };
+// 衝突したときの巻き戻し(2026-09-27 ユーザーの判断で変更)。
+// 機体は横に動かさず、collisionPushMs かけて進行を collisionPullbackDistance だけなめらかに戻す。
+// この間は入力を受け付けない。戻り値の pullDistance は、この1歩で戻す距離。
+function advancePullback(pushback, dtSec, p) {
+  if (!pushback) return { pushback: null, pullSec: 0, pullDistance: 0 };
+  const remainingMs = Math.max(0, p.collisionPushMs - pushback.elapsedMs);
+  const usedMs = Math.min(remainingMs, dtSec * 1000);
+  const fraction = p.collisionPushMs > 0 ? usedMs / p.collisionPushMs : 1;
+  const elapsedMs = pushback.elapsedMs + usedMs;
   return {
-    position,
-    pushback: elapsedMs >= p.collisionPushMs ? null : { ...state.pushback, elapsedMs },
+    pushback: elapsedMs >= p.collisionPushMs ? null : { elapsedMs },
+    pullSec: usedMs / 1000,
+    pullDistance: p.collisionPullbackDistance * fraction,
   };
 }
 
@@ -339,33 +338,34 @@ export function stepT6State(state, input, dtSec, p, rng) {
   if (!Number.isFinite(dtSec) || dtSec < 0) throw new RangeError('dtSec は0以上の有限値である必要があります');
   const nextElapsed = state.elapsedSec + dtSec;
   const normalizedInput = normalizeInput(input);
-  const moved = movePosition(state, normalizedInput, dtSec, p);
+  const pull = advancePullback(state.pushback, dtSec, p);
+  const position = state.pushback ? state.position : moveAircraft(state.position, normalizedInput, dtSec, p);
   const speedBeforeCollision = advanceSpeed(state.speed, nextElapsed, dtSec, p);
-  const distanceDelta = (state.speed + speedBeforeCollision) * 0.5 * dtSec;
+  // 巻き戻しの間は前へ進まない。巻き戻しがこの1歩の途中で終われば、残りの時間だけ進む
+  const forwardSec = dtSec - pull.pullSec;
+  const distanceDelta = (state.speed + speedBeforeCollision) * 0.5 * forwardSec - pull.pullDistance;
   let speed = speedBeforeCollision;
   let cleared = state.cleared;
   let collisions = state.collisions;
-  let pushback = moved.pushback;
+  let pushback = pull.pushback;
 
   let obstacles = state.obstacles.map(o => advanceObstacle(o, distanceDelta, state.elapsedSec, dtSec, p));
   for (let i = 0; i < obstacles.length; i++) {
     const previous = state.obstacles[i];
     const obstacle = obstacles[i];
     if (!crossedAircraftPlane(previous.z, obstacle.z, p.collisionZ)) continue;
-    if (isObstacleSafe(obstacle, moved.position, p)) {
+    // 透過の障害物(一度ぶつかったもの)は当たり判定をせず、通過にも衝突にも数えない
+    if (obstacle.ghost) continue;
+    if (isObstacleSafe(obstacle, position, p)) {
       cleared++;
     } else {
       collisions++;
       speed = applyCollisionSpeed(speed, p);
-      const direction = safeDirection(obstacle, moved.position, p);
-      const to = clampToTunnel({
-        x: moved.position.x + direction.x * p.collisionPushDistance,
-        y: moved.position.y + direction.y * p.collisionPushDistance,
-      }, p.aircraftMaxRadius);
-      pushback = { from: moved.position, to, elapsedMs: 0 };
+      obstacles[i] = { ...obstacle, ghost: true };
+      pushback = { elapsedMs: 0 };
     }
   }
-  obstacles = recycleObstacles(obstacles, rng, p);
+  obstacles = recycleObstacles(obstacles, rng, p, pushback !== null);
 
   return {
     ...state,
@@ -373,7 +373,7 @@ export function stepT6State(state, input, dtSec, p, rng) {
     speed,
     distance: state.distance + distanceDelta,
     maxSpeedReached: Math.max(state.maxSpeedReached, speedBeforeCollision),
-    position: moved.position,
+    position,
     obstacles,
     cleared,
     collisions,

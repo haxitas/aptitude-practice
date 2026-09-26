@@ -37,7 +37,7 @@ test('T6 の既定値は承認済みの数値', () => {
     bladeInitialAngularSpeedDegSec: 30,
     bladeAngularAccelerationDegSec2: 0.15,
     collisionPushMs: 350,
-    collisionPushDistance: 0.28,
+    collisionPullbackDistance: 0.5,
     aircraftMaxRadius: 0.86,
     canvasMarginPx: 8,
     stickRadiusRatio: 0.14,
@@ -410,7 +410,9 @@ test('T6 状態は安全通過と衝突を別に数え、実際の最高速度�
   assert.equal(next.collisions, 1);
   assert.equal(next.speed, applyCollisionSpeed(baseSpeedAt(next.elapsedSec, P), P));
   assert.ok(next.maxSpeedReached >= 1);
-  assert.ok(next.obstacles.every(o => o.z > P.collisionZ));
+  // 通過した障害物は奥へ戻し、ぶつかった障害物はその場に透過扱いで残す
+  assert.ok(next.obstacles.find(o => o.id === 1).z > P.collisionZ);
+  assert.equal(next.obstacles.find(o => o.id === 2).ghost, true);
 });
 
 test('状態を1フレーム進めても元の状態を書き換えない', () => {
@@ -420,19 +422,16 @@ test('状態を1フレーム進めても元の状態を書き換えない', () =
   assert.deepEqual(state, before);
 });
 
-test('入力で移動し、入力を離すと即停止し、押し戻し中は入力を無視する', () => {
+test('入力で移動し、入力を離すと即停止し、巻き戻し中は入力を無視する', () => {
   const rng = createRng(20);
   const initial = { ...createT6State(rng, P), obstacles: [], speed: 0 };
   const moved = stepT6State(initial, { x: 1, y: 0 }, 0.5, P, createRng(21));
   approx(moved.position.x, 0.5);
   const stopped = stepT6State(moved, { x: 0, y: 0 }, 0.5, P, createRng(22));
   approx(stopped.position.x, moved.position.x);
-  const pushing = {
-    ...stopped,
-    pushback: { from: stopped.position, to: { x: -0.2, y: 0 }, elapsedMs: 0 },
-  };
-  const duringPush = stepT6State(pushing, { x: 1, y: 0 }, 0.1, P, createRng(23));
-  assert.ok(duringPush.position.x < pushing.position.x);
+  const pulling = { ...stopped, pushback: { elapsedMs: 0 } };
+  const duringPull = stepT6State(pulling, { x: 1, y: 0 }, 0.1, P, createRng(23));
+  assert.deepEqual(duringPull.position, pulling.position);
 });
 
 test('採点と記録は成功通過数、衝突、距離、実際の最高速度を保存する', () => {
@@ -447,4 +446,95 @@ test('採点と記録は成功通過数、衝突、距離、実際の最高速�
   assert.equal(record.test, 't6');
   assert.deepEqual(record.settings, { ...P });
   assert.notEqual(record.settings, P);
+});
+
+// ---- 衝突したときの巻き戻しと透過(2026-09-27 ユーザーの判断で変更) ----
+
+const DT = 0.05; // 50ms。巻き戻しの350msは7回で終わる
+const HIT_ID = 2;
+const FAR_ID = 3;
+
+// 機体は下側(y<0)にいて、下がふさがった半円にぶつかる。奥にもう1つ障害物を置く
+function collisionStart() {
+  return {
+    ...createT6State(createRng(1), P),
+    position: { x: 0.1, y: -0.6 },
+    obstacles: [
+      { id: HIT_ID, type: 'half', blockedSide: 'down', z: 1.01 },
+      { id: FAR_ID, type: 'half', blockedSide: 'up', z: 3.4 },
+    ],
+    speed: 1,
+    maxSpeedReached: 1,
+  };
+}
+const obstacleOf = (state, id) => state.obstacles.find(o => o.id === id);
+
+function runSteps(state, count, input = { x: 0, y: 0 }) {
+  let s = state;
+  for (let i = 0; i < count; i++) s = stepT6State(s, input, DT, P, createRng(100 + i));
+  return s;
+}
+
+test('衝突: 機体の位置は横に動かず、巻き戻しの間は入力を受け付けない', () => {
+  const start = collisionStart();
+  const hit = stepT6State(start, { x: 0, y: 0 }, 0.02, P, createRng(2));
+  assert.equal(hit.collisions, 1);
+  assert.deepEqual(hit.position, start.position);
+  assert.notEqual(hit.pushback, null);
+  let s = hit;
+  for (let i = 0; i < 6; i++) {
+    s = stepT6State(s, { x: 1, y: 1 }, DT, P, createRng(10 + i));
+    assert.deepEqual(s.position, start.position, `step ${i}`);
+  }
+});
+
+test('衝突: 障害物は時間とともに collisionPullbackDistance だけ奥へ遠ざかり、進んだ距離も同じだけ減る', () => {
+  const hit = stepT6State(collisionStart(), { x: 0, y: 0 }, 0.02, P, createRng(2));
+  const farZ = obstacleOf(hit, FAR_ID).z;
+  const halfway = runSteps(hit, 3); // 150ms
+  approx(obstacleOf(halfway, FAR_ID).z, farZ + P.collisionPullbackDistance * 150 / P.collisionPushMs);
+  approx(halfway.distance, hit.distance - P.collisionPullbackDistance * 150 / P.collisionPushMs);
+  const done = runSteps(hit, 7); // 350ms
+  assert.equal(done.pushback, null);
+  approx(obstacleOf(done, FAR_ID).z, farZ + P.collisionPullbackDistance);
+  approx(done.distance, hit.distance - P.collisionPullbackDistance);
+});
+
+test('衝突: ぶつかった障害物は透過扱いになり、再び機体の面をまたいでも衝突にも通過にも数えない', () => {
+  const hit = stepT6State(collisionStart(), { x: 0, y: 0 }, 0.02, P, createRng(2));
+  const afterPull = runSteps(hit, 7);
+  const ghost = obstacleOf(afterPull, HIT_ID);
+  assert.equal(ghost.ghost, true);
+  assert.ok(ghost.z > P.collisionZ, 'その場に残り、巻き戻しで機体の面より奥へ戻る');
+  assert.ok(drawableObstacles(afterPull.obstacles, P).some(o => o.id === HIT_ID), '透過中も描く');
+  let s = afterPull;
+  let steps = 0;
+  while (obstacleOf(s, HIT_ID).ghost && steps < 400) {
+    s = stepT6State(s, { x: 0, y: 0 }, DT, P, createRng(200 + steps));
+    steps++;
+  }
+  assert.ok(steps < 400, '透過の障害物が機体の面を通り抜ける');
+  assert.equal(s.collisions, 1);
+  assert.equal(s.cleared, afterPull.cleared);
+});
+
+test('衝突: 透過の障害物は通り抜けたあと、奥で作り直される', () => {
+  const hit = stepT6State(collisionStart(), { x: 0, y: 0 }, 0.02, P, createRng(2));
+  let s = runSteps(hit, 7);
+  let steps = 0;
+  while (obstacleOf(s, HIT_ID).ghost && steps < 400) {
+    s = stepT6State(s, { x: 0, y: 0 }, DT, P, createRng(300 + steps));
+    steps++;
+  }
+  const recycled = obstacleOf(s, HIT_ID);
+  assert.ok(!recycled.ghost);
+  assert.ok(recycled.z > obstacleOf(s, FAR_ID).z, 'いちばん奥の障害物よりさらに奥');
+});
+
+test('衝突: 速度は今までどおり50%になり、巻き戻しの間も回復する', () => {
+  const hit = stepT6State(collisionStart(), { x: 0, y: 0 }, 0.02, P, createRng(2));
+  assert.equal(hit.speed, applyCollisionSpeed(baseSpeedAt(hit.elapsedSec, P), P));
+  const done = runSteps(hit, 7);
+  assert.ok(done.speed > hit.speed);
+  assert.ok(done.speed <= baseSpeedAt(done.elapsedSec, P));
 });

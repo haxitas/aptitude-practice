@@ -34,6 +34,8 @@ const AIRCRAFT_SHAPE = Object.freeze({
   minShadowBlurPx: 4,
 });
 let aircraftPath = null; // Path2D は描画のときに1回だけ作る
+// ぶつかって透過扱いになった障害物は、当たらないことが分かるよう薄く描く
+const GHOST_OBSTACLE_ALPHA = 0.28;
 
 function drawHalf(ctx, obstacle, cx, cy, radius) {
   ctx.save();
@@ -200,6 +202,7 @@ function drawScene(ctx, layout, state, p, stickInput) {
     ctx.fillStyle = T6_COLOR_OPTIONS.obstacle.find(color => color.name === p.obstacleColor)?.value ?? T6_COLOR_OPTIONS.obstacle[0].value;
     ctx.strokeStyle = T6_COLOR_OPTIONS.edge.find(color => color.name === p.obstacleEdgeColor)?.value ?? T6_COLOR_OPTIONS.edge[0].value;
     ctx.lineWidth = Math.max(1.5, 4 * scale);
+    ctx.globalAlpha = obstacle.ghost ? GHOST_OBSTACLE_ALPHA : 1;
     if (obstacle.type === 'half') drawHalf(ctx, obstacle, cx, cy, radius);
     else if (obstacle.type === 'blades') drawBlades(ctx, obstacle, cx, cy, radius, p.bladeHubRadius, p.bladeOpeningDeg);
     else if (obstacle.type === 'sector') drawSector(ctx, obstacle, cx, cy, radius, p.sectorOpeningDeg);
@@ -284,7 +287,7 @@ export function mount(root, ctx) {
       <h1 data-ref="title"></h1>
       <p>矢印キー、または操縦用の円を指・マウスで動かして機体を操縦します。横画面では左右ボタンで円の側を選べます。縦画面ではトンネルが上、操縦円が下です。</p>
           <p>半円、回転する羽根(開口1〜3個)、回転する扇形、縁の小穴(開口1〜3個)を通り抜けます。</p>
-      <p class="muted">衝突すると速度が半分になり、安全な開口方向へ押し戻されます。制限時間は <span data-ref="duration"></span>です。</p>
+      <p class="muted">衝突すると速度が半分になり、少し手前へ巻き戻されます。ぶつかった障害物は薄くなり、そのまま通り抜けられます。制限時間は <span data-ref="duration"></span>です。</p>
       <p class="notice notice-error" data-ref="layoutError" hidden></p>
       <button class="btn btn-primary btn-large" type="button" data-ref="start">開始</button>
     </section>`);
