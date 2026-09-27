@@ -59,8 +59,16 @@ export const DEFAULTS = Object.freeze({
     elapsedMinutesMin: 15,
     elapsedMinutesMax: 180,
     // 単位換算の選ばれやすさ(他の種類は1)。同じ種類を続けて出さない決まりの下で、
-    // 7 なら単位換算が長い目で見て1/3(以前の1/9の3倍)になる。2026-09-28 ユーザーの判断で追加
-    unitKindWeight: 7,
+    // 種類が10(他が9)なら重み8で単位換算が長い目で見て約1/3になる。2026-09-28 ユーザーの判断で追加
+    unitKindWeight: 8,
+    // 図形(2026-09-28 ユーザーの判断で追加)
+    geometryLengthMin: 2, // 三角形・台形・平行四辺形の辺と高さ(cm)
+    geometryLengthMax: 20,
+    circlePi: 3.14,
+    circleDiameterUnit: 50, // 円周の問題の直径は50の倍数(円周が整数になる)
+    circleAreaRadiusUnit: 10, // 円の面積の問題の半径は10の倍数(面積が整数になる)
+    circleMultiplierMax: 6,
+    circleAreaMultiplierMax: 3,
   }),
   t2: Object.freeze({
     durationSec: 120, // 2026-09-22 ユーザーの判断で 180 → 120

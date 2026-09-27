@@ -1,8 +1,8 @@
-// テスト1 計算: 9種類の問題生成、典型誤答の4択、判定、採点。DOMには触れない。
+// テスト1 計算: 10種類の問題生成、典型誤答の4択、判定、採点。DOMには触れない。
 import { randInt, shuffle } from '../core/rng.js';
 import { correctFeedback, wrongFeedback } from '../core/feedback.js';
 
-export const PROBLEM_KINDS = Object.freeze(['unit', 'speed', 'meeting', 'catchup', 'percentage', 'inversePercentage', 'price', 'average', 'elapsed']);
+export const PROBLEM_KINDS = Object.freeze(['unit', 'speed', 'meeting', 'catchup', 'percentage', 'inversePercentage', 'price', 'average', 'elapsed', 'geometry']);
 
 // 単位換算の組(大きい単位 → 小さい単位の向きを1行で書き、往復の2種類を作る)。
 // 換算後 = 換算前 × num ÷ den。pre は「時速」などの前置き。
@@ -61,6 +61,10 @@ const UNIT_VARIANTS = Object.freeze(UNIT_PAIRS.flatMap(pair => {
 export const UNIT_VARIANT_IDS = Object.freeze(UNIT_VARIANTS.map(v => v.id));
 export const POWER_UNIT_VARIANT_IDS = Object.freeze(UNIT_VARIANTS.filter(v => v.forgotPower).map(v => v.id));
 export const PRICE_VARIANTS = Object.freeze(['total', 'unit-price', 'per-100g', 'per-gram-total']);
+export const GEOMETRY_VARIANTS = Object.freeze([
+  'circle-circumference-diameter', 'circle-circumference-radius', 'circle-diameter', 'circle-area',
+  'triangle-area', 'trapezoid-area', 'parallelogram-area',
+]);
 
 function roundNumber(value) {
   return Math.round(value * 1e6) / 1e6;
@@ -284,8 +288,75 @@ function elapsedProblem(rng, p) {
     [(h2-h1)*100+m2-m1, minutes*60, minutes/60, minutes+60, Math.abs(minutes-60), minutes*10, minutes/10], rng, { h1, m1, h2, m2 });
 }
 
+// ---- 図形(2026-09-28 ユーザーの判断で追加) ----
+// 円は円周率3.14。直径は circleDiameterUnit(50)の倍数、面積の半径は circleAreaRadiusUnit(10)の倍数にして答えを整数にする。
+// 誤答は典型的な間違い(半径と直径の取り違え、円周率を3にする、÷2のし忘れ、周と面積の混同など)から作る。
+function productEven(rng, a, min, max) {
+  let b = randInt(rng, min, max);
+  if ((a * b) % 2 !== 0) b = b + 1 <= max ? b + 1 : b - 1;
+  return b;
+}
+
+function geometryProblem(rng, p, forcedVariant = null) {
+  const variant = forcedVariant ?? GEOMETRY_VARIANTS[randInt(rng, 0, GEOMETRY_VARIANTS.length - 1)];
+  const pi = p.circlePi;
+  const note = `(円周率は${formatNumber(pi)})`;
+  const min = p.geometryLengthMin;
+  const max = p.geometryLengthMax;
+  if (variant === 'circle-circumference-diameter') {
+    const diameter = p.circleDiameterUnit * randInt(rng, 1, p.circleMultiplierMax);
+    const answer = diameter * pi;
+    return finish('geometry', variant, `直径${diameter}cmの円の周の長さは何cmですか?${note}`, answer, 'cm',
+      [diameter * 3, answer / 2, (diameter / 2) ** 2 * pi, answer * 10, answer / 10], rng, { diameter, pi },
+      { required: [answer * 2] }); // 直径を半径として計算する
+  }
+  if (variant === 'circle-circumference-radius') {
+    const radius = p.circleDiameterUnit / 2 * randInt(rng, 1, p.circleMultiplierMax);
+    const answer = radius * 2 * pi;
+    return finish('geometry', variant, `半径${radius}cmの円の周の長さは何cmですか?${note}`, answer, 'cm',
+      [radius * pi, radius * 4 * pi, radius * 2 * 3, radius * radius * pi, answer * 10, answer / 10], rng, { radius, pi });
+  }
+  if (variant === 'circle-diameter') {
+    const diameter = p.circleDiameterUnit * randInt(rng, 1, p.circleMultiplierMax);
+    const circumference = roundNumber(diameter * pi);
+    return finish('geometry', variant, `周の長さが${circumference}cmの円の直径は何cmですか?${note}`, diameter, 'cm',
+      [diameter / 2, diameter * 2, circumference / 3, diameter * 10, diameter / 10], rng, { circumference, pi });
+  }
+  if (variant === 'circle-area') {
+    const radius = p.circleAreaRadiusUnit * randInt(rng, 1, p.circleAreaMultiplierMax);
+    const answer = radius * radius * pi;
+    return finish('geometry', variant, `半径${radius}cmの円の面積は何cm²ですか?${note}`, answer, 'cm²',
+      [radius * radius * 3, (radius * 2) ** 2 * pi, radius * 2 * pi, radius * pi, answer * 10, answer / 10], rng, { radius, pi });
+  }
+  if (variant === 'triangle-area') {
+    const base = randInt(rng, min, max);
+    const height = productEven(rng, base, min, max);
+    const answer = base * height / 2;
+    return finish('geometry', variant, `底辺${base}cm、高さ${height}cmの三角形の面積は何cm²ですか?`, answer, 'cm²',
+      [base + height, (base + height) * 2, base * height * 2, answer * 10, answer / 10], rng, { base, height },
+      { required: [base * height] }); // ÷2 のし忘れ
+  }
+  if (variant === 'trapezoid-area') {
+    const top = randInt(rng, min, max - 1);
+    const bottom = randInt(rng, top + 1, max);
+    const height = productEven(rng, top + bottom, min, max);
+    const answer = (top + bottom) * height / 2;
+    return finish('geometry', variant, `上底${top}cm、下底${bottom}cm、高さ${height}cmの台形の面積は何cm²ですか?`, answer, 'cm²',
+      [bottom * height, top * height, (bottom - top) * height / 2, top * bottom * height / 2, top + bottom + height, answer * 10, answer / 10],
+      rng, { top, bottom, height }, { required: [(top + bottom) * height] }); // ÷2 のし忘れ
+  }
+  if (variant === 'parallelogram-area') {
+    const base = randInt(rng, min, max);
+    const height = randInt(rng, min, max);
+    const answer = base * height;
+    return finish('geometry', variant, `底辺${base}cm、高さ${height}cmの平行四辺形の面積は何cm²ですか?`, answer, 'cm²',
+      [answer / 2, base + height, (base + height) * 2, answer * 2, answer * 10, answer / 10], rng, { base, height });
+  }
+  throw new RangeError(`不明な図形の問題です: ${variant}`);
+}
+
 const GENERATORS = { unit: unitProblem, speed: speedProblem, meeting: meetingProblem, catchup: catchupProblem, percentage: percentageProblem,
-  inversePercentage: inversePercentageProblem, price: priceProblem, average: averageProblem, elapsed: elapsedProblem };
+  inversePercentage: inversePercentageProblem, price: priceProblem, average: averageProblem, elapsed: elapsedProblem, geometry: geometryProblem };
 
 // forcedVariant: 単位換算・単価の形を指定する(単体テストで全種類を確かめるため)
 export function generateT1Problem(rng, p, previous = null, forcedKind = null, forcedVariant = null) {
@@ -347,6 +418,15 @@ const FORMULA_TEMPLATES = Object.freeze({
   },
   average: v => ['(', num(v.a), '+', num(v.b), '+', num(v.c), ')', '÷', num(3)],
   elapsed: v => [clock(v.h2, v.m2), '−', clock(v.h1, v.m1)],
+  geometry: (v, variant) => {
+    if (variant === 'circle-circumference-diameter') return [num(v.diameter, 'cm'), '×', num(v.pi)];
+    if (variant === 'circle-circumference-radius') return [num(v.radius, 'cm'), '×', num(2), '×', num(v.pi)];
+    if (variant === 'circle-diameter') return [num(v.circumference, 'cm'), '÷', num(v.pi)];
+    if (variant === 'circle-area') return [num(v.radius, 'cm'), '×', num(v.radius, 'cm'), '×', num(v.pi)];
+    if (variant === 'triangle-area') return [num(v.base, 'cm'), '×', num(v.height, 'cm'), '÷', num(2)];
+    if (variant === 'trapezoid-area') return ['(', num(v.top, 'cm'), '+', num(v.bottom, 'cm'), ')', '×', num(v.height, 'cm'), '÷', num(2)];
+    return [num(v.base, 'cm'), '×', num(v.height, 'cm')];
+  },
 });
 
 const OPERATOR_EXPRESSION = Object.freeze({ '+': '+', '−': '-', '×': '*', '÷': '/', '(': '(', ')': ')' });

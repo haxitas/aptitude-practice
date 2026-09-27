@@ -44,7 +44,9 @@ export const SETTING_FIELDS = Object.freeze({
     number('clockStartHourMax', '経過時間の開始時(最大)', 0, 20, { integer: true }),
     number('elapsedMinutesMin', '経過時間の最小値', 1, 180, { integer: true, unit: '分' }),
     number('elapsedMinutesMax', '経過時間の最大値', 1, 180, { integer: true, unit: '分' }),
-    number('unitKindWeight', '単位換算の出やすさ', 1, 50, { integer: true, hint: '他の種類を1とした重み。7で全体の約1/3' }),
+    number('unitKindWeight', '単位換算の出やすさ', 1, 50, { integer: true, hint: '他の種類を1とした重み。8で全体の約1/3' }),
+    number('geometryLengthMin', '図形の辺・高さの最小値', 1, 100, { integer: true, unit: 'cm' }),
+    number('geometryLengthMax', '図形の辺・高さの最大値', 2, 100, { integer: true, unit: 'cm' }),
   ]),
   t2: Object.freeze([
     duration(),
@@ -168,6 +170,7 @@ export function validateTestSettings(testId, raw, defaults) {
   if (testId === 't1') {
     for (const pair of [['unitValueMin', 'unitValueMax'], ['speedMin', 'speedMax'], ['speedHoursMin', 'speedHoursMax'], ['lapSpeedMin', 'lapSpeedMax'], ['lapMultiplierMin', 'lapMultiplierMax'], ['percentageUnitMin', 'percentageUnitMax']]) minMax(errors, value, ...pair);
     for (const pair of [['priceMin', 'priceMax'], ['priceCountMin', 'priceCountMax'], ['averageMin', 'averageMax'], ['clockStartHourMin', 'clockStartHourMax'], ['elapsedMinutesMin', 'elapsedMinutesMax']]) minMax(errors, value, ...pair);
+    if (value.geometryLengthMax <= value.geometryLengthMin) errors.geometryLengthMax = '台形を作るため、最小値より大きくしてください';
     if (value.averageMax - value.averageMin < 2) errors.averageMax = '整数の平均を作るため、最小値より2以上大きくしてください';
     if (!Object.keys(errors).length && !lapCandidates(value).integer.length) errors.lapMultiplierMax = '整数の周回距離を作れる速度と倍率の組がありません';
   } else if (testId === 't2') {

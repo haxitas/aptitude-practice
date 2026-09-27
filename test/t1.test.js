@@ -6,7 +6,7 @@ import {
   PROBLEM_KINDS, lapMinutes, makeT1Choices, generateT1Problem, judgeT1,
   createT1Tally, recordT1Answer, summarizeT1, buildT1Record,
 } from '../js/logic/t1.js';
-import { t1Feedback, t1Formula, formatT1Answer, UNIT_VARIANT_IDS, POWER_UNIT_VARIANT_IDS, PRICE_VARIANTS } from '../js/logic/t1.js';
+import { t1Feedback, t1Formula, formatT1Answer, UNIT_VARIANT_IDS, POWER_UNIT_VARIANT_IDS, PRICE_VARIANTS, GEOMETRY_VARIANTS } from '../js/logic/t1.js';
 
 const P = DEFAULTS.t1;
 
@@ -37,6 +37,18 @@ function priceExpected(variant, n) {
   if (variant === 'per-gram-total') return n[1] * n[2]; // 1gあたりa円 → b g(n=[1,a,b])
   throw new Error(variant);
 }
+// 図形: 問題文の数値の並びから正解を計算する(円周率は3.14)
+const PI_NOTE = '(円周率は3.14)';
+function geometryExpected(variant, n) {
+  if (variant === 'circle-circumference-diameter') return n[0] * 3.14;
+  if (variant === 'circle-circumference-radius') return n[0] * 2 * 3.14;
+  if (variant === 'circle-diameter') return n[0] / 3.14;
+  if (variant === 'circle-area') return n[0] * n[0] * 3.14;
+  if (variant === 'triangle-area') return n[0] * n[1] / 2;
+  if (variant === 'trapezoid-area') return (n[0] + n[1]) * n[2] / 2;
+  if (variant === 'parallelogram-area') return n[0] * n[1];
+  throw new Error(variant);
+}
 const close = (a, b) => Math.abs(a - b) < 1e-8;
 const evaluateExpr = expression => Function(`"use strict"; return (${expression});`)();
 
@@ -64,12 +76,14 @@ test('T1 の既定値は承認済みの数値', () => {
     averageMin: 2, averageMax: 50,
     clockStartHourMin: 6, clockStartHourMax: 18,
     elapsedMinutesMin: 15, elapsedMinutesMax: 180,
-    unitKindWeight: 7,
+    unitKindWeight: 8,
+    geometryLengthMin: 2, geometryLengthMax: 20,
+    circlePi: 3.14, circleDiameterUnit: 50, circleAreaRadiusUnit: 10, circleMultiplierMax: 6, circleAreaMultiplierMax: 3,
   });
 });
 
-test('問題は9種類。単位換算は他の3倍の約1/3、他の8種類はそれぞれ約1/12(2026-09-28 ユーザーの判断で変更)', () => {
-  assert.deepEqual(PROBLEM_KINDS, ['unit', 'speed', 'meeting', 'catchup', 'percentage', 'inversePercentage', 'price', 'average', 'elapsed']);
+test('問題は10種類。単位換算は約1/3、他の9種類はそれぞれ約2/27(2026-09-28 ユーザーの判断で変更)', () => {
+  assert.deepEqual(PROBLEM_KINDS, ['unit', 'speed', 'meeting', 'catchup', 'percentage', 'inversePercentage', 'price', 'average', 'elapsed', 'geometry']);
   // 本番と同じく、直前の問題を渡しながら続けて作る
   const rng = createRng(2026);
   const counts = Object.fromEntries(PROBLEM_KINDS.map(k => [k, 0]));
@@ -85,19 +99,20 @@ test('問題は9種類。単位換算は他の3倍の約1/3、他の8種類は�
   assert.ok(unitShare > 0.32 && unitShare < 0.347, `単位換算 ${unitShare}`);
   for (const kind of PROBLEM_KINDS.filter(k => k !== 'unit')) {
     const share = counts[kind] / total;
-    assert.ok(share > 0.075 && share < 0.092, `${kind} ${share}`);
+    assert.ok(share > 0.066 && share < 0.082, `${kind} ${share}`);
   }
 });
 
-test('2000シード: 小数は第1位まで・20%以下・9種類の正解が式に一致', () => {
+test('2000シード: 小数は第1位まで・20%以下・全種類の正解が式に一致', () => {
   let decimals = 0;
   const seen = new Set();
   for (let seed = 1; seed <= 2000; seed++) {
     const q = generateT1Problem(createRng(seed), P);
     seen.add(q.kind);
-    assert.ok(!/\d+\.\d{2,}/.test(q.prompt), `seed=${seed} ${q.prompt}`);
+    const body = q.prompt.replace(PI_NOTE, ''); // 円周率の注記は定数なので除いて調べる
+    assert.ok(!/\d+\.\d{2,}/.test(body), `seed=${seed} ${q.prompt}`);
     if (/\d+\.\d+/.test(q.prompt)) decimals++;
-    const n = q.prompt.match(/\d+(?:\.\d+)?/g).map(Number);
+    const n = body.match(/\d+(?:\.\d+)?/g).map(Number);
     let expected;
     if (q.kind === 'unit') expected = n[0] * UNIT_RATIOS[q.variant];
     if (q.kind === 'speed') expected = q.variant === 'distance' ? n[0]*n[1] : n[0]/n[1];
@@ -108,10 +123,11 @@ test('2000シード: 小数は第1位まで・20%以下・9種類の正解が式
     if (q.kind === 'price') expected = priceExpected(q.variant, n);
     if (q.kind === 'average') expected = (n[0]+n[1]+n[2])/3;
     if (q.kind === 'elapsed') expected = (n[2]-n[0])*60+n[3]-n[1];
+    if (q.kind === 'geometry') expected = geometryExpected(q.variant, n);
     assert.ok(Math.abs(q.answer-expected) < 1e-8, `seed=${seed} ${q.prompt}: ${q.answer} != ${expected}`);
   }
   assert.ok(decimals <= 400, `小数問題=${decimals}/2000`);
-  assert.equal(seen.size, 9);
+  assert.equal(seen.size, PROBLEM_KINDS.length);
 });
 
 test('周回問題は8割以上が整数の距離で、小数も第1位まで', () => {
@@ -147,7 +163,7 @@ test('4択は重ならず、正解を1つだけ含み、誤答は正の整数で
   assert.equal(made.choices[made.correctIndex], 36);
 });
 
-test('シード2000種類で全9種類が出て、4択は正の整数・重複なし・桁ずらし1つまで', () => {
+test('シード2000種類で全種類が出て、4択は正の整数・重複なし・桁ずらし1つまで', () => {
   const kinds = new Set();
   for (let seed = 1; seed <= 2000; seed++) {
     const q = generateT1Problem(createRng(seed), P);
@@ -229,7 +245,7 @@ test('即時判定: 正解は「○ 正解」、不正解は単位つきの正�
 
 const evaluate = expression => Function(`"use strict"; return (${expression});`)();
 
-test('式: 9種類すべてで式を作り、式を計算すると正解と一致する(2000シード)', () => {
+test('式: 全種類で式を作り、式を計算すると正解と一致する(2000シード)', () => {
   const kinds = new Set();
   const speedVariants = new Set();
   for (let seed = 1; seed <= 2000; seed++) {
@@ -380,4 +396,57 @@ test('単価: gあたりの式の例', () => {
     '450円 ÷ 300g × 100 = 150円');
   assert.equal(t1Formula({ kind: 'price', variant: 'per-gram-total', answer: 750, unit: '円', values: { perGram: 3, grams: 250 } }).text,
     '3円 × 250g = 750円');
+});
+
+// ---- 図形(2026-09-28 ユーザーの判断で追加) ----
+
+test('図形: 円周・直径・円の面積・三角形・台形・平行四辺形の7つの形が同じ確率で出る', () => {
+  assert.deepEqual([...GEOMETRY_VARIANTS].sort(), [
+    'circle-area', 'circle-circumference-diameter', 'circle-circumference-radius', 'circle-diameter',
+    'parallelogram-area', 'trapezoid-area', 'triangle-area',
+  ]);
+  const counts = Object.fromEntries(GEOMETRY_VARIANTS.map(v => [v, 0]));
+  const total = GEOMETRY_VARIANTS.length * 500;
+  for (let seed = 1; seed <= total; seed++) counts[generateT1Problem(createRng(seed), P, null, 'geometry').variant]++;
+  for (const [v, count] of Object.entries(counts)) assert.ok(count >= 400 && count <= 600, `${v}: ${count}/${total}`);
+});
+
+test('図形: 正解は公式と一致し、式を計算しても一致し、4択の決まり(正の整数・重複なし・桁ずらし1つまで)を守る', () => {
+  for (const variant of GEOMETRY_VARIANTS) {
+    for (let seed = 1; seed <= 500; seed++) {
+      const q = generateT1Problem(createRng(seed), P, null, 'geometry', variant);
+      assert.equal(q.variant, variant);
+      const n = q.prompt.replace(PI_NOTE, '').match(/\d+(?:\.\d+)?/g).map(Number);
+      assert.ok(close(q.answer, geometryExpected(variant, n)), `${q.prompt} → ${q.answer}`);
+      assert.ok(close(evaluateExpr(t1Formula(q).expression), q.answer), t1Formula(q).text);
+      assert.ok(Number.isInteger(q.answer) && q.answer > 0);
+      assert.equal(new Set(q.choices).size, 4, `${q.prompt} ${q.choices}`);
+      assert.ok(q.choices.every(v => Number.isInteger(v) && v > 0), `${q.prompt} ${q.choices}`);
+      assert.ok(q.choices.filter(v => v === q.answer * 10 || v === q.answer / 10).length <= 1, `${q.prompt} ${q.choices}`);
+      if (variant.startsWith('circle')) assert.ok(q.prompt.endsWith(PI_NOTE), q.prompt);
+      assert.ok(q.unit === 'cm' || q.unit === 'cm²');
+    }
+  }
+});
+
+test('図形: 円周の問題の誤答には「半径と直径の取り違え」、面積の問題には「÷2のし忘れ」が入る', () => {
+  for (let seed = 1; seed <= 300; seed++) {
+    const d = generateT1Problem(createRng(seed), P, null, 'geometry', 'circle-circumference-diameter');
+    assert.ok(d.choices.includes(Math.round(d.answer * 2)), `${d.prompt} ${d.choices}`);
+    const t = generateT1Problem(createRng(seed), P, null, 'geometry', 'triangle-area');
+    assert.ok(t.choices.includes(t.answer * 2), `${t.prompt} ${t.choices}`);
+    const z = generateT1Problem(createRng(seed), P, null, 'geometry', 'trapezoid-area');
+    assert.ok(z.choices.includes(z.answer * 2), `${z.prompt} ${z.choices}`);
+  }
+});
+
+test('図形の式: 例のとおりに作る', () => {
+  const f = (variant, answer, unit, values) => t1Formula({ kind: 'geometry', variant, answer, unit, values }).text;
+  assert.equal(f('circle-circumference-diameter', 157, 'cm', { diameter: 50, pi: 3.14 }), '50cm × 3.14 = 157cm');
+  assert.equal(f('circle-circumference-radius', 157, 'cm', { radius: 25, pi: 3.14 }), '25cm × 2 × 3.14 = 157cm');
+  assert.equal(f('circle-diameter', 50, 'cm', { circumference: 157, pi: 3.14 }), '157cm ÷ 3.14 = 50cm');
+  assert.equal(f('circle-area', 314, 'cm²', { radius: 10, pi: 3.14 }), '10cm × 10cm × 3.14 = 314cm²');
+  assert.equal(f('triangle-area', 20, 'cm²', { base: 8, height: 5 }), '8cm × 5cm ÷ 2 = 20cm²');
+  assert.equal(f('trapezoid-area', 42, 'cm²', { top: 4, bottom: 10, height: 6 }), '(4cm + 10cm) × 6cm ÷ 2 = 42cm²');
+  assert.equal(f('parallelogram-area', 63, 'cm²', { base: 7, height: 9 }), '7cm × 9cm = 63cm²');
 });
