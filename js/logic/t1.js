@@ -4,18 +4,63 @@ import { correctFeedback, wrongFeedback } from '../core/feedback.js';
 
 export const PROBLEM_KINDS = Object.freeze(['unit', 'speed', 'meeting', 'catchup', 'percentage', 'inversePercentage', 'price', 'average', 'elapsed']);
 
-const UNIT_VARIANTS = Object.freeze([
-  { id: 'ha-to-m2', from: 'ha', to: 'm²', factor: 10000, reverse: false },
-  { id: 'm2-to-ha', from: 'm²', to: 'ha', factor: 10000, reverse: true },
-  { id: 'a-to-m2', from: 'a', to: 'm²', factor: 100, reverse: false },
-  { id: 'm2-to-a', from: 'm²', to: 'a', factor: 100, reverse: true },
-  { id: 'km2-to-ha', from: 'km²', to: 'ha', factor: 100, reverse: false },
-  { id: 'ha-to-km2', from: 'ha', to: 'km²', factor: 100, reverse: true },
-  { id: 'km-to-m', from: 'km', to: 'm', factor: 1000, reverse: false },
-  { id: 'm-to-km', from: 'm', to: 'km', factor: 1000, reverse: true },
-  { id: 'hours-to-minutes', from: '時間', to: '分', factor: 60, reverse: false },
-  { id: 'minutes-to-hours', from: '分', to: '時間', factor: 60, reverse: true },
+// 単位換算の組(大きい単位 → 小さい単位の向きを1行で書き、往復の2種類を作る)。
+// 換算後 = 換算前 × num ÷ den。pre は「時速」などの前置き。
+// confuse: 典型的に取り違える倍率(掛けると割るの逆、換算忘れは共通で加える)。
+// forgotPower: 2乗・3乗の換算で「乗し忘れ」たときの倍率(長さの倍率のまま)。
+const UNIT_PAIRS = Object.freeze([
+  { ids: ['ha-to-m2', 'm2-to-ha'], big: 'ha', small: 'm²', num: 10000, den: 1, confuse: [100, 1000, 1000000] },
+  { ids: ['a-to-m2', 'm2-to-a'], big: 'a', small: 'm²', num: 100, den: 1, confuse: [10, 1000, 10000] },
+  { ids: ['km2-to-ha', 'ha-to-km2'], big: 'km²', small: 'ha', num: 100, den: 1, confuse: [1000, 10000, 1000000] },
+  { ids: ['km-to-m', 'm-to-km'], big: 'km', small: 'm', num: 1000, den: 1, confuse: [100, 10000] },
+  { ids: ['hours-to-minutes', 'minutes-to-hours'], big: '時間', small: '分', num: 60, den: 1, confuse: [100, 3600, 24] },
+  // 2026-09-27 ユーザーの判断で追加
+  { ids: ['m-to-cm', 'cm-to-m'], big: 'm', small: 'cm', num: 100, den: 1, confuse: [10, 1000, 10000] },
+  { ids: ['cm-to-mm', 'mm-to-cm'], big: 'cm', small: 'mm', num: 10, den: 1, confuse: [100, 1000, 10000] },
+  { ids: ['kg-to-g', 'g-to-kg'], big: 'kg', small: 'g', num: 1000, den: 1, confuse: [100, 10000] },
+  { ids: ['t-to-kg', 'kg-to-t'], big: 't', small: 'kg', num: 1000, den: 1, confuse: [100, 10000] },
+  { ids: ['L-to-mL', 'mL-to-L'], big: 'L', small: 'mL', num: 1000, den: 1, confuse: [100, 10000] },
+  { ids: ['L-to-dL', 'dL-to-L'], big: 'L', small: 'dL', num: 10, den: 1, confuse: [100, 1000, 10000] },
+  { ids: ['m3-to-L', 'L-to-m3'], big: 'm³', small: 'L', num: 1000, den: 1, confuse: [100, 10000, 1000000] },
+  { ids: ['minutes-to-seconds', 'seconds-to-minutes'], big: '分', small: '秒', num: 60, den: 1, confuse: [100, 3600, 24] },
+  { ids: ['days-to-hours', 'hours-to-days'], big: '日', small: '時間', num: 24, den: 1, confuse: [60, 12, 100] },
+  { ids: ['ha-to-a', 'a-to-ha'], big: 'ha', small: 'a', num: 100, den: 1, confuse: [10, 1000, 10000] },
+  // 速さ: 60 と 3600 の取り違え、km→m の換算忘れなど
+  { ids: ['kmh-to-mpm', 'mpm-to-kmh'], big: 'km', bigPre: '時速', small: 'm', smallPre: '分速', num: 1000, den: 60,
+    confuse: [1000 / 3600, 1000, 60, 1 / 60] },
+  { ids: ['mps-to-kmh', 'kmh-to-mps'], big: 'm', bigPre: '秒速', small: 'km', smallPre: '時速', num: 3600, den: 1000,
+    confuse: [60 / 1000, 3600, 60, 1000 / 3600] },
+  // 2乗・3乗の換算(2026-09-27 ユーザーの判断で追加)
+  { ids: ['m2-to-cm2', 'cm2-to-m2'], big: 'm²', small: 'cm²', num: 10000, den: 1, forgotPower: 100, confuse: [1000, 1000000] },
+  { ids: ['cm2-to-mm2', 'mm2-to-cm2'], big: 'cm²', small: 'mm²', num: 100, den: 1, forgotPower: 10, confuse: [1000, 10000] },
+  { ids: ['cm3-to-mm3', 'mm3-to-cm3'], big: 'cm³', small: 'mm³', num: 1000, den: 1, forgotPower: 10, confuse: [100, 1000000] },
+  { ids: ['L-to-cm3', 'cm3-to-L'], big: 'L', small: 'cm³', num: 1000, den: 1, forgotPower: 10, confuse: [100, 10000] },
 ]);
+
+// 単位換算の誤答の上限(正解は100万以下。誤答もその10倍まで)
+const UNIT_DISTRACTOR_MAX = 10000000;
+
+function gcd(a, b) {
+  return b === 0 ? a : gcd(b, a % b);
+}
+
+// 往復それぞれを1つの種類にする。step は、換算後が整数になる換算前の最小の数
+const UNIT_VARIANTS = Object.freeze(UNIT_PAIRS.flatMap(pair => {
+  const forward = {
+    id: pair.ids[0], from: pair.big, fromPre: pair.bigPre ?? '', to: pair.small, toPre: pair.smallPre ?? '',
+    num: pair.num, den: pair.den, confuse: pair.confuse, forgotPower: pair.forgotPower ?? null,
+  };
+  const reverse = {
+    id: pair.ids[1], from: pair.small, fromPre: pair.smallPre ?? '', to: pair.big, toPre: pair.bigPre ?? '',
+    num: pair.den, den: pair.num, confuse: pair.confuse.map(c => 1 / c),
+    forgotPower: pair.forgotPower ? 1 / pair.forgotPower : null,
+  };
+  return [forward, reverse].map(v => Object.freeze({ ...v, step: v.den / gcd(v.num, v.den) }));
+}));
+
+export const UNIT_VARIANT_IDS = Object.freeze(UNIT_VARIANTS.map(v => v.id));
+export const POWER_UNIT_VARIANT_IDS = Object.freeze(UNIT_VARIANTS.filter(v => v.forgotPower).map(v => v.id));
+export const PRICE_VARIANTS = Object.freeze(['total', 'unit-price', 'per-100g', 'per-gram-total']);
 
 function roundNumber(value) {
   return Math.round(value * 1e6) / 1e6;
@@ -33,50 +78,74 @@ export function lapMinutes(lengthKm, speedA, speedB, kind) {
   return roundNumber(lengthKm * 60 / divisor);
 }
 
-export function makeT1Choices(answer, mistakes, rng) {
+// required: 必ず入れる誤答(2乗・3乗の「乗し忘れ」)。桁ずらし(正解×10・÷10)は合わせて1つまで
+export function makeT1Choices(answer, mistakes, rng, required = []) {
   if (!(Number.isInteger(answer) && answer > 0)) throw new RangeError('正解は正の整数である必要があります');
+  const isShift = value => value === answer * 10 || value === answer / 10;
+  const valid = value => Number.isInteger(value) && value > 0;
+  const seen = new Set([answer]);
+  const forced = [];
+  for (const raw of required) {
+    const value = roundNumber(raw);
+    if (!valid(value) || seen.has(value)) throw new RangeError(`必ず入れる誤答が正の整数になりません: ${raw}`);
+    seen.add(value);
+    forced.push(value);
+  }
   const typical = [];
   const digitShifts = [];
-  const seen = new Set([answer]);
   for (const raw of mistakes) {
     const value = roundNumber(raw);
-    if (!(Number.isInteger(value) && value > 0) || seen.has(value)) continue;
+    if (!valid(value) || seen.has(value)) continue;
     seen.add(value);
-    if (value === answer * 10 || value === answer / 10) digitShifts.push(value);
+    if (isShift(value)) digitShifts.push(value);
     else typical.push(value);
   }
-  if (typical.length < 2 || typical.length + Math.min(1, digitShifts.length) < 3) {
+  const forcedShift = forced.some(isShift);
+  const shiftSlots = forcedShift || !digitShifts.length ? 0 : 1;
+  const typicalNeeded = 3 - forced.length - shiftSlots;
+  if (typical.length < typicalNeeded || typicalNeeded < 0 || typical.length < 2 - forced.length) {
     throw new RangeError('正の整数の典型誤答を3つ作れません');
   }
-  const distractors = shuffle(rng, typical).slice(0, digitShifts.length ? 2 : 3);
-  if (digitShifts.length) distractors.push(shuffle(rng, digitShifts)[0]);
+  const distractors = [...forced, ...shuffle(rng, typical).slice(0, typicalNeeded)];
+  if (shiftSlots) distractors.push(shuffle(rng, digitShifts)[0]);
   const choices = shuffle(rng, [answer, ...distractors]);
   return { choices, correctIndex: choices.indexOf(answer) };
 }
 
 // values: 不正解のときに出す式(t1Formula)に入れる数値。表示のために問題文を読み直さない
-function finish(kind, variant, prompt, answer, unit, mistakes, rng, values) {
+// answerPrefix: 答えの前置き(「時速」など)。options.required: 必ず入れる誤答
+function finish(kind, variant, prompt, answer, unit, mistakes, rng, values, { answerPrefix = '', required = [] } = {}) {
   const roundedAnswer = roundNumber(answer);
   if (!Number.isInteger(roundedAnswer) || roundedAnswer <= 0) throw new Error(`整数の正解を作れませんでした: ${kind}/${variant}`);
-  const choice = makeT1Choices(roundedAnswer, mistakes, rng);
+  const choice = makeT1Choices(roundedAnswer, mistakes, rng, required);
   return {
-    kind, variant, prompt, answer: roundedAnswer, unit, values,
+    kind, variant, prompt, answer: roundedAnswer, unit, answerPrefix, values,
     ...choice,
     signature: `${kind}|${variant}|${prompt}|${roundedAnswer}`,
   };
 }
 
-function unitProblem(rng, p) {
-  const v = UNIT_VARIANTS[randInt(rng, 0, UNIT_VARIANTS.length - 1)];
-  const base = randInt(rng, p.unitValueMin, p.unitValueMax);
-  const shown = v.reverse ? base * v.factor : base;
-  const answer = v.reverse ? base : base * v.factor;
+function unitProblem(rng, p, forcedVariant = null) {
+  const v = forcedVariant
+    ? UNIT_VARIANTS.find(x => x.id === forcedVariant)
+    : UNIT_VARIANTS[randInt(rng, 0, UNIT_VARIANTS.length - 1)];
+  if (!v) throw new RangeError(`不明な単位換算です: ${forcedVariant}`);
+  // 換算前は step の倍数にして、答えを整数にする(時速は3の倍数、秒速は5の倍数など)
+  const shown = randInt(rng, p.unitValueMin, p.unitValueMax) * v.step;
+  const answer = shown * v.num / v.den;
+  const mistakes = [
+    shown, // 換算し忘れ
+    shown * v.den / v.num, // 掛けると割るを逆にする
+    ...v.confuse.map(c => shown * c), // 倍率の取り違え
+    ...v.confuse.map(c => shown / c), // 掛けると割るを逆にし、倍率も取り違える
+    answer * 100, answer / 100, answer * 10, answer / 10,
+  ].filter(value => value <= UNIT_DISTRACTOR_MAX); // すぐに誤りと分かる極端に大きな誤答は使わない
   return finish(
     'unit', v.id,
-    `${formatNumber(shown)}${v.from}は何${v.to}ですか?`,
-    answer, v.to,
-    [shown, answer * v.factor, answer * 100, answer * 1000, answer * 10, answer / 10], rng,
-    { shown, factor: v.factor, from: v.from, to: v.to, reverse: v.reverse },
+    `${v.fromPre}${formatNumber(shown)}${v.from}は${v.toPre}何${v.to}ですか?`,
+    answer, v.to, mistakes, rng,
+    { shown, num: v.num, den: v.den, from: v.from, fromPre: v.fromPre, to: v.to, toPre: v.toPre },
+    { answerPrefix: v.toPre, required: v.forgotPower ? [shown * v.forgotPower] : [] },
   );
 }
 
@@ -93,8 +162,9 @@ function speedProblem(rng, p) {
     return finish('speed', variant, `${distance}kmを時速${speed}kmで進むと何時間ですか?`, hours, '時間',
       [distance - speed, hours * 60, distance + speed, speed + hours, distance, hours * 10, hours / 10], rng, { speed, hours, distance });
   }
-  return finish('speed', variant, `${distance}kmを${hours}時間で進む速さは時速何kmですか?`, speed, 'km/h',
-    [distance - hours, speed * 60, distance + hours, speed + hours, distance, speed * 10, speed / 10], rng, { speed, hours, distance });
+  return finish('speed', variant, `${distance}kmを${hours}時間で進む速さは時速何kmですか?`, speed, 'km',
+    [distance - hours, speed * 60, distance + hours, speed + hours, distance, speed * 10, speed / 10], rng, { speed, hours, distance },
+    { answerPrefix: '時速' });
 }
 
 const lapCache = new WeakMap();
@@ -160,14 +230,38 @@ function inversePercentageProblem(rng, p) {
     [100 - percent, percent * 100, percent / 100, base - part, base * part, percent * 10, percent / 10], rng, { base, part });
 }
 
-function priceProblem(rng, p) {
-  const price = randInt(rng, p.priceMin, p.priceMax);
-  const count = randInt(rng, p.priceCountMin, p.priceCountMax);
-  const total = price * count;
-  if (rng() < 0.5) return finish('price', 'total', `単価${price}円の商品を${count}個買うと、合計は何円ですか?`, total, '円',
-    [price / count, price + count, price, total + price, total - price, total * 10, total / 10], rng, { price, count, total });
-  return finish('price', 'unit-price', `${count}個で${total}円の商品は、単価が何円ですか?`, price, '円',
-    [total * count, total - count, total, price + count, price * 10, price / 10], rng, { price, count, total });
+function priceProblem(rng, p, forcedVariant = null) {
+  const variant = forcedVariant ?? PRICE_VARIANTS[randInt(rng, 0, PRICE_VARIANTS.length - 1)];
+  if (variant === 'total' || variant === 'unit-price') {
+    const price = randInt(rng, p.priceMin, p.priceMax);
+    const count = randInt(rng, p.priceCountMin, p.priceCountMax);
+    const total = price * count;
+    if (variant === 'total') return finish('price', 'total', `単価${price}円の商品を${count}個買うと、合計は何円ですか?`, total, '円',
+      [price / count, price + count, price, total + price, total - price, total * 10, total / 10], rng, { price, count, total });
+    return finish('price', 'unit-price', `${count}個で${total}円の商品は、単価が何円ですか?`, price, '円',
+      [total * count, total - count, total, price + count, price * 10, price / 10], rng, { price, count, total });
+  }
+  if (variant === 'per-100g') {
+    // 2026-09-27 ユーザーの判断で追加: 「300gで450円の品物は、100gあたり何円ですか?」
+    const per = 100;
+    const answer = randInt(rng, p.priceMin, p.priceMax);
+    // 1000gだと「割り忘れ(合計の円)」が正解のちょうど10倍(桁ずらし)と重なるため除く
+    const counts = [];
+    for (let c = p.priceCountMin; c <= p.priceCountMax; c++) if (c * per !== 1000) counts.push(c);
+    const grams = per * (counts.length ? counts[randInt(rng, 0, counts.length - 1)] : p.priceCountMin);
+    const total = answer * grams / per;
+    return finish('price', 'per-100g', `${grams}gで${total}円の品物は、${per}gあたり何円ですか?`, answer, '円',
+      [total, total * grams / per, total / grams, grams * per / total, answer * 10, answer / 10], rng, { grams, total, per });
+  }
+  if (variant === 'per-gram-total') {
+    // 2026-09-27 ユーザーの判断で追加: 「1gあたり3円の品物を250g買うと何円ですか?」
+    const perGram = randInt(rng, Math.max(2, Math.ceil(p.priceMin / 10)), Math.max(2, Math.floor(p.priceMax / 10)));
+    const grams = 50 * randInt(rng, 2 * p.priceCountMin, 2 * p.priceCountMax);
+    const answer = perGram * grams;
+    return finish('price', 'per-gram-total', `1gあたり${perGram}円の品物を${grams}g買うと何円ですか?`, answer, '円',
+      [grams, perGram + grams, answer / 100, grams / perGram, answer * 100, answer * 10, answer / 10], rng, { perGram, grams });
+  }
+  throw new RangeError(`不明な単価の問題です: ${variant}`);
 }
 
 function averageProblem(rng, p) {
@@ -193,13 +287,14 @@ function elapsedProblem(rng, p) {
 const GENERATORS = { unit: unitProblem, speed: speedProblem, meeting: meetingProblem, catchup: catchupProblem, percentage: percentageProblem,
   inversePercentage: inversePercentageProblem, price: priceProblem, average: averageProblem, elapsed: elapsedProblem };
 
-export function generateT1Problem(rng, p, previous = null, forcedKind = null) {
+// forcedVariant: 単位換算・単価の形を指定する(単体テストで全種類を確かめるため)
+export function generateT1Problem(rng, p, previous = null, forcedKind = null, forcedVariant = null) {
   const kinds = forcedKind
     ? [forcedKind]
     : PROBLEM_KINDS.filter(kind => !previous || kind !== previous.kind || PROBLEM_KINDS.length === 1);
   const kind = kinds[randInt(rng, 0, kinds.length - 1)];
   if (!GENERATORS[kind]) throw new RangeError(`不明な問題種類です: ${kind}`);
-  return GENERATORS[kind](rng, p);
+  return GENERATORS[kind](rng, p, forcedVariant);
 }
 
 export function judgeT1(problem, choiceIndex) {
@@ -208,7 +303,12 @@ export function judgeT1(problem, choiceIndex) {
 
 // 即時判定: 不正解のときは単位つきの正解を出す
 export function t1Feedback(problem, correct) {
-  return correct ? correctFeedback() : wrongFeedback(`${problem.answer}${problem.unit}`);
+  return correct ? correctFeedback() : wrongFeedback(formatT1Answer(problem, problem.answer));
+}
+
+// 答え・選択肢の書き方(速さは「時速◯km」)
+export function formatT1Answer(problem, value) {
+  return `${problem.answerPrefix ?? ''}${value}${problem.unit}`;
 }
 
 // ---- 不正解のときに出す式 ----
@@ -218,9 +318,13 @@ const num = (n, unit = '', pre = '') => ({ n, unit, pre });
 const clock = (h, m) => ({ h, m });
 
 const FORMULA_TEMPLATES = Object.freeze({
-  unit: v => (v.reverse
-    ? [num(v.shown, v.from), '÷', num(v.factor)]
-    : [num(v.shown, v.from), '×', num(v.factor)]),
+  // 例: 3kg × 1000 / 30000m² ÷ 10000 / 時速6km × 1000 ÷ 60 / 分速100m × 60 ÷ 1000
+  unit: v => {
+    const from = num(v.shown, v.from, v.fromPre ?? '');
+    if (v.den === 1) return [from, '×', num(v.num)];
+    if (v.num === 1) return [from, '÷', num(v.den)];
+    return [from, '×', num(v.num), '÷', num(v.den)];
+  },
   speed: (v, variant) => {
     if (variant === 'distance') return [num(v.speed, 'km', '時速'), '×', num(v.hours, '時間')];
     if (variant === 'time') return [num(v.distance, 'km'), '÷', num(v.speed, 'km', '時速')];
@@ -230,9 +334,12 @@ const FORMULA_TEMPLATES = Object.freeze({
   catchup: v => [num(v.length, 'km'), '÷', '(', num(v.a, 'km', '時速'), '−', num(v.b, 'km', '時速'), ')', '×', num(60)],
   percentage: v => [num(v.base), '×', num(v.percent), '÷', num(100)],
   inversePercentage: v => [num(v.part), '÷', num(v.base), '×', num(100)],
-  price: (v, variant) => (variant === 'total'
-    ? [num(v.price, '円'), '×', num(v.count, '個')]
-    : [num(v.total, '円'), '÷', num(v.count, '個')]),
+  price: (v, variant) => {
+    if (variant === 'total') return [num(v.price, '円'), '×', num(v.count, '個')];
+    if (variant === 'unit-price') return [num(v.total, '円'), '÷', num(v.count, '個')];
+    if (variant === 'per-100g') return [num(v.total, '円'), '÷', num(v.grams, 'g'), '×', num(v.per)];
+    return [num(v.perGram, '円'), '×', num(v.grams, 'g')];
+  },
   average: v => ['(', num(v.a), '+', num(v.b), '+', num(v.c), ')', '÷', num(3)],
   elapsed: v => [clock(v.h2, v.m2), '−', clock(v.h1, v.m1)],
 });
@@ -261,7 +368,7 @@ export function t1Formula(problem) {
   if (!template || !problem.values) throw new RangeError(`式を作れない問題です: ${problem.kind}`);
   const tokens = template(problem.values, problem.variant);
   return {
-    text: `${joinTokens(tokens.map(tokenText))} = ${problem.answer}${problem.unit}`,
+    text: `${joinTokens(tokens.map(tokenText))} = ${formatT1Answer(problem, problem.answer)}`,
     expression: joinTokens(tokens.map(tokenExpression)),
   };
 }

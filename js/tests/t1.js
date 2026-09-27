@@ -1,7 +1,7 @@
 // テスト1 計算: 4択表示、回答、時間管理、保存。
 
 import {
-  generateT1Problem, judgeT1, t1Feedback, t1Formula, createT1Tally, recordT1Answer, buildT1Record,
+  generateT1Problem, judgeT1, t1Feedback, t1Formula, formatT1Answer, createT1Tally, recordT1Answer, buildT1Record,
 } from '../logic/t1.js';
 import { createFeedbackSlot, feedbackSlotHtml, instantFeedbackBadge, recordSettingsWithFeedback } from '../core/feedback.js';
 import { createRng, randomSeed } from '../core/rng.js';
@@ -10,10 +10,6 @@ import { appendRecord } from '../core/storage.js';
 import { renderResult } from '../core/result.js';
 import { findTest, formatDetail } from '../core/catalog.js';
 import { mountCalculator } from '../calculator.js';
-
-function formatChoice(value, unit) {
-  return `${value}${unit}`;
-}
 
 export function mount(root, ctx) {
   const params = ctx.settings.t1;
@@ -87,7 +83,7 @@ export function mount(root, ctx) {
       $('kind').textContent = kindLabels[problem.kind];
       $('question').textContent = problem.prompt;
       choiceButtons.forEach((button, index) => {
-        button.textContent = formatChoice(problem.choices[index], problem.unit);
+        button.textContent = formatT1Answer(problem, problem.choices[index]);
       });
     }
 
