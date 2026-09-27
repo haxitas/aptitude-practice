@@ -58,6 +58,9 @@ export const DEFAULTS = Object.freeze({
     clockStartHourMax: 18,
     elapsedMinutesMin: 15,
     elapsedMinutesMax: 180,
+    // 単位換算の選ばれやすさ(他の種類は1)。同じ種類を続けて出さない決まりの下で、
+    // 7 なら単位換算が長い目で見て1/3(以前の1/9の3倍)になる。2026-09-28 ユーザーの判断で追加
+    unitKindWeight: 7,
   }),
   t2: Object.freeze({
     durationSec: 120, // 2026-09-22 ユーザーの判断で 180 → 120

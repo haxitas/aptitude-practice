@@ -44,6 +44,7 @@ export const SETTING_FIELDS = Object.freeze({
     number('clockStartHourMax', '経過時間の開始時(最大)', 0, 20, { integer: true }),
     number('elapsedMinutesMin', '経過時間の最小値', 1, 180, { integer: true, unit: '分' }),
     number('elapsedMinutesMax', '経過時間の最大値', 1, 180, { integer: true, unit: '分' }),
+    number('unitKindWeight', '単位換算の出やすさ', 1, 50, { integer: true, hint: '他の種類を1とした重み。7で全体の約1/3' }),
   ]),
   t2: Object.freeze([
     duration(),

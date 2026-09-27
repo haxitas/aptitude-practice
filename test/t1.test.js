@@ -64,13 +64,29 @@ test('T1 の既定値は承認済みの数値', () => {
     averageMin: 2, averageMax: 50,
     clockStartHourMin: 6, clockStartHourMax: 18,
     elapsedMinutesMin: 15, elapsedMinutesMax: 180,
+    unitKindWeight: 7,
   });
 });
 
-test('問題は均等に選ぶ9種類', () => {
+test('問題は9種類。単位換算は他の3倍の約1/3、他の8種類はそれぞれ約1/12(2026-09-28 ユーザーの判断で変更)', () => {
   assert.deepEqual(PROBLEM_KINDS, ['unit', 'speed', 'meeting', 'catchup', 'percentage', 'inversePercentage', 'price', 'average', 'elapsed']);
-  const seen = PROBLEM_KINDS.map((_, i) => generateT1Problem(() => (i + 0.5) / 9, P).kind);
-  assert.deepEqual(seen, PROBLEM_KINDS);
+  // 本番と同じく、直前の問題を渡しながら続けて作る
+  const rng = createRng(2026);
+  const counts = Object.fromEntries(PROBLEM_KINDS.map(k => [k, 0]));
+  const total = 45000;
+  let previous = null;
+  for (let i = 0; i < total; i++) {
+    const q = generateT1Problem(rng, P, previous);
+    if (previous) assert.notEqual(q.kind, previous.kind, '同じ種類は続けて出さない');
+    counts[q.kind]++;
+    previous = q;
+  }
+  const unitShare = counts.unit / total;
+  assert.ok(unitShare > 0.32 && unitShare < 0.347, `単位換算 ${unitShare}`);
+  for (const kind of PROBLEM_KINDS.filter(k => k !== 'unit')) {
+    const share = counts[kind] / total;
+    assert.ok(share > 0.075 && share < 0.092, `${kind} ${share}`);
+  }
 });
 
 test('2000シード: 小数は第1位まで・20%以下・9種類の正解が式に一致', () => {

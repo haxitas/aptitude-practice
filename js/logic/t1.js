@@ -292,7 +292,12 @@ export function generateT1Problem(rng, p, previous = null, forcedKind = null, fo
   const kinds = forcedKind
     ? [forcedKind]
     : PROBLEM_KINDS.filter(kind => !previous || kind !== previous.kind || PROBLEM_KINDS.length === 1);
-  const kind = kinds[randInt(rng, 0, kinds.length - 1)];
+  // 単位換算だけ unitKindWeight の重みで選びやすくする(他の種類は1)
+  const weights = kinds.map(kind => (kind === 'unit' ? p.unitKindWeight : 1));
+  let r = rng() * weights.reduce((sum, w) => sum + w, 0);
+  let index = 0;
+  while (index < kinds.length - 1 && r >= weights[index]) r -= weights[index++];
+  const kind = kinds[index];
   if (!GENERATORS[kind]) throw new RangeError(`不明な問題種類です: ${kind}`);
   return GENERATORS[kind](rng, p, forcedVariant);
 }
