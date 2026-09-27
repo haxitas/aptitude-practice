@@ -171,49 +171,6 @@ export function isObstacleSafe(obstacle, position, p) {
   throw new RangeError(`不明な障害物です: ${obstacle.type}`);
 }
 
-export function safeDirection(obstacle, position, p) {
-  if (obstacle.type === 'half') {
-    if (obstacle.blockedSide === 'up') return { x: 0, y: -1 };
-    if (obstacle.blockedSide === 'down') return { x: 0, y: 1 };
-    if (obstacle.blockedSide === 'left') return { x: 1, y: 0 };
-    return { x: -1, y: 0 };
-  }
-  if (obstacle.type === 'sector') {
-    const rad = obstacle.openCenterDeg * Math.PI / 180;
-    return { x: Math.cos(rad), y: Math.sin(rad) };
-  }
-  if (obstacle.type === 'holes') {
-    const centers = holeCenters(obstacle, p);
-    let nearest = centers[0];
-    let best = (position.x - nearest.x) ** 2 + (position.y - nearest.y) ** 2;
-    for (let i = 1; i < centers.length; i++) {
-      const distance = (position.x - centers[i].x) ** 2 + (position.y - centers[i].y) ** 2;
-      if (distance < best) {
-        best = distance;
-        nearest = centers[i];
-      }
-    }
-    const dx = nearest.x - position.x;
-    const dy = nearest.y - position.y;
-    const length = Math.hypot(dx, dy);
-    if (length > 0) return { x: dx / length, y: dy / length };
-    return normalizeInput(nearest);
-  }
-  const angle = toPolar(position).angleDeg;
-  let center = normalizeAngleDeg(obstacle.rotationDeg);
-  let best = angularDistanceDeg(angle, center);
-  for (let i = 1; i < (obstacle.openingCount ?? 3); i++) {
-    const candidate = normalizeAngleDeg(obstacle.rotationDeg + i * 360 / (obstacle.openingCount ?? 3));
-    const distance = angularDistanceDeg(angle, candidate);
-    if (distance < best) {
-      best = distance;
-      center = candidate;
-    }
-  }
-  const rad = center * Math.PI / 180;
-  return { x: Math.cos(rad), y: Math.sin(rad) };
-}
-
 export function crossedAircraftPlane(previousZ, nextZ, collisionZ) {
   return previousZ > collisionZ && nextZ <= collisionZ;
 }

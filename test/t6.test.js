@@ -10,7 +10,7 @@ import {
   createObstacle, createInitialObstacles, advanceObstacle, recycleObstacles, drawableObstacles,
   crossedAircraftPlane, isHalfOpeningSafe, isBladeOpeningSafe, isObstacleSafe,
   isSectorOpeningSafe, holeCenters, isHoleOpeningSafe,
-  safeDirection, createT6State, stepT6State, summarizeT6, buildT6Record,
+  createT6State, stepT6State, summarizeT6, buildT6Record,
 } from '../js/logic/t6.js';
 
 const P = DEFAULTS.t6;
@@ -324,18 +324,6 @@ test('障害物が機体面をまたいだ瞬間だけ判定する', () => {
   assert.equal(crossedAircraftPlane(1.1, 0.9, P.collisionZ), true);
   assert.equal(crossedAircraftPlane(1.1, 1.01, P.collisionZ), false);
   assert.equal(crossedAircraftPlane(1, 0.9, P.collisionZ), false);
-});
-
-test('衝突時の安全方向を返す', () => {
-  assert.deepEqual(safeDirection({ type: 'half', blockedSide: 'up' }, { x: 0, y: 0 }, P), { x: 0, y: -1 });
-  const d = safeDirection({ type: 'blades', rotationDeg: 0 }, { x: 0, y: 0 }, P);
-  approx(Math.hypot(d.x, d.y), 1);
-  const sector = safeDirection({ type: 'sector', openCenterDeg: 135 }, { x: 0, y: 0 }, P);
-  approx(sector.x, -Math.SQRT1_2);
-  approx(sector.y, Math.SQRT1_2);
-  const holes = safeDirection({ type: 'holes', openSlots: [0, 2, 3] }, { x: 0.2, y: 0 }, P);
-  approx(holes.x, 1);
-  approx(holes.y, 0);
 });
 
 test('衝突がなければ速度は baseSpeed と同じ', () => {
