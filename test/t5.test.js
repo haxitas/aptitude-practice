@@ -5,17 +5,10 @@ import { DEFAULTS } from '../js/core/settings.js';
 import {
   generateT5Problem, reshuffleT5Dots, shuffleIndexAt, shouldTimeoutT5,
   createT5Tally, recordT5Answer, recordT5Unanswered, summarizeT5, buildT5Record,
-  formatT5PreviousAnswer,
 } from '../js/logic/t5.js';
-import { t5PreviousAnswerText } from '../js/logic/t5.js';
+import { t5Feedback } from '../js/logic/t5.js';
 
 const P = DEFAULTS.t5;
-
-test('前問表示は回答した場合だけ作り、正誤を区別する', () => {
-  assert.equal(formatT5PreviousAnswer(5, 5), '前の問題の正解: 5個 / あなたの答え: 5個 ○');
-  assert.equal(formatT5PreviousAnswer(5, 4), '前の問題の正解: 5個 / あなたの答え: 4個 ×');
-  assert.equal(formatT5PreviousAnswer(5, null), null);
-});
 
 test('T5 の既定値は承認済みの数値', () => {
   assert.deepEqual(P, {
@@ -168,9 +161,7 @@ test('記録はSPEC §4の形で、その回の設定を複製する', () => {
 
 // ---- 即時判定 ----
 
-test('即時判定: 前の問題の正解はオンのときだけ、今までと同じ形で出す', () => {
-  assert.equal(t5PreviousAnswerText(7, 7, true), '前の問題の正解: 7個 / あなたの答え: 7個 ○');
-  assert.equal(t5PreviousAnswerText(7, 8, true), '前の問題の正解: 7個 / あなたの答え: 8個 ×');
-  assert.equal(t5PreviousAnswerText(7, 8, false), null);
-  assert.equal(t5PreviousAnswerText(7, null, true), null);
+test('即時判定: 正解は「○ 正解 8個」、不正解は正解とあなたの答えを出す', () => {
+  assert.deepEqual(t5Feedback(8, 8), { kind: 'correct', text: '○ 正解 8個' });
+  assert.deepEqual(t5Feedback(8, 7), { kind: 'wrong', text: '× 正解は 8個 / あなたの答え 7個' });
 });

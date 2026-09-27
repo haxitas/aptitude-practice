@@ -6,7 +6,7 @@ import {
   PROBLEM_KINDS, lapMinutes, makeT1Choices, generateT1Problem, judgeT1,
   createT1Tally, recordT1Answer, summarizeT1, buildT1Record,
 } from '../js/logic/t1.js';
-import { t1Feedback } from '../js/logic/t1.js';
+import { t1Feedback, t1Formula } from '../js/logic/t1.js';
 
 const P = DEFAULTS.t1;
 
@@ -190,4 +190,48 @@ test('即時判定: 正解は「○ 正解」、不正解は単位つきの正�
   assert.deepEqual(t1Feedback(problem, true), { kind: 'correct', text: '○ 正解' });
   assert.deepEqual(t1Feedback(problem, false), { kind: 'wrong', text: '× 正解は 36分' });
   assert.deepEqual(t1Feedback({ ...problem, answer: 120, unit: '' }, false), { kind: 'wrong', text: '× 正解は 120' });
+});
+
+// ---- 不正解のときに出す式 ----
+
+const evaluate = expression => Function(`"use strict"; return (${expression});`)();
+
+test('式: 9種類すべてで式を作り、式を計算すると正解と一致する(2000シード)', () => {
+  const kinds = new Set();
+  const speedVariants = new Set();
+  for (let seed = 1; seed <= 2000; seed++) {
+    const kind = PROBLEM_KINDS[seed % PROBLEM_KINDS.length];
+    const problem = generateT1Problem(createRng(seed), P, null, kind);
+    const formula = t1Formula(problem);
+    assert.ok(formula.text.endsWith(` = ${problem.answer}${problem.unit}`), `${kind}: ${formula.text}`);
+    assert.ok(Math.abs(evaluate(formula.expression) - problem.answer) < 1e-9, `${kind}: ${formula.expression} != ${problem.answer}`);
+    kinds.add(problem.kind);
+    if (problem.kind === 'speed') speedVariants.add(problem.variant);
+  }
+  assert.deepEqual([...kinds].sort(), [...PROBLEM_KINDS].sort());
+  assert.deepEqual([...speedVariants].sort(), ['distance', 'speed', 'time']);
+});
+
+test('式: SPEC の例 4.2km・時速4km・時速3km → 36分', () => {
+  const problem = { kind: 'meeting', variant: 'opposite', answer: 36, unit: '分', values: { length: 4.2, a: 4, b: 3 } };
+  assert.deepEqual(t1Formula(problem), {
+    text: '4.2km ÷ (時速4km + 時速3km) × 60 = 36分',
+    expression: '4.2 / (4 + 3) * 60',
+  });
+});
+
+test('式: 種類ごとのひな形に、その問題の数値が入る', () => {
+  const text = (kind, variant, answer, unit, values) => t1Formula({ kind, variant, answer, unit, values }).text;
+  assert.equal(text('catchup', 'same-direction', 30, '分', { length: 1.5, a: 5, b: 2 }), '1.5km ÷ (時速5km − 時速2km) × 60 = 30分');
+  assert.equal(text('percentage', 'basic', 520, '', { base: 1300, percent: 40 }), '1300 × 40 ÷ 100 = 520');
+  assert.equal(text('inversePercentage', 'basic', 25, '%', { base: 300, part: 75 }), '75 ÷ 300 × 100 = 25%');
+  assert.equal(text('price', 'total', 119, '円', { price: 17, count: 7, total: 119 }), '17円 × 7個 = 119円');
+  assert.equal(text('price', 'unit-price', 17, '円', { price: 17, count: 7, total: 119 }), '119円 ÷ 7個 = 17円');
+  assert.equal(text('average', 'three', 12, '', { a: 10, b: 12, c: 14 }), '(10 + 12 + 14) ÷ 3 = 12');
+  assert.equal(text('elapsed', 'same-day', 105, '分', { h1: 9, m1: 40, h2: 11, m2: 25 }), '11時25分 − 9時40分 = 105分');
+  assert.equal(text('unit', 'm2-to-ha', 3, 'ha', { shown: 30000, factor: 10000, from: 'm²', to: 'ha', reverse: true }), '30000m² ÷ 10000 = 3ha');
+  assert.equal(text('unit', 'ha-to-m2', 30000, 'm²', { shown: 3, factor: 10000, from: 'ha', to: 'm²', reverse: false }), '3ha × 10000 = 30000m²');
+  assert.equal(text('speed', 'distance', 8, 'km', { speed: 2, hours: 4, distance: 8 }), '時速2km × 4時間 = 8km');
+  assert.equal(text('speed', 'time', 4, '時間', { speed: 2, hours: 4, distance: 8 }), '8km ÷ 時速2km = 4時間');
+  assert.equal(text('speed', 'speed', 2, 'km/h', { speed: 2, hours: 4, distance: 8 }), '8km ÷ 4時間 = 2km/h');
 });

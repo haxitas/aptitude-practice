@@ -141,14 +141,11 @@ export function shouldTimeoutT5(nowMs, questionStartMs, p, overallDeadlineMs) {
   return nowMs >= questionDeadlineMs && questionDeadlineMs < overallDeadlineMs;
 }
 
-export function formatT5PreviousAnswer(correctAnswer, answer) {
-  if (answer === null) return null;
-  return `前の問題の正解: ${correctAnswer}個 / あなたの答え: ${answer}個 ${answer === correctAnswer ? '○' : '×'}`;
-}
-
-// 前の問題の正解は、即時判定がオンのときだけ出す(文言は formatT5PreviousAnswer のまま)
-export function t5PreviousAnswerText(correctAnswer, answer, instantFeedback) {
-  return instantFeedback ? formatT5PreviousAnswer(correctAnswer, answer) : null;
+// 即時判定: 正解は「○ 正解 8個」、不正解は正解とあなたの答え
+export function t5Feedback(correctAnswer, answer) {
+  return answer === correctAnswer
+    ? { kind: 'correct', text: `○ 正解 ${correctAnswer}個` }
+    : { kind: 'wrong', text: `× 正解は ${correctAnswer}個 / あなたの答え ${answer}個` };
 }
 
 export function createT5Tally() {

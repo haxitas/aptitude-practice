@@ -481,7 +481,6 @@ h1 { font-size: 1.6rem; margin: 0 0 16px; }
   cursor: pointer; transition: opacity 80ms linear;
 }
 .t5-number.is-pressed { opacity: 0.35; }
-.t5-previous { margin: 0; text-align: center; color: var(--muted); font-size: 0.85rem; }
 @media (max-width: 700px) {
   .t5-buttons { grid-template-columns: repeat(6, 1fr); }
   .t5-number { min-height: var(--tap); }
@@ -591,3 +590,7 @@ h1 { font-size: 1.6rem; margin: 0 0 16px; }
   display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 0.8rem; font-weight: 800;
   background: var(--info-bg); color: var(--info-text); white-space: nowrap;
 }
+.feedback-formula { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; text-align: center; font-size: clamp(0.95rem, 2.2vw, 1.15rem); }
+.t5-feedback { min-height: 2.2rem; }
+/* テスト1は不正解で式の行が増えても選択肢が動かないよう、2行分の高さを確保する */
+.t1-card .feedback-slot { min-height: 4.6rem; justify-content: flex-start; }

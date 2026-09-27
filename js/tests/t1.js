@@ -1,7 +1,7 @@
 // テスト1 計算: 4択表示、回答、時間管理、保存。
 
 import {
-  generateT1Problem, judgeT1, t1Feedback, createT1Tally, recordT1Answer, buildT1Record,
+  generateT1Problem, judgeT1, t1Feedback, t1Formula, createT1Tally, recordT1Answer, buildT1Record,
 } from '../logic/t1.js';
 import { createFeedbackSlot, feedbackSlotHtml, instantFeedbackBadge, recordSettingsWithFeedback } from '../core/feedback.js';
 import { createRng, randomSeed } from '../core/rng.js';
@@ -95,7 +95,16 @@ export function mount(root, ctx) {
       const button = e.currentTarget;
       const correct = judgeT1(problem, Number(button.dataset.index));
       tally = recordT1Answer(tally, correct);
-      feedback?.show(t1Feedback(problem, correct), e.timeStamp);
+      if (feedback) {
+        // 不正解のときだけ式を添え、式を読めるよう次に答えるまで残す
+        let formula = null;
+        if (!correct) {
+          formula = document.createElement('p');
+          formula.className = 'feedback-formula';
+          formula.textContent = t1Formula(problem).text;
+        }
+        feedback.show(t1Feedback(problem, correct), e.timeStamp, formula, { sticky: !correct });
+      }
       button.classList.add('is-pressed');
       pale.set(button, e.timeStamp);
       problem = generateT1Problem(rng, params, problem);

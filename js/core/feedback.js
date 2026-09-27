@@ -38,23 +38,26 @@ export function feedbackSlotHtml(ref = 'feedback', extraClass = '') {
 
 export function createFeedbackSlot(slot, { durationMs, sticky = false }) {
   let shownAt = null;
+  let currentSticky = sticky;
   function hide() {
     shownAt = null;
     slot.textContent = '';
     slot.classList?.remove('is-visible');
   }
   return {
-    // extra: 文言の下に並べる要素(テスト4の3×3のイラスト)
-    show(message, ts, extra = null) {
+    // extra: 文言の下に並べる要素(テスト4の3×3のイラスト、テスト1の式)
+    // options.sticky: この表示だけ次の判定まで残す(テスト1の不正解)
+    show(message, ts, extra = null, options = {}) {
       const line = document.createElement('p');
       line.className = `feedback feedback-${message.kind}`;
       line.textContent = message.text;
       slot.replaceChildren(line, ...(extra ? [extra] : []));
       slot.classList?.add('is-visible');
       shownAt = ts;
+      currentSticky = options.sticky ?? sticky;
     },
     tick(ts) {
-      if (feedbackExpired(shownAt, ts, durationMs, sticky)) hide();
+      if (feedbackExpired(shownAt, ts, durationMs, currentSticky)) hide();
     },
     hide,
   };
