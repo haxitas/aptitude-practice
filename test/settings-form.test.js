@@ -63,11 +63,18 @@ test('T5 は個数の順序と点の大きさ・最小間隔の組み合わせ�
   const order = validateTestSettings('t5', raw('t5', { minDots: 10, maxDots: 5 }), DEFAULTS.t5);
   assert.equal(order.ok, false);
   assert.match(order.errors.maxDots, /最小/);
-  const overlap = validateTestSettings('t5', raw('t5', { dotRadiusRatio: 0.08, dotMinDistanceRatio: 0.1 }), DEFAULTS.t5);
+  // 2026-09-30 本番に合わせて変更: 点どうしは少し重なってよい(最小間隔は点の直径より小さくてよい)。半径より小さいのは不可
+  assert.equal(validateTestSettings('t5', raw('t5', {}), DEFAULTS.t5).ok, true);
+  const slightOverlap = validateTestSettings('t5', raw('t5', { dotRadiusRatio: 0.045, dotMinDistanceRatio: 0.07 }), DEFAULTS.t5);
+  assert.equal(slightOverlap.ok, true);
+  const overlap = validateTestSettings('t5', raw('t5', { dotRadiusRatio: 0.08, dotMinDistanceRatio: 0.05 }), DEFAULTS.t5);
   assert.equal(overlap.ok, false);
-  assert.match(overlap.errors.dotMinDistanceRatio, /直径/);
-  assert.equal(canPlaceT5Fallback(13, { ...DEFAULTS.t5, dotMinDistanceRatio: 0.12 }), true);
-  assert.equal(canPlaceT5Fallback(13, { ...DEFAULTS.t5, dotMinDistanceRatio: 0.6 }), false);
+  assert.match(overlap.errors.dotMinDistanceRatio, /半径/);
+  assert.equal(canPlaceT5Fallback(14, { ...DEFAULTS.t5 }), true);
+  assert.equal(canPlaceT5Fallback(14, { ...DEFAULTS.t5, dotMinDistanceRatio: 0.6 }), false);
+  const keys = SETTING_FIELDS.t5.map(f => f.key);
+  assert.ok(keys.includes('fieldScale'));
+  assert.equal(validateTestSettings('t5', raw('t5', { fieldScale: 1.5 }), DEFAULTS.t5).ok, false);
 });
 
 test('T6 は速度と小穴の個数・重なり・範囲を検証する', () => {

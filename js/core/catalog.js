@@ -57,6 +57,7 @@ export const TESTS = Object.freeze([
       { key: 'answered', label: '回答' },
       { key: 'unanswered', label: '未回答' },
       { key: 'meanError', label: '平均の誤差' },
+      { key: 'maxLevel', label: '到達した最大の数' },
     ],
   },
   {

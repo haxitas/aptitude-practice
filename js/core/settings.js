@@ -110,13 +110,18 @@ export const DEFAULTS = Object.freeze({
   }),
   t5: Object.freeze({
     durationSec: 180,
+    // 2026-09-30 本番に合わせて変更: 点の数は段階(最初は minDots、正解で+1、続けて不正解で−1)の上下 levelSpread から選ぶ
     minDots: 3,
-    maxDots: 13,
-    shuffleIntervalMs: 1000,
-    dotMoveMs: 400,
+    maxDots: 14,
+    levelSpread: 3,
+    levelDownWrongStreak: 2, // この回数続けて不正解なら段階を1つ下げる
+    choiceCount: 5, // 回答の選択肢(連続した数)の個数
+    shuffleIntervalMs: 850,
+    dotMoveMs: 600,
     questionLimitSec: 0, // 0 は1問の制限時間なし
-    dotRadiusRatio: 0.025,
-    dotMinDistanceRatio: 0.12,
+    fieldScale: 0.85, // 全体の円の大きさ(以前の大きさに対する倍率)
+    dotRadiusRatio: 0.045,
+    dotMinDistanceRatio: 0.07, // 点の直径より少し小さい。点どうしは少し重なってよい
     placementAttemptLimit: 200,
     layoutRestartLimit: 20,
     answerFeedbackMs: 300,

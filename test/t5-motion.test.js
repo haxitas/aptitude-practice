@@ -4,17 +4,17 @@ import { pairDotPositions, interpolateDotPositions, generateDotPositions, distan
 import { DEFAULTS } from '../js/core/settings.js';
 import { createRng } from '../js/core/rng.js';
 
-test('点のスライドの既定値は400ms', () => assert.equal(DEFAULTS.t5.dotMoveMs, 400));
+test('点のスライドの既定値は600ms(2026-09-30 本番に合わせて変更)', () => assert.equal(DEFAULTS.t5.dotMoveMs, 600));
 
 test('対応は近い未使用点を選ぶ1対1・同値は添字順・入力を変えない', () => {
   for (let seed=1; seed<=100; seed++) {
     const rng = createRng(seed);
-    const old = generateDotPositions(rng, 13, DEFAULTS.t5).dots;
-    const next = generateDotPositions(rng, 13, DEFAULTS.t5).dots;
+    const old = generateDotPositions(rng, 14, DEFAULTS.t5).dots;
+    const next = generateDotPositions(rng, 14, DEFAULTS.t5).dots;
     const copy = JSON.stringify([old,next]);
     const pairs = pairDotPositions(old, next);
-    assert.equal(new Set(pairs.map(p=>p.fromIndex)).size,13);
-    assert.equal(new Set(pairs.map(p=>p.toIndex)).size,13);
+    assert.equal(new Set(pairs.map(p=>p.fromIndex)).size,14);
+    assert.equal(new Set(pairs.map(p=>p.toIndex)).size,14);
     const used = new Set();
     pairs.forEach((p,i) => {
       assert.equal(p.fromIndex,i);

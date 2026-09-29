@@ -1,9 +1,10 @@
-// テスト5 点の数: Canvas描画、1000msごとの再配置、回答と時間切れ、保存。
+// テスト4 点の数(内部 id t5): Canvas描画、shuffleIntervalMs ごとの再配置、回答と時間切れ、保存。
+// 2026-09-30 本番に合わせて変更: 点の数は段階で決め(js/logic/t5.js)、答えは連続した5つの数から選ぶ。
 
 import {
   generateT5Problem, reshuffleT5Dots, shuffleIndexAt, shouldTimeoutT5,
   pairDotPositions, interpolateDotPositions,
-  t5Feedback,
+  t5Feedback, createT5Level, nextT5Level,
   createT5Tally, recordT5Answer, recordT5Unanswered, buildT5Record,
 } from '../logic/t5.js';
 import { createFeedbackSlot, feedbackSlotHtml } from '../core/feedback.js';
@@ -23,7 +24,7 @@ function drawDots(canvas, problem, p) {
   const ctx = canvas.getContext('2d');
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, width, height);
-  const radius = Math.max(1, Math.min(width, height) * 0.44);
+  const radius = Math.max(1, Math.min(width, height) * 0.44 * p.fieldScale);
   const cx = width / 2;
   const cy = height / 2;
   ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--surface');
@@ -59,7 +60,7 @@ export function mount(root, ctx) {
     root.innerHTML = `
       <section class="screen">
         <h1 data-ref="title"></h1>
-        <p>円の中の点を数え、3〜13の数字で答えます。点の数は同じまま、開始直後から位置が1秒ごとに変わります。</p>
+        <p>円の中の点を数え、下の<span data-ref="choiceCount"></span>つの数から答えます。1問の中では点の数は同じまま、開始直後から位置が約<span data-ref="interval"></span>秒ごとに変わります。</p>
         <p><span data-ref="questionLimit"></span> 全体は <span data-ref="duration"></span>です。</p>
         <div class="actions">
           <button class="btn btn-primary btn-large" type="button" data-ref="start">開始</button>
@@ -68,6 +69,8 @@ export function mount(root, ctx) {
       </section>`;
     const $ = name => root.querySelector(`[data-ref="${name}"]`);
     $('title').textContent = meta.name;
+    $('choiceCount').textContent = String(params.choiceCount);
+    $('interval').textContent = String(Math.round(params.shuffleIntervalMs / 100) / 10);
     $('questionLimit').textContent = params.questionLimitSec === 0
       ? '1問の時間制限はなく、答えるまで次に進みません。'
       : `1問は${params.questionLimitSec}秒で、過ぎると未回答で次へ進みます。`;
@@ -79,7 +82,8 @@ export function mount(root, ctx) {
   function startPlay() {
     setPhase(null);
     const rng = createRng(randomSeed());
-    let problem = generateT5Problem(rng, params);
+    let level = createT5Level(params);
+    let problem = generateT5Problem(rng, params, null, level.level);
     let tally = createT5Tally();
     let questionNumber = 1;
     let questionStartMs = 0;
@@ -104,15 +108,22 @@ export function mount(root, ctx) {
     const canvas = $('canvas');
     // テスト5の判定は、時間制限なしで数える間に見返せるよう次に答えるまで残す
     const feedback = createFeedbackSlot($('feedback'), { durationMs: common.feedbackMs, sticky: true });
-    for (let n = params.minDots; n <= params.maxDots; n++) {
+    // 選択肢のボタンは choiceCount 個。数字は問題ごとに書き換える
+    for (let i = 0; i < params.choiceCount; i++) {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 't5-number';
-      button.dataset.answer = String(n);
-      button.textContent = String(n);
       $('buttons').append(button);
     }
-    const answerButtons = [...root.querySelectorAll('[data-answer]')];
+    $('buttons').style.gridTemplateColumns = `repeat(${params.choiceCount}, 1fr)`;
+    const answerButtons = [...$('buttons').children];
+
+    function showChoices() {
+      answerButtons.forEach((button, i) => {
+        button.dataset.answer = String(problem.choices[i]);
+        button.textContent = String(problem.choices[i]);
+      });
+    }
 
     function draw() {
       $('question').textContent = `第${questionNumber}問`;
@@ -124,9 +135,11 @@ export function mount(root, ctx) {
     }
 
     function nextQuestion(elapsed, answer) {
-      // 即時判定がオンのときだけ、答えた問題の正誤を出す(未回答では出さない)
-      if (answer !== null) feedback?.show(t5Feedback(problem.count, answer), performance.now());
-      problem = generateT5Problem(rng, params, problem);
+      // 答えた問題の正誤を出す(未回答では出さない)。段階は正解で+1、続けて不正解で−1(未回答は不正解と同じ)
+      if (answer !== null) feedback.show(t5Feedback(problem.count, answer), performance.now());
+      level = nextT5Level(level, answer === problem.count, params);
+      problem = generateT5Problem(rng, params, problem, level.level);
+      showChoices();
       movement = null;
       questionNumber++;
       questionStartMs = elapsed;
@@ -155,6 +168,7 @@ export function mount(root, ctx) {
 
     function onResize() { draw(); }
 
+    showChoices();
     answerButtons.forEach(b => b.addEventListener('click', onAnswer));
     $('quit').addEventListener('click', () => { setPhase(null); ctx.navigate('#/'); });
     document.addEventListener('visibilitychange', onVisibility);
@@ -194,7 +208,7 @@ export function mount(root, ctx) {
         }
       },
       onEnd() {
-        const record = buildT5Record({ date: new Date().toISOString(), tally, settings: params });
+        const record = buildT5Record({ date: new Date().toISOString(), tally, level, settings: params });
         const saveResult = appendRecord(ctx.store, record);
         setPhase(null);
         renderResult(root, {

@@ -78,11 +78,12 @@ export const SETTING_FIELDS = Object.freeze({
   ]),
   t5: Object.freeze([
     duration(),
-    number('minDots', '点の最小個数', 1, 13, { integer: true, unit: '個' }),
-    number('maxDots', '点の最大個数', 1, 13, { integer: true, unit: '個' }),
+    number('minDots', '点の最小個数', 1, 20, { integer: true, unit: '個', hint: '最初の問題の個数' }),
+    number('maxDots', '点の最大個数', 1, 20, { integer: true, unit: '個' }),
     number('shuffleIntervalMs', '位置の切り替え間隔', 50, 10000, { integer: true, unit: 'ms' }),
     number('dotMoveMs', '点のスライド時間', 0, 10000, { integer: true, unit: 'ms' }),
     number('questionLimitSec', '1問の制限時間', 0, 300, { integer: true, unit: '秒', hint: '0は時間制限なし' }),
+    number('fieldScale', '円の大きさ', 0.3, 1, { step: 0.05, hint: '1で以前の大きさ' }),
     number('dotRadiusRatio', '点の半径', 0.005, 0.1, { step: 0.005 }),
     number('dotMinDistanceRatio', '点の最小間隔', 0.01, 0.5, { step: 0.01 }),
   ]),
@@ -179,7 +180,8 @@ export function validateTestSettings(testId, raw, defaults) {
     if (value.calcMaxTwoDigitTerms > defaults.calcTermCount) errors.calcMaxTwoDigitTerms = `計算の項数${defaults.calcTermCount}以下にしてください`;
   } else if (testId === 't5') {
     minMax(errors, value, 'minDots', 'maxDots');
-    if (value.dotMinDistanceRatio < value.dotRadiusRatio * 2) errors.dotMinDistanceRatio = '点の直径以上にしてください';
+    // 点どうしは少し重なってよい(2026-09-30 本番に合わせて変更)。半径より近いと重なりすぎるので不可
+    if (value.dotMinDistanceRatio < value.dotRadiusRatio) errors.dotMinDistanceRatio = '点の半径以上にしてください';
     if (!Object.keys(errors).length) {
       if (!canPlaceT5Fallback(value.maxDots, { ...defaults, ...value })) {
         errors.maxDots = 'この点の大きさと最小間隔では、最大個数を円内に配置できません';

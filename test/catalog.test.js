@@ -18,3 +18,8 @@ test('内部の id はそのまま使い、番号だけが変わる', () => {
   assert.equal(findTest('t5').number, 4);
   assert.equal(findTest('t9'), null);
 });
+
+test('点の数(t5)の内訳に「到達した最大の数」がある(2026-09-30 本番に合わせて追加)', () => {
+  const item = findTest('t5').details.find(d => d.key === 'maxLevel');
+  assert.equal(item?.label, '到達した最大の数');
+});
