@@ -1,9 +1,10 @@
 // テスト6 トンネル飛行: Canvas描画、Pointer Events、開始・中断・結果画面。
 // 座標変換・物理・衝突・採点は js/logic/t6.js に任せる。
+// 2026-09-30 本番に合わせて変更: 一人称視点(画面の中心が自機)。飛行機の絵と、手前に流れる輪はやめた。
 
 import {
-  computeTunnelLayout, stickInputAt, keyboardInput, combineInputs,
-  projectScale, drawableObstacles, holeCenters,
+  computeTunnelLayout, stickInputAt, stickVectorAt, keyboardInput,
+  projectScale, projectTunnelSection, drawableObstacles, holeCenters,
   createT6State, stepT6State, buildT6Record,
 } from '../logic/t6.js';
 import { createRng, randomSeed } from '../core/rng.js';
@@ -14,30 +15,42 @@ import { findTest, formatDetail } from '../core/catalog.js';
 import { T6_COLOR_OPTIONS } from '../core/settings.js';
 
 const DEG = Math.PI / 180;
-const AIRCRAFT_SIZE_RATIO = 0.055;
-const MIN_AIRCRAFT_SIZE_PX = 8;
+const RADIAL_LINES = 12; // 消失点から手前の縁へ引く放射状の線の本数
+const RETICLE = Object.freeze({ sizeRatio: 0.045, minSizePx: 8, color: '#eaf1fb', pushColor: '#ffcc4d' });
 
-// 自機の形(機首が上、原点 (0,0) が機体の位置=当たり判定の点)。
-// spanUnits は左右の翼端の間(この形では x=-60〜60)。scaleX/scaleY で横と縦を別の倍率に縮める。
-// widthFactor は以前の機体の横幅(size × 2.9)で、翼幅をこれに合わせて見え方と難しさを変えない。
-const AIRCRAFT_SHAPE = Object.freeze({
-  d: 'M0 -78 C6 -72 9 -60 9 -44 L9 -20 L60 24 L60 38 L12 14 L11 30 L22 38 L22 50 L8 52 L0 56 '
-    + 'L-8 52 L-22 50 L-22 38 L-11 30 L-12 14 L-60 38 L-60 24 L-9 -20 L-9 -44 C-9 -60 -6 -72 0 -78 Z',
-  spanUnits: 120,
-  scaleX: 0.46,
-  scaleY: 0.36,
-  widthFactor: 2.9,
-  color: '#eaf1fb',
-  pushColor: '#ffcc4d',
-  shadowColor: 'rgba(0, 0, 0, 0.55)',
-  shadowBlurRatio: 0.6,
-  minShadowBlurPx: 4,
-});
-let aircraftPath = null; // Path2D は描画のときに1回だけ作る
-// ぶつかって透過扱いになった障害物は、当たらないことが分かるよう薄く描く
-const GHOST_OBSTACLE_ALPHA = 0.28;
+// 断面の座標(トンネル半径1、y が上)を画面へ
+function toScreen(section, x, y) {
+  return { x: section.centerX + x * section.radius, y: section.centerY - y * section.radius };
+}
 
-function drawHalf(ctx, obstacle, cx, cy, radius) {
+// 角度 fromDeg から toDeg まで(反時計回り)の、内側の半径 inner〜外側 1 の帯を塗る
+function fillAnnularSector(ctx, section, fromDeg, toDeg, inner) {
+  const { centerX: cx, centerY: cy, radius } = section;
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, -fromDeg * DEG, -toDeg * DEG, true);
+  ctx.arc(cx, cy, radius * inner, -toDeg * DEG, -fromDeg * DEG, false);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function strokeRadialEdge(ctx, section, deg, inner) {
+  const rad = deg * DEG;
+  const from = toScreen(section, Math.cos(rad) * inner, Math.sin(rad) * inner);
+  const to = toScreen(section, Math.cos(rad), Math.sin(rad));
+  ctx.beginPath();
+  ctx.moveTo(from.x, from.y);
+  ctx.lineTo(to.x, to.y);
+  ctx.stroke();
+}
+
+function strokeCircle(ctx, x, y, r) {
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
+function drawHalf(ctx, obstacle, section) {
+  const { centerX: cx, centerY: cy, radius } = section;
   ctx.save();
   ctx.beginPath();
   ctx.arc(cx, cy, radius, 0, Math.PI * 2);
@@ -58,92 +71,98 @@ function drawHalf(ctx, obstacle, cx, cy, radius) {
   ctx.stroke();
 }
 
-function drawBlades(ctx, obstacle, cx, cy, radius, hubRatio, openingDeg) {
-  ctx.beginPath();
-  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-  for (let i = 0; i < obstacle.openingCount; i++) {
-    const center = obstacle.rotationDeg + i * 360 / obstacle.openingCount;
-    ctx.moveTo(cx, cy);
-    ctx.arc(cx, cy, radius, -(center + openingDeg / 2) * DEG, -(center - openingDeg / 2) * DEG);
-    ctx.closePath();
+// 羽根: 開口の間をふさぐ。中心の安全円(centerOpenRadius)は抜く(2026-09-30 本番に合わせて変更)
+function drawBlades(ctx, obstacle, section, p) {
+  const count = obstacle.openingCount;
+  const half = p.bladeOpeningDeg / 2;
+  const inner = p.centerOpenRadius;
+  for (let i = 0; i < count; i++) {
+    const center = obstacle.rotationDeg + i * 360 / count;
+    const next = obstacle.rotationDeg + (i + 1) * 360 / count;
+    fillAnnularSector(ctx, section, center + half, next - half, inner);
   }
-  ctx.fill('evenodd');
-  ctx.beginPath();
-  ctx.arc(cx, cy, radius * hubRatio, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-  for (let i = 0; i < obstacle.openingCount; i++) {
-    const center = obstacle.rotationDeg + i * 360 / obstacle.openingCount;
-    for (const edge of [center - openingDeg / 2, center + openingDeg / 2]) {
-      const rad = edge * DEG;
-      ctx.beginPath();
-      ctx.moveTo(cx + Math.cos(rad) * radius * hubRatio, cy - Math.sin(rad) * radius * hubRatio);
-      ctx.lineTo(cx + Math.cos(rad) * radius, cy - Math.sin(rad) * radius);
-      ctx.stroke();
-    }
+  for (let i = 0; i < count; i++) {
+    const center = obstacle.rotationDeg + i * 360 / count;
+    strokeRadialEdge(ctx, section, center - half, inner);
+    strokeRadialEdge(ctx, section, center + half, inner);
   }
+  strokeCircle(ctx, section.centerX, section.centerY, section.radius * inner);
 }
 
-function drawSector(ctx, obstacle, cx, cy, radius, openingDeg) {
-  const half = openingDeg / 2;
-  ctx.beginPath();
-  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-  ctx.moveTo(cx, cy);
-  ctx.arc(
-    cx, cy, radius,
-    -(obstacle.openCenterDeg - half) * DEG,
-    -(obstacle.openCenterDeg + half) * DEG,
-    true,
-  );
-  ctx.closePath();
-  ctx.fill('evenodd');
-  for (const edge of [obstacle.openCenterDeg - half, obstacle.openCenterDeg + half]) {
-    const rad = edge * DEG;
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.lineTo(cx + Math.cos(rad) * radius, cy - Math.sin(rad) * radius);
-    ctx.stroke();
-  }
+// 扇形: 90°だけ開き、中心の安全円は抜く(2026-09-30 本番に合わせて変更)
+function drawSector(ctx, obstacle, section, p) {
+  const half = p.sectorOpeningDeg / 2;
+  const inner = p.centerOpenRadius;
+  fillAnnularSector(ctx, section, obstacle.openCenterDeg + half, obstacle.openCenterDeg + 360 - half, inner);
+  strokeRadialEdge(ctx, section, obstacle.openCenterDeg - half, inner);
+  strokeRadialEdge(ctx, section, obstacle.openCenterDeg + half, inner);
+  strokeCircle(ctx, section.centerX, section.centerY, section.radius * inner);
 }
 
-function drawHoles(ctx, obstacle, cx, cy, radius, p) {
+function drawHoles(ctx, obstacle, section, p) {
+  const { centerX: cx, centerY: cy, radius } = section;
   ctx.beginPath();
   ctx.arc(cx, cy, radius, 0, Math.PI * 2);
   for (const center of holeCenters(obstacle, p)) {
-    const x = cx + center.x * radius;
-    const y = cy - center.y * radius;
+    const { x, y } = toScreen(section, center.x, center.y);
     const holeRadius = p.holeRadius * radius;
     ctx.moveTo(x + holeRadius, y);
     ctx.arc(x, y, holeRadius, 0, Math.PI * 2);
   }
   ctx.fill('evenodd');
   for (const center of holeCenters(obstacle, p)) {
-    ctx.beginPath();
-    ctx.arc(cx + center.x * radius, cy - center.y * radius, p.holeRadius * radius, 0, Math.PI * 2);
-    ctx.stroke();
+    const { x, y } = toScreen(section, center.x, center.y);
+    strokeCircle(ctx, x, y, p.holeRadius * radius);
   }
 }
 
-function drawAircraft(ctx, layout, position, pushing) {
-  const x = layout.tunnel.centerX + position.x * layout.tunnel.radius;
-  const y = layout.tunnel.centerY - position.y * layout.tunnel.radius;
-  const size = Math.max(MIN_AIRCRAFT_SIZE_PX, layout.tunnel.radius * AIRCRAFT_SIZE_RATIO);
-  const s = AIRCRAFT_SHAPE;
-  if (aircraftPath === null) aircraftPath = new Path2D(s.d);
-  // 翼幅が size × widthFactor になるように、形の単位あたりの大きさを決める
-  const unit = (size * s.widthFactor) / (s.spanUnits * s.scaleX);
+// 回転する長方形: 中心を通り直径いっぱいに伸びる幅 barWidth の帯(2026-09-30 本番に合わせて追加)
+function drawBar(ctx, obstacle, section, p) {
+  const rad = obstacle.rotationDeg * DEG;
+  const u = { x: Math.cos(rad), y: Math.sin(rad) };
+  const n = { x: -u.y, y: u.x };
+  const w = p.barWidth / 2;
+  const corners = [[1, 1], [-1, 1], [-1, -1], [1, -1]].map(([a, b]) => toScreen(section, u.x * a + n.x * w * b, u.y * a + n.y * w * b));
   ctx.save();
-  ctx.translate(x, y);
-  // 障害物と重なっても機体が見えるように、薄い暗い影を付ける
-  ctx.shadowColor = s.shadowColor;
-  ctx.shadowBlur = Math.max(s.minShadowBlurPx, size * s.shadowBlurRatio);
-  ctx.fillStyle = pushing ? s.pushColor : s.color;
-  ctx.scale(unit * s.scaleX, unit * s.scaleY);
-  ctx.fill(aircraftPath);
+  ctx.beginPath();
+  ctx.arc(section.centerX, section.centerY, section.radius, 0, Math.PI * 2);
+  ctx.clip();
+  ctx.beginPath();
+  corners.forEach((c, i) => (i === 0 ? ctx.moveTo(c.x, c.y) : ctx.lineTo(c.x, c.y)));
+  ctx.closePath();
+  ctx.fill();
+  for (const [from, to] of [[corners[0], corners[1]], [corners[2], corners[3]]]) {
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.lineTo(to.x, to.y);
+    ctx.stroke();
+  }
   ctx.restore();
 }
 
-function drawStick(ctx, layout, input) {
+// 照準: 画面の中心(自機=当たり判定の点)
+function drawReticle(ctx, view, pushing) {
+  const size = Math.max(RETICLE.minSizePx, view.radius * RETICLE.sizeRatio);
+  const { centerX: x, centerY: y } = view;
+  ctx.save();
+  ctx.strokeStyle = pushing ? RETICLE.pushColor : RETICLE.color;
+  ctx.lineWidth = 2;
+  strokeCircle(ctx, x, y, size * 0.55);
+  ctx.beginPath();
+  ctx.moveTo(x - size * 1.3, y); ctx.lineTo(x - size * 0.35, y);
+  ctx.moveTo(x + size * 0.35, y); ctx.lineTo(x + size * 1.3, y);
+  ctx.moveTo(x, y - size * 1.3); ctx.lineTo(x, y - size * 0.35);
+  ctx.moveTo(x, y + size * 0.35); ctx.lineTo(x, y + size * 1.3);
+  ctx.stroke();
+  ctx.fillStyle = ctx.strokeStyle;
+  ctx.beginPath();
+  ctx.arc(x, y, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+// 操縦の円。つまみは自機の位置(円の縁 = 機体が動ける範囲の端)
+function drawStick(ctx, layout, position, p) {
   const { centerX, centerY, radius } = layout.stick;
   ctx.save();
   ctx.fillStyle = 'rgba(30, 55, 83, 0.82)';
@@ -153,8 +172,8 @@ function drawStick(ctx, layout, input) {
   ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
-  const knobX = centerX + input.x * radius;
-  const knobY = centerY - input.y * radius;
+  const knobX = centerX + position.x / p.aircraftMaxRadius * radius;
+  const knobY = centerY - position.y / p.aircraftMaxRadius * radius;
   ctx.fillStyle = '#69b7ff';
   ctx.strokeStyle = '#f4f8ff';
   ctx.lineWidth = 2;
@@ -165,61 +184,55 @@ function drawStick(ctx, layout, input) {
   ctx.restore();
 }
 
-function drawScene(ctx, layout, state, p, stickInput) {
+function drawScene(ctx, layout, state, p) {
   const { width, height } = layout;
-  const { centerX: cx, centerY: cy, radius: tunnelRadius } = layout.tunnel;
+  const view = layout.tunnel;
+  const { centerX: cx, centerY: cy, radius: viewRadius } = view;
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = '#07101f';
   ctx.fillRect(0, 0, width, height);
 
   ctx.save();
   ctx.beginPath();
-  ctx.arc(cx, cy, tunnelRadius, 0, Math.PI * 2);
+  ctx.arc(cx, cy, viewRadius, 0, Math.PI * 2);
   ctx.clip();
 
-  // トンネルの輪。距離に合わせて手前へ流す。
-  const phase = state.distance % p.tunnelRingSpacing;
+  // 放射状の線: 奥の消失点(画面の中心)から、手前のトンネルの縁へ引く
+  const edge = projectTunnelSection(state.position, p.tunnelEdgeZ, view, p);
   ctx.strokeStyle = 'rgba(110, 170, 230, 0.32)';
   ctx.lineWidth = 1;
-  for (let z = p.collisionZ + p.tunnelRingSpacing - phase; z <= p.farZ; z += p.tunnelRingSpacing) {
-    const radius = tunnelRadius * projectScale(p.perspectiveFocal, z);
-    ctx.beginPath();
-    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-  for (let i = 0; i < 12; i++) {
-    const a = i * 30 * DEG;
+  for (let i = 0; i < RADIAL_LINES; i++) {
+    const a = i * 360 / RADIAL_LINES;
+    const to = toScreen(edge, Math.cos(a * DEG), Math.sin(a * DEG));
     ctx.beginPath();
     ctx.moveTo(cx, cy);
-    ctx.lineTo(cx + Math.cos(a) * tunnelRadius, cy + Math.sin(a) * tunnelRadius);
+    ctx.lineTo(to.x, to.y);
     ctx.stroke();
   }
+  strokeCircle(ctx, edge.centerX, edge.centerY, edge.radius);
 
+  const fill = T6_COLOR_OPTIONS.obstacle.find(color => color.name === p.obstacleColor)?.value ?? T6_COLOR_OPTIONS.obstacle[0].value;
+  const stroke = T6_COLOR_OPTIONS.edge.find(color => color.name === p.obstacleEdgeColor)?.value ?? T6_COLOR_OPTIONS.edge[0].value;
   const visible = drawableObstacles(state.obstacles, p).sort((a, b) => b.z - a.z);
   for (const obstacle of visible) {
-    const scale = projectScale(p.perspectiveFocal, obstacle.z);
-    const radius = tunnelRadius * scale;
-    ctx.fillStyle = T6_COLOR_OPTIONS.obstacle.find(color => color.name === p.obstacleColor)?.value ?? T6_COLOR_OPTIONS.obstacle[0].value;
-    ctx.strokeStyle = T6_COLOR_OPTIONS.edge.find(color => color.name === p.obstacleEdgeColor)?.value ?? T6_COLOR_OPTIONS.edge[0].value;
-    ctx.lineWidth = Math.max(1.5, 4 * scale);
-    ctx.globalAlpha = obstacle.ghost ? GHOST_OBSTACLE_ALPHA : 1;
-    if (obstacle.type === 'half') drawHalf(ctx, obstacle, cx, cy, radius);
-    else if (obstacle.type === 'blades') drawBlades(ctx, obstacle, cx, cy, radius, p.bladeHubRadius, p.bladeOpeningDeg);
-    else if (obstacle.type === 'sector') drawSector(ctx, obstacle, cx, cy, radius, p.sectorOpeningDeg);
-    else drawHoles(ctx, obstacle, cx, cy, radius, p);
-    ctx.beginPath();
-    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-    ctx.stroke();
+    const section = projectTunnelSection(state.position, obstacle.z, view, p);
+    ctx.fillStyle = fill;
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = Math.max(1.5, 4 * projectScale(p.perspectiveFocal, obstacle.z));
+    if (obstacle.type === 'half') drawHalf(ctx, obstacle, section);
+    else if (obstacle.type === 'blades') drawBlades(ctx, obstacle, section, p);
+    else if (obstacle.type === 'sector') drawSector(ctx, obstacle, section, p);
+    else if (obstacle.type === 'bar') drawBar(ctx, obstacle, section, p);
+    else drawHoles(ctx, obstacle, section, p);
+    strokeCircle(ctx, section.centerX, section.centerY, section.radius);
   }
   ctx.restore();
 
   ctx.strokeStyle = '#75a8d8';
   ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.arc(cx, cy, tunnelRadius, 0, Math.PI * 2);
-  ctx.stroke();
-  drawAircraft(ctx, layout, state.position, state.pushback !== null);
-  drawStick(ctx, layout, stickInput);
+  strokeCircle(ctx, cx, cy, viewRadius);
+  drawReticle(ctx, view, state.pushback !== null);
+  drawStick(ctx, layout, state.position, p);
 
   if (state.pushback) {
     ctx.strokeStyle = 'rgba(255, 204, 77, 0.8)';
@@ -285,9 +298,9 @@ export function mount(root, ctx) {
     setPhase(null);
     root.innerHTML = shell(`<section class="t6-start">
       <h1 data-ref="title"></h1>
-      <p>矢印キー、または操縦用の円を指・マウスで動かして機体を操縦します。横画面では左右ボタンで円の側を選べます。縦画面ではトンネルが上、操縦円が下です。</p>
-          <p>半円、回転する羽根(開口1〜3個)、回転する扇形、縁の小穴(開口1〜3個)を通り抜けます。</p>
-      <p class="muted">衝突すると速度が半分になり、少し手前へ巻き戻されます。ぶつかった障害物は薄くなり、そのまま通り抜けられます。制限時間は <span data-ref="duration"></span>です。</p>
+      <p>トンネルの中を進みます。画面の中心の照準が自分の位置です。操縦用の円の中の位置が、そのまま自分の位置になります(円の中心 = トンネルの中心、指・マウスを離すとその位置のまま)。矢印キーでも動かせます。横画面では左右ボタンで円の側を選べます。縦画面ではトンネルが上、操縦円が下です。</p>
+      <p>半円、回転する羽根(開口1〜3個)、回転する扇形、縁の小穴(開口1〜3個)、回転する長方形を通り抜けます。羽根と扇形は中心も通れます。</p>
+      <p class="muted">衝突すると速度が半分になり、少し手前へ巻き戻されます。よけなければ、同じ障害物にまた衝突します。制限時間は <span data-ref="duration"></span>です。</p>
       <p class="notice notice-error" data-ref="layoutError" hidden></p>
       <button class="btn btn-primary btn-large" type="button" data-ref="start">開始</button>
     </section>`);
@@ -314,7 +327,7 @@ export function mount(root, ctx) {
     const rng = createRng(randomSeed());
     let state = createT6State(rng, params);
     const pressedKeys = new Set();
-    let stickInput = { x: 0, y: 0 };
+    let stickVector = null; // 操縦の円を押している間の、円の中の位置(離したら null。自機はその位置のまま)
     let activePointerId = null;
     let lastFrameTs = null;
     let layout = null;
@@ -355,24 +368,18 @@ export function mount(root, ctx) {
       e.preventDefault();
       activePointerId = e.pointerId;
       canvas.setPointerCapture?.(e.pointerId);
-      stickInput = input;
+      stickVector = input;
     }
 
     function onPointerMove(e) {
       if (e.pointerId !== activePointerId || !layout) return;
       e.preventDefault();
-      const point = pointerPosition(e);
-      const dx = point.x - layout.stick.centerX;
-      const dy = layout.stick.centerY - point.y;
-      stickInput = combineInputs({ x: 0, y: 0 }, {
-        x: dx / layout.stick.radius,
-        y: dy / layout.stick.radius,
-      });
+      stickVector = stickVectorAt(pointerPosition(e), layout); // 円の外へ出たら縁に収める
     }
 
     function stopPointer(e) {
       if (e.pointerId !== activePointerId) return;
-      stickInput = { x: 0, y: 0 };
+      stickVector = null;
       activePointerId = null;
     }
 
@@ -390,7 +397,7 @@ export function mount(root, ctx) {
 
     function clearControls() {
       pressedKeys.clear();
-      stickInput = { x: 0, y: 0 };
+      stickVector = null;
       if (activePointerId !== null && canvas.hasPointerCapture?.(activePointerId)) canvas.releasePointerCapture(activePointerId);
       activePointerId = null;
     }
@@ -416,9 +423,8 @@ export function mount(root, ctx) {
       lastFrameTs = ts;
       try { resizeCanvas(); }
       catch (e) { abort(`${e.message}(記録は保存していません)`); return; }
-      const input = combineInputs(keyboardInput(pressedKeys), stickInput);
-      state = stepT6State(state, input, dtSec, params, rng);
-      drawScene(drawCtx, layout, state, params, stickInput);
+      state = stepT6State(state, { stick: stickVector, keys: keyboardInput(pressedKeys) }, dtSec, params, rng);
+      drawScene(drawCtx, layout, state, params);
       live.textContent = `通過 ${state.cleared}　衝突 ${state.collisions}　速度 ${state.speed.toFixed(2)}`;
     }
 
@@ -461,7 +467,7 @@ export function mount(root, ctx) {
     globalThis.addEventListener('resize', onResize);
 
     resizeCanvas();
-    drawScene(drawCtx, layout, state, params, stickInput);
+    drawScene(drawCtx, layout, state, params);
     const timer = startTimer({
       durationMs: params.durationSec * 1000,
       onFrame,

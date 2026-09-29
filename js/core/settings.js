@@ -156,18 +156,20 @@ export const DEFAULTS = Object.freeze({
     moveSpeed: 1, // トンネル断面の内部単位/秒
     collisionSpeedFactor: 0.5,
     initialSpeed: 0.8, // トンネル半径を1とする内部単位/秒
-    acceleration: 0.02,
-    recoveryAcceleration: 0.16, // 最高速で衝突しても約5秒で基準速度へ戻る
-    maxSpeed: 1.6,
-    obstacleSpacing: 2.4,
-    firstObstacleDistance: 5,
+    // 速さと間隔(2026-09-30 本番に合わせて変更)
+    acceleration: 3,
+    recoveryAcceleration: 3,
+    maxSpeed: 10,
+    obstacleSpacing: 8,
+    firstObstacleDistance: 12,
     bladeOpeningDeg: 60,
     bladeOpeningCounts: Object.freeze([1, 2, 3]),
-    bladeHubRadius: 0.18,
+    centerOpenRadius: 0.2, // 羽根と扇形は、中心からこの半径の円の中を通れる(2026-09-30 本番に合わせて追加)
+    barWidth: 0.35, // 回転する長方形の帯の幅(2026-09-30 本番に合わせて追加)
     bladeInitialAngularSpeedDegSec: 30,
     bladeAngularAccelerationDegSec2: 0.15,
     collisionPushMs: 350, // 衝突したときの巻き戻しにかける時間
-    collisionPullbackDistance: 0.5, // 衝突したときに進行を巻き戻す距離(障害物の間隔は2.4。2026-09-27 ユーザーの判断で横の押し戻しから変更)
+    collisionPullbackDistance: 2, // 衝突したときに進行を巻き戻す距離(2026-09-27 ユーザーの判断で横の押し戻しから変更。2026-09-30 速さが上がるので 0.5 → 2)
     aircraftMaxRadius: 0.86,
     canvasMarginPx: 8,
     stickRadiusRatio: 0.14,
@@ -178,14 +180,14 @@ export const DEFAULTS = Object.freeze({
     stallAbortMs: 1000,
     perspectiveFocal: 1,
     collisionZ: 1,
-    farZ: 12,
-    tunnelRingSpacing: 0.75,
+    farZ: 32, // 奥まで見えるよう 12 → 32(2026-09-30 本番に合わせて変更)
+    tunnelEdgeZ: 0.5, // 放射状の線を引く、手前のトンネルの縁の奥行き(2026-09-30 本番に合わせて追加)
     sectorOpeningDeg: 90,
     holeSlotCount: 4,
     holeOpenCounts: Object.freeze([1, 2, 3]),
     holeRotationRate: 0.5,
     holeRingRadius: 0.6,
-    holeRadius: 0.3,
+    holeRadius: 0.38, // 隣の穴と重ならず、トンネルの内側に収まる大きさ(2026-09-30 本番に合わせて 0.3 → 0.38)
   }),
 });
 

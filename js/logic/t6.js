@@ -1,5 +1,7 @@
-// テスト6 トンネル飛行: 座標変換、疑似3D投影、障害物、衝突、物理、採点。
+// テスト6 トンネル飛行: 座標変換、疑似3D投影(一人称)、障害物、衝突、物理、採点。
 // DOM と Canvas には触れない。
+// 2026-09-30 本番に合わせて変更: 一人称視点、操縦の円の位置がそのまま自機の位置、衝突した障害物も当たり判定を残す、
+// 中心を通れる羽根・扇形、回転する長方形。
 
 const HALF_SIDES = Object.freeze(['up', 'down', 'left', 'right']);
 const SECTOR_CENTERS = Object.freeze([45, 135, 225, 315]);
@@ -39,10 +41,6 @@ export function keyboardInput(keys) {
     x: (keys.has('ArrowRight') ? 1 : 0) - (keys.has('ArrowLeft') ? 1 : 0),
     y: (keys.has('ArrowUp') ? 1 : 0) - (keys.has('ArrowDown') ? 1 : 0),
   });
-}
-
-export function combineInputs(a, b) {
-  return normalizeInput({ x: a.x + b.x, y: a.y + b.y });
 }
 
 export function moveAircraft(position, input, dtSec, p) {
@@ -105,6 +103,7 @@ export function computeTunnelLayout(width, height, p, { topInset = 0, viewportWi
   return { width, height, tunnel, stick, mode };
 }
 
+// 押し始め: 操縦の円の中なら、円の中の位置(中心0、縁で長さ1)。円の外なら null
 export function stickInputAt(pointer, layout) {
   const dx = pointer.x - layout.stick.centerX;
   const dy = layout.stick.centerY - pointer.y;
@@ -113,10 +112,37 @@ export function stickInputAt(pointer, layout) {
   return normalizeInput({ x: dx / layout.stick.radius, y: dy / layout.stick.radius });
 }
 
+// 押したまま動かしているとき: 円の外へ出たら縁に収める
+export function stickVectorAt(pointer, layout) {
+  return normalizeInput({
+    x: (pointer.x - layout.stick.centerX) / layout.stick.radius,
+    y: (layout.stick.centerY - pointer.y) / layout.stick.radius,
+  });
+}
+
+// 操縦の円の中の位置を、そのまま自機の位置にする(2026-09-30 本番に合わせて変更)。
+// 円の中心 = トンネルの中心、円の縁 = 機体が動ける範囲の端(aircraftMaxRadius)
+export function stickToPosition(vector, p) {
+  const v = normalizeInput(vector);
+  return clampToTunnel({ x: v.x * p.aircraftMaxRadius, y: v.y * p.aircraftMaxRadius }, p.aircraftMaxRadius);
+}
+
 export function projectScale(focal, z) {
   if (!Number.isFinite(z) || z <= 0) throw new RangeError('z は0より大きい有限値である必要があります');
   if (!Number.isFinite(focal) || focal <= 0) throw new RangeError('focal は0より大きい有限値である必要があります');
   return focal / z;
+}
+
+// 一人称視点(2026-09-30 本番に合わせて変更)。画面の中心(view の中心)が自機。
+// 奥行き z のトンネルの断面は、(断面の中心 0 − 自機の位置) × トンネル半径 × 縮尺(z) だけ中心からずれる。
+// 手前ほど大きくずれ、奥はほとんどずれない(消失点は画面の中心)。画面の y は下向き。
+export function projectTunnelSection(position, z, view, p) {
+  const k = view.radius * projectScale(p.perspectiveFocal, z);
+  return {
+    centerX: view.centerX - position.x * k,
+    centerY: view.centerY + position.y * k,
+    radius: k,
+  };
 }
 
 export function isHalfOpeningSafe(position, blockedSide) {
@@ -129,9 +155,14 @@ export function isHalfOpeningSafe(position, blockedSide) {
   return dot < 0; // 直径上は障害物の縁なので衝突
 }
 
+// 羽根と扇形は、中心から centerOpenRadius の円の中を安全にする(2026-09-30 本番に合わせて変更。円の縁は開口の判定に従う)
+function insideCenterOpening(radius, p) {
+  return radius < p.centerOpenRadius;
+}
+
 export function isBladeOpeningSafe(position, rotationDeg, p, openingCount = 3) {
   const { radius, angleDeg } = toPolar(position);
-  if (radius <= p.bladeHubRadius) return false; // 中心円の縁も衝突
+  if (insideCenterOpening(radius, p)) return true;
   const halfOpening = p.bladeOpeningDeg / 2;
   for (let i = 0; i < openingCount; i++) {
     const center = normalizeAngleDeg(rotationDeg + i * 360 / openingCount);
@@ -142,7 +173,7 @@ export function isBladeOpeningSafe(position, rotationDeg, p, openingCount = 3) {
 
 export function isSectorOpeningSafe(position, openCenterDeg, p) {
   const { radius, angleDeg } = toPolar(position);
-  if (radius === 0) return false;
+  if (insideCenterOpening(radius, p)) return true;
   return angularDistanceDeg(angleDeg, openCenterDeg) < p.sectorOpeningDeg / 2 - ANGLE_EPSILON_DEG;
 }
 
@@ -163,11 +194,20 @@ export function isHoleOpeningSafe(position, obstacle, p) {
   });
 }
 
+// 回転する長方形(2026-09-30 本番に合わせて追加): トンネルの中心を通り直径いっぱいに伸びる幅 barWidth の帯。
+// 帯の上(縁ちょうどを含む)は衝突、それ以外は安全。帯の向きは rotationDeg
+export function isBarSafe(position, rotationDeg, p) {
+  const rad = rotationDeg * Math.PI / 180;
+  const distance = Math.abs(-position.x * Math.sin(rad) + position.y * Math.cos(rad));
+  return distance > p.barWidth / 2 + Number.EPSILON;
+}
+
 export function isObstacleSafe(obstacle, position, p) {
   if (obstacle.type === 'half') return isHalfOpeningSafe(position, obstacle.blockedSide);
   if (obstacle.type === 'blades') return isBladeOpeningSafe(position, obstacle.rotationDeg, p, obstacle.openingCount ?? 3);
   if (obstacle.type === 'sector') return isSectorOpeningSafe(position, obstacle.openCenterDeg, p);
   if (obstacle.type === 'holes') return isHoleOpeningSafe(position, obstacle, p);
+  if (obstacle.type === 'bar') return isBarSafe(position, obstacle.rotationDeg, p);
   throw new RangeError(`不明な障害物です: ${obstacle.type}`);
 }
 
@@ -189,8 +229,11 @@ export function applyCollisionSpeed(speed, p) {
   return speed * p.collisionSpeedFactor;
 }
 
+// 5種類(半円・3枚羽根・扇形・小穴・回転する長方形)を同じ確率で出す
+export const OBSTACLE_TYPES = Object.freeze(['half', 'blades', 'sector', 'holes', 'bar']);
+
 export function createObstacle(rng, z, id, p) {
-  const typeIndex = Math.floor(rng() * 4);
+  const typeIndex = Math.floor(rng() * OBSTACLE_TYPES.length);
   if (typeIndex === 0) {
     return {
       id, type: 'half', z,
@@ -212,13 +255,17 @@ export function createObstacle(rng, z, id, p) {
       rotationDirection: rng() < 0.5 ? -1 : 1,
     };
   }
+  if (typeIndex === 4) {
+    return { id, type: 'bar', z, rotationDeg: rng() * 180, rotationDirection: rng() < 0.5 ? -1 : 1 };
+  }
   const slots = Array.from({ length: p.holeSlotCount }, (_, i) => i);
   for (let i = slots.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1));
     [slots[i], slots[j]] = [slots[j], slots[i]];
   }
   const openCount = p.holeOpenCounts[Math.floor(rng() * p.holeOpenCounts.length)];
-  const rotationDirection = openCount === 1 || rng() >= p.holeRotationRate ? 0 : (rng() < 0.5 ? -1 : 1);
+  // 回転するのは3穴だけ(確率 holeRotationRate)。1穴・2穴は回転しない(2026-09-30 本番に合わせて変更)
+  const rotationDirection = openCount !== 3 || rng() >= p.holeRotationRate ? 0 : (rng() < 0.5 ? -1 : 1);
   return { id, type: 'holes', z, openSlots: slots.slice(0, openCount), rotationDeg: 0, rotationDirection };
 }
 
@@ -235,23 +282,24 @@ export function createInitialObstacles(rng, p) {
 
 export function advanceObstacle(obstacle, distanceDelta, elapsedSec, dtSec, p) {
   const next = { ...obstacle, z: obstacle.z - distanceDelta };
-  if (obstacle.type === 'blades' || obstacle.type === 'sector' || (obstacle.type === 'holes' && obstacle.rotationDirection !== 0)) {
+  if (obstacle.type === 'blades' || obstacle.type === 'sector' || obstacle.type === 'bar'
+      || (obstacle.type === 'holes' && obstacle.rotationDirection !== 0)) {
     const end = elapsedSec + dtSec;
     const turn = p.bladeInitialAngularSpeedDegSec * dtSec
       + 0.5 * p.bladeAngularAccelerationDegSec2 * (end * end - elapsedSec * elapsedSec);
-    if (obstacle.type === 'blades' || obstacle.type === 'holes') next.rotationDeg = normalizeAngleDeg((obstacle.rotationDeg ?? 0) + obstacle.rotationDirection * turn);
+    if (obstacle.type !== 'sector') next.rotationDeg = normalizeAngleDeg((obstacle.rotationDeg ?? 0) + obstacle.rotationDirection * turn);
     else next.openCenterDeg = normalizeAngleDeg(obstacle.openCenterDeg + obstacle.rotationDirection * turn);
   }
   return next;
 }
 
 // 機体の面を過ぎた障害物を奥で作り直す。
-// holdGhosts(巻き戻しの間)は、ぶつかった透過の障害物をその場に残す
-export function recycleObstacles(obstacles, rng, p, holdGhosts = false) {
+// holdHit(巻き戻しの間)は、ぶつかった障害物(held)をその場に残す。巻き戻しで奥へ戻り、再び近づいてくる
+export function recycleObstacles(obstacles, rng, p, holdHit = false) {
   const active = obstacles.filter(o => o.z > p.collisionZ);
   let farthest = Math.max(p.farZ - p.obstacleSpacing, ...active.map(o => o.z));
   return obstacles.map(o => {
-    if (o.z > p.collisionZ || (holdGhosts && o.ghost)) return o;
+    if (o.z > p.collisionZ || (holdHit && o.held)) return o;
     farthest += p.obstacleSpacing;
     return createObstacle(rng, farthest, o.id, p);
   });
@@ -291,12 +339,20 @@ function advancePullback(pushback, dtSec, p) {
   };
 }
 
-export function stepT6State(state, input, dtSec, p, rng) {
+// 操縦: control.stick(操縦の円の中の位置。押していなければ null)があれば、その位置がそのまま自機の位置。
+// なければ control.keys(矢印キー)で moveSpeed だけ動かす。どちらも無ければ最後の位置のまま。
+// 巻き戻しの間は操縦を受け付けない。
+function steer(state, control, dtSec, p) {
+  if (state.pushback) return state.position;
+  if (control.stick) return stickToPosition(control.stick, p);
+  return moveAircraft(state.position, control.keys ?? { x: 0, y: 0 }, dtSec, p);
+}
+
+export function stepT6State(state, control, dtSec, p, rng) {
   if (!Number.isFinite(dtSec) || dtSec < 0) throw new RangeError('dtSec は0以上の有限値である必要があります');
   const nextElapsed = state.elapsedSec + dtSec;
-  const normalizedInput = normalizeInput(input);
   const pull = advancePullback(state.pushback, dtSec, p);
-  const position = state.pushback ? state.position : moveAircraft(state.position, normalizedInput, dtSec, p);
+  const position = steer(state, control ?? {}, dtSec, p);
   const speedBeforeCollision = advanceSpeed(state.speed, nextElapsed, dtSec, p);
   // 巻き戻しの間は前へ進まない。巻き戻しがこの1歩の途中で終われば、残りの時間だけ進む
   const forwardSec = dtSec - pull.pullSec;
@@ -306,19 +362,23 @@ export function stepT6State(state, input, dtSec, p, rng) {
   let collisions = state.collisions;
   let pushback = pull.pushback;
 
-  let obstacles = state.obstacles.map(o => advanceObstacle(o, distanceDelta, state.elapsedSec, dtSec, p));
+  let obstacles = state.obstacles.map(o => {
+    const moved = advanceObstacle(o, distanceDelta, state.elapsedSec, dtSec, p);
+    // ぶつかった障害物は、巻き戻しで機体の面より奥へ戻ったら普通の障害物に戻す(当たり判定は消さない)
+    if (moved.held && moved.z > p.collisionZ) delete moved.held;
+    return moved;
+  });
   for (let i = 0; i < obstacles.length; i++) {
     const previous = state.obstacles[i];
     const obstacle = obstacles[i];
     if (!crossedAircraftPlane(previous.z, obstacle.z, p.collisionZ)) continue;
-    // 透過の障害物(一度ぶつかったもの)は当たり判定をせず、通過にも衝突にも数えない
-    if (obstacle.ghost) continue;
     if (isObstacleSafe(obstacle, position, p)) {
       cleared++;
     } else {
+      // 衝突はそのたびに数える。ぶつかった障害物は巻き戻しの間その場に残し、再び近づいてくる
       collisions++;
       speed = applyCollisionSpeed(speed, p);
-      obstacles[i] = { ...obstacle, ghost: true };
+      obstacles[i] = { ...obstacle, held: true };
       pushback = { elapsedMs: 0 };
     }
   }

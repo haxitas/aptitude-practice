@@ -86,6 +86,18 @@ test('T6 は速度と小穴の個数・重なり・範囲を検証する', () =>
   assert.match(overlap.errors.holeRadius, /重な/);
   const outside = validateTestSettings('t6', raw('t6', { holeRingRadius: 0.8, holeRadius: 0.25 }), DEFAULTS.t6);
   assert.match(outside.errors.holeRadius, /トンネル/);
+  assert.equal(validateTestSettings('t6', raw('t6', {}), DEFAULTS.t6).ok, true, '既定値(小穴の半径0.38・巻き戻し2)は保存できる');
+});
+
+test('T6: 中心の安全円と回転する長方形の幅を設定でき、使わなくなった設定は無い(2026-09-30 本番に合わせて変更)', () => {
+  const fields = SETTING_FIELDS.t6.map(field => field.key);
+  for (const key of ['centerOpenRadius', 'barWidth']) assert.ok(fields.includes(key), key);
+  for (const key of ['bladeHubRadius', 'tunnelRingSpacing']) {
+    assert.equal(fields.includes(key), false, key);
+    assert.equal(key in DEFAULTS.t6, false, key);
+  }
+  assert.equal(validateTestSettings('t6', raw('t6', { barWidth: 2.5 }), DEFAULTS.t6).ok, false);
+  assert.equal(validateTestSettings('t6', raw('t6', { centerOpenRadius: 1.5 }), DEFAULTS.t6).ok, false);
 });
 
 test('T6の小穴は4方位固定で、開口数候補と回転確率を検証する', () => {
