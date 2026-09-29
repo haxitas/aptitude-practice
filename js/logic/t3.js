@@ -104,7 +104,7 @@ export function generateCalcProblem(rng, p) {
   const answer = r;
   const cands = [...new Set(p.calcDistractorOffsets.flatMap(o => [answer + o, answer - o]))]
     .filter(c => c >= 0 && c !== answer);
-  if (cands.length < 3) throw new Error('テスト3の設定が不正です: 誤答の候補が3つ未満です(calcDistractorOffsets)');
+  if (cands.length < 3) throw new Error('テスト2(マルチタスク)の設定が不正です: 誤答の候補が3つ未満です(calcDistractorOffsets)');
   const choices = shuffle(rng, [answer, ...shuffle(rng, cands).slice(0, 3)]);
   return { terms, answer, choices, correctIndex: choices.indexOf(answer) };
 }

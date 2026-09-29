@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { SETTING_FIELDS, validateTestSettings, resetTestOverrides, canPlaceT5Fallback } from '../js/logic/settings-form.js';
 import { DEFAULTS, resolveSettings, T6_COLOR_OPTIONS, T6_COLOR_PRESETS } from '../js/core/settings.js';
-import { withInstantFeedback } from '../js/logic/settings-form.js';
+import { inputStep } from '../js/logic/settings-form.js';
 
 function raw(testId, changes = {}) {
   return Object.fromEntries(Object.entries({ ...DEFAULTS[testId], ...changes }).map(([key, value]) => [
@@ -166,20 +166,23 @@ test('T4の不要な基準角・前問表示は設定項目にも保存値にも
   assert.deepEqual(result.value, { durationSec: DEFAULTS.t4.durationSec, compassMode: DEFAULTS.t4.compassMode });
 });
 
-// ---- 即時判定 ----
+// ---- 共通の設定と入力の刻み(2026-09-30 本番に合わせて変更) ----
 
-test('即時判定: 設定画面の共通項目は、オン/オフと表示時間を検証する', () => {
-  const ok = validateTestSettings('common', { instantFeedback: 'true', feedbackMs: '1200' }, {});
-  assert.deepEqual(ok, { ok: true, value: { instantFeedback: true, feedbackMs: 1200 }, errors: {} });
-  const off = validateTestSettings('common', { instantFeedback: 'false', feedbackMs: '800' }, {});
-  assert.equal(off.value.instantFeedback, false);
-  assert.equal(validateTestSettings('common', { instantFeedback: 'yes', feedbackMs: '1200' }, {}).ok, false);
-  assert.equal(validateTestSettings('common', { instantFeedback: 'true', feedbackMs: '0' }, {}).ok, false);
+test('共通の設定は判定の表示時間だけ(即時判定の項目は無い)', () => {
+  assert.deepEqual(SETTING_FIELDS.common.map(f => f.key), ['feedbackMs']);
+  const ok = validateTestSettings('common', { feedbackMs: '1200' }, {});
+  assert.deepEqual(ok, { ok: true, value: { feedbackMs: 1200 }, errors: {} });
+  assert.equal(validateTestSettings('common', { feedbackMs: '0' }, {}).ok, false);
 });
 
-test('即時判定: スイッチは common だけを書き換え、ほかのテストの保存値は残す', () => {
-  const saved = { t2: { durationSec: 60 }, common: { feedbackMs: 900 } };
-  assert.deepEqual(withInstantFeedback(saved, true), { t2: { durationSec: 60 }, common: { feedbackMs: 900, instantFeedback: true } });
-  assert.deepEqual(withInstantFeedback(null, false), { common: { instantFeedback: false } });
-  assert.deepEqual(saved, { t2: { durationSec: 60 }, common: { feedbackMs: 900 } });
+test('ミリ秒の設定(〜Ms)は入力の刻みが50。50の倍数でない値も保存できる', () => {
+  const msFields = Object.values(SETTING_FIELDS).flat().filter(f => f.type === 'number' && /Ms$/.test(f.key));
+  assert.ok(msFields.length >= 5, msFields.map(f => f.key).join(','));
+  for (const f of msFields) assert.equal(inputStep(f), '50', f.key);
+  assert.equal(inputStep({ key: 'durationSec', type: 'number', integer: true }), '1');
+  assert.equal(inputStep({ key: 'matchRate', type: 'number', step: 0.01 }), '0.01');
+  assert.equal(inputStep({ key: 'x', type: 'number' }), 'any');
+  const saved = validateTestSettings('common', { feedbackMs: '1234' }, {});
+  assert.equal(saved.ok, true);
+  assert.equal(saved.value.feedbackMs, 1234);
 });

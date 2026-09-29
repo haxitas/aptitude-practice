@@ -2,10 +2,9 @@
 // 画面を切り替えるときは、前の画面の後片付け(タイマー停止・キー入力の解除)を必ず呼ぶ。
 
 import { TESTS, findTest } from './core/catalog.js';
-import { defaultStore, readResults, readSettingsRaw, saveSettings } from './core/storage.js';
+import { defaultStore, readResults } from './core/storage.js';
 import { loadSettings } from './core/settings.js';
 import { summarize } from './core/stats.js';
-import { withInstantFeedback } from './logic/settings-form.js';
 import * as t1 from './tests/t1.js';
 import * as t2 from './tests/t2.js';
 import * as t3 from './tests/t3.js';
@@ -41,15 +40,6 @@ function renderMenu(settingsInfo) {
     <section class="screen menu">
       <h1>適性検査 練習</h1>
       <div data-ref="notices"></div>
-      <div class="instant-toggle-row">
-        <label class="instant-toggle">
-          <input type="checkbox" role="switch" data-ref="instant">
-          <span class="instant-toggle-track" aria-hidden="true"></span>
-          <span class="instant-toggle-label">即時判定</span>
-        </label>
-        <span class="muted small" data-ref="instantHint"></span>
-      </div>
-      <p class="notice notice-error" data-ref="instantError" hidden></p>
       <nav class="menu-grid" data-ref="grid"></nav>
       <div class="menu-sub">
         <a class="btn" href="#/history">履歴</a>
@@ -70,22 +60,6 @@ function renderMenu(settingsInfo) {
     addNotice(notices, `成績データを読めません: ${results.message}。この状態では新しい記録を保存しません`, 'error');
   }
   const records = results.ok ? results.records : [];
-
-  // 即時判定のオン/オフ。押すと apt_settings の common に保存し、次に開いたときも残す
-  const instant = $('instant');
-  const showInstant = on => {
-    instant.checked = on;
-    $('instantHint').textContent = on ? 'オン: テスト1〜5で、答えるたびに正誤を表示します' : 'オフ: テスト中は正誤を表示しません';
-  };
-  showInstant(settingsInfo.settings.common.instantFeedback);
-  instant.addEventListener('change', () => {
-    const raw = readSettingsRaw(store);
-    // 読めない設定を上書きして消さないよう、保存しない
-    const result = raw.ok ? saveSettings(store, withInstantFeedback(raw.value, instant.checked)) : raw;
-    $('instantError').hidden = result.ok;
-    $('instantError').textContent = result.ok ? '' : `即時判定を保存できませんでした(${result.message})`;
-    showInstant(result.ok ? instant.checked : !instant.checked);
-  });
 
   for (const t of TESTS) {
     const s = summarize(records, t.id);

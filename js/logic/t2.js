@@ -30,8 +30,8 @@ function validate(p) {
   if (!(Number.isInteger(p.maxConsecutiveMatches) && p.maxConsecutiveMatches >= 0)) {
     bad.push(`連続の上限 maxConsecutiveMatches=${p.maxConsecutiveMatches}`);
   }
-  if (bad.length) throw new Error(`テスト2の設定が不正です: ${bad.join('、')}`);
-  if (displayCount(p) < 1) throw new Error('テスト2の設定が不正です: 制限時間が切り替え間隔より短いため、1回も表示できません');
+  if (bad.length) throw new Error(`テスト3(同一図形)の設定が不正です: ${bad.join('、')}`);
+  if (displayCount(p) < 1) throw new Error('テスト3(同一図形)の設定が不正です: 制限時間が切り替え間隔より短いため、1回も表示できません');
 }
 
 // 一致・不一致の並びを作る。棄却サンプリングは使わず、構成的に置く:

@@ -5,7 +5,7 @@ import {
   generateSequence, displayCount, createDisplayState, registerPress, createTally, settleDisplay, buildRecord,
   t2PressFeedback, t2MissFeedback,
 } from '../logic/t2.js';
-import { createFeedbackSlot, feedbackSlotHtml, instantFeedbackBadge, recordSettingsWithFeedback } from '../core/feedback.js';
+import { createFeedbackSlot, feedbackSlotHtml } from '../core/feedback.js';
 import { createRng, randomSeed } from '../core/rng.js';
 import { startTimer, formatDuration } from '../core/timer.js';
 import { appendRecord } from '../core/storage.js';
@@ -92,10 +92,9 @@ export function mount(root, ctx) {
     const N = seq.length;
 
     root.innerHTML = `
-      <section class="t2-play${common.instantFeedback ? ' has-feedback' : ''}">
+      <section class="t2-play has-feedback">
         <div class="topbar">
           <span class="remaining" data-ref="remaining"></span>
-          ${instantFeedbackBadge(common)}
           <button class="btn btn-quiet" type="button" data-ref="quit">途中終了</button>
         </div>
         <div class="t2-shapes">
@@ -103,7 +102,7 @@ export function mount(root, ctx) {
           <div class="t2-shape" role="img" data-ref="right"></div>
         </div>
         <div class="t2-bottom">
-          ${common.instantFeedback ? feedbackSlotHtml() : ''}
+          ${feedbackSlotHtml()}
           <button class="t2-same" type="button" data-ref="same">同じ</button>
         </div>
       </section>`;
@@ -111,7 +110,7 @@ export function mount(root, ctx) {
     const leftEl = $('left');
     const rightEl = $('right');
     const sameBtn = $('same');
-    const feedback = common.instantFeedback ? createFeedbackSlot($('feedback'), { durationMs: common.feedbackMs }) : null;
+    const feedback = createFeedbackSlot($('feedback'), { durationMs: common.feedbackMs });
 
     let cur = -1; // いま表示している番号
     let frameTs = 0; // その表示を描いたフレームの時刻
@@ -180,7 +179,7 @@ export function mount(root, ctx) {
         return;
       }
       tally = settleDisplay(tally, seq[cur].match, ds);
-      const record = buildRecord({ date: new Date().toISOString(), tally, settings: recordSettingsWithFeedback(params, common) });
+      const record = buildRecord({ date: new Date().toISOString(), tally, settings: params });
       const saveResult = appendRecord(ctx.store, record);
       setPhase(null); // 入力の受け付けを外す
       renderResult(root, {

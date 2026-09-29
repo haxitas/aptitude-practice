@@ -3,7 +3,7 @@ import {
   readResults, readSettingsRaw, saveSettings, appendImportedRecords, clearResults,
 } from './core/storage.js';
 import { DEFAULTS, T6_COLOR_PRESETS } from './core/settings.js';
-import { SETTING_FIELDS, validateTestSettings, resetTestOverrides } from './logic/settings-form.js';
+import { SETTING_FIELDS, validateTestSettings, resetTestOverrides, inputStep } from './logic/settings-form.js';
 import { makeExportData, parseImportJson, mergeImportedRecords } from './logic/records-transfer.js';
 
 function setNotice(element, text, kind = 'info') {
@@ -82,7 +82,7 @@ export function mount(root, ctx) {
     if (field.type === 'number') {
       input.min = String(field.min);
       input.max = String(field.max);
-      input.step = String(field.integer ? 1 : (field.step ?? 'any'));
+      input.step = inputStep(field);
       input.inputMode = field.integer ? 'numeric' : 'decimal';
     }
     input.setAttribute('aria-describedby', `${id}-help ${id}-error`);
@@ -100,7 +100,7 @@ export function mount(root, ctx) {
   }
 
   // 共通(即時判定)を先頭に、開いた状態で出す
-  for (const test of [{ id: 'common', name: '共通(即時判定)' }, ...TESTS]) {
+  for (const test of [{ id: 'common', name: '共通(判定の表示時間)' }, ...TESTS]) {
     const details = document.createElement('details');
     details.className = 'settings-test';
     if (test.id === 'common') details.open = true;

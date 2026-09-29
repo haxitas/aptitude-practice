@@ -1,6 +1,5 @@
 // テスト1 計算: 10種類の問題生成、典型誤答の4択、判定、採点。DOMには触れない。
 import { randInt, shuffle } from '../core/rng.js';
-import { correctFeedback, wrongFeedback } from '../core/feedback.js';
 
 export const PROBLEM_KINDS = Object.freeze(['unit', 'speed', 'meeting', 'catchup', 'percentage', 'inversePercentage', 'price', 'average', 'elapsed', 'geometry']);
 
@@ -377,9 +376,21 @@ export function judgeT1(problem, choiceIndex) {
   return problem.choices[choiceIndex] === problem.answer;
 }
 
-// 即時判定: 不正解のときは単位つきの正解を出す
-export function t1Feedback(problem, correct) {
-  return correct ? correctFeedback() : wrongFeedback(formatT1Answer(problem, problem.answer));
+// 結果画面の「間違えた問題」(2026-09-30 本番に合わせて変更: テスト中は正誤を出さない)
+// 正解なら null、不正解なら問題文・あなたの答え・正解・式
+export function t1MistakeEntry(problem, choiceIndex) {
+  if (judgeT1(problem, choiceIndex)) return null;
+  return {
+    prompt: problem.prompt,
+    yourAnswer: formatT1Answer(problem, problem.choices[choiceIndex]),
+    correctAnswer: formatT1Answer(problem, problem.answer),
+    formula: t1Formula(problem).text,
+  };
+}
+
+export function t1ReviewSummary(answered, mistakes) {
+  if (answered === 0) return '回答した問題はありません';
+  return mistakes.length === 0 ? '全問正解' : `間違えた問題(${mistakes.length}問)`;
 }
 
 // 答え・選択肢の書き方(速さは「時速◯km」)

@@ -1,9 +1,11 @@
 // テスト一覧。メニューと履歴画面が共用する。
 // details: 結果画面に出す内訳(record.detail のキーと表示名)。inHistory: false のものは履歴の表に出さない
 
+// 並び順と番号は本番の順(2026-09-30 本番の順に合わせて変更)。内部の id・記録・設定のキー・ハッシュは変えない
 export const TESTS = Object.freeze([
   {
     id: 't1',
+    number: 1,
     name: 'テスト1 計算',
     implemented: true,
     details: [
@@ -12,19 +14,9 @@ export const TESTS = Object.freeze([
     ],
   },
   {
-    id: 't2',
-    name: 'テスト2 同一図形の検出',
-    implemented: true,
-    details: [
-      { key: 'hits', label: '的中' },
-      { key: 'misses', label: '見逃し' },
-      { key: 'falseAlarms', label: '誤押し' },
-      { key: 'meanRtMs', label: '平均反応時間', unit: 'ms' },
-    ],
-  },
-  {
     id: 't3',
-    name: 'テスト3 マルチタスク',
+    number: 2,
+    name: 'テスト2 マルチタスク',
     implemented: true,
     details: [
       { key: 'shapeCorrect', label: '図形 正答' },
@@ -40,8 +32,32 @@ export const TESTS = Object.freeze([
     ],
   },
   {
+    id: 't2',
+    number: 3,
+    name: 'テスト3 同一図形の検出',
+    implemented: true,
+    details: [
+      { key: 'hits', label: '的中' },
+      { key: 'misses', label: '見逃し' },
+      { key: 'falseAlarms', label: '誤押し' },
+      { key: 'meanRtMs', label: '平均反応時間', unit: 'ms' },
+    ],
+  },
+  {
+    id: 't5',
+    number: 4,
+    name: 'テスト4 点の数',
+    implemented: true,
+    details: [
+      { key: 'answered', label: '回答' },
+      { key: 'unanswered', label: '未回答' },
+      { key: 'meanError', label: '平均の誤差' },
+    ],
+  },
+  {
     id: 't4',
-    name: 'テスト4 計器の読み取り',
+    number: 5,
+    name: 'テスト5 計器の読み取り',
     implemented: true,
     details: [
       { key: 'answered', label: '回答数' },
@@ -51,17 +67,8 @@ export const TESTS = Object.freeze([
     ],
   },
   {
-    id: 't5',
-    name: 'テスト5 点の数',
-    implemented: true,
-    details: [
-      { key: 'answered', label: '回答' },
-      { key: 'unanswered', label: '未回答' },
-      { key: 'meanError', label: '平均の誤差' },
-    ],
-  },
-  {
     id: 't6',
+    number: 6,
     name: 'テスト6 トンネル飛行',
     implemented: true,
     details: [

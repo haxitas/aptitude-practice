@@ -8,7 +8,7 @@ import {
   createT4Practice, answerT4Practice, advanceT4Practice, explainT4Solution,
   createT4Tally, recordT4Answer, buildT4Record, t4Feedback,
 } from '../logic/t4.js';
-import { createFeedbackSlot, feedbackSlotHtml, instantFeedbackBadge, recordSettingsWithFeedback } from '../core/feedback.js';
+import { createFeedbackSlot, feedbackSlotHtml } from '../core/feedback.js';
 import { createRng, randomSeed } from '../core/rng.js';
 import { startTimer, formatDuration } from '../core/timer.js';
 import { appendRecord } from '../core/storage.js';
@@ -118,7 +118,6 @@ export function mount(root, ctx) {
       <section class="t4-play">
         <div class="topbar">
           <span class="remaining" data-ref="remaining"></span>
-          ${mode === 'test' ? instantFeedbackBadge(common) : ''}
           <button class="btn btn-quiet" type="button" data-ref="quit">途中終了</button>
         </div>
         ${example ? `<p class="t4-example-note"><strong>例題</strong><br>
@@ -132,7 +131,7 @@ export function mount(root, ctx) {
           <div class="t4-answer-field"><p>自機の位置(中央が塔)</p><div class="t4-map" data-ref="map" aria-label="自機の位置"></div></div>
           <div class="t4-answer-field"><p>自機の機首の向き</p><div class="t4-headings" data-ref="headings" aria-label="機首の向き"></div></div>
           ${!example && !explaining ? '<button class="btn btn-primary t4-submit" type="button" data-ref="submit" disabled>決定</button>' : ''}
-          ${mode === 'test' && common.instantFeedback ? feedbackSlotHtml('feedback', 't4-feedback') : ''}
+          ${mode === 'test' ? feedbackSlotHtml('feedback', 't4-feedback') : ''}
         </div>
         ${example ? '<div class="actions t4-start-actions"><button class="btn" type="button" data-ref="practiceStart">練習問題を解く</button><button class="btn btn-primary" type="button" data-ref="start">始める</button></div>' : ''}
         ${explaining ? `<div class="t4-practice-feedback" data-ref="practiceFeedback"></div>
@@ -141,7 +140,7 @@ export function mount(root, ctx) {
     const $ = name => root.querySelector(`[data-ref="${name}"]`);
     const submit = $('submit');
     // テスト4の判定は、イラストを読む時間が要るため次の決定まで出し続ける
-    const feedback = mode === 'test' && common.instantFeedback
+    const feedback = mode === 'test'
       ? createFeedbackSlot($('feedback'), { durationMs: common.feedbackMs, sticky: true }) : null;
     if (example) $('exampleSteps').textContent = explainT4Solution(sample.problem, params.compassMode).join('\n');
 
@@ -289,7 +288,7 @@ export function mount(root, ctx) {
         if (ts >= paleUntil) submit.classList.remove('is-pressed');
       },
       onEnd() {
-        const record = buildT4Record({ date: new Date().toISOString(), tally, settings: recordSettingsWithFeedback(params, common) });
+        const record = buildT4Record({ date: new Date().toISOString(), tally, settings: params });
         const saveResult = appendRecord(ctx.store, record);
         setPhase(null);
         renderResult(root, {

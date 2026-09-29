@@ -532,25 +532,6 @@ h1 { font-size: 1.6rem; margin: 0 0 16px; }
 }
 
 /* ---- 即時判定(2026-09-27 追加) ---- */
-.instant-toggle-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 0 0 14px; }
-.instant-toggle { display: inline-flex; align-items: center; gap: 10px; min-height: var(--tap); font-weight: 800; cursor: pointer; }
-.instant-toggle input { position: absolute; opacity: 0; width: 1px; height: 1px; }
-.instant-toggle-track {
-  position: relative; width: 52px; height: 30px; border-radius: 999px;
-  background: var(--border); transition: background 120ms linear;
-}
-.instant-toggle-track::after {
-  content: ''; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%;
-  background: var(--surface); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35); transition: transform 120ms linear;
-}
-.instant-toggle input:checked + .instant-toggle-track { background: var(--accent); }
-.instant-toggle input:checked + .instant-toggle-track::after { transform: translateX(22px); }
-.instant-toggle input:focus-visible + .instant-toggle-track { outline: 3px solid var(--accent); outline-offset: 2px; }
-
-.feedback-badge {
-  font-size: 0.75rem; font-weight: 800; white-space: nowrap; padding: 2px 8px;
-  border: 1px solid var(--accent); border-radius: 999px; color: var(--accent);
-}
 /* 判定の枠は高さを確保しておき、問題やボタンに重ねない。押す操作は下へ通す */
 .feedback-slot {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
@@ -586,11 +567,14 @@ h1 { font-size: 1.6rem; margin: 0 0 16px; }
   .t4-feedback { grid-column: 1; grid-row: auto; }
 }
 
-.history-label {
-  display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 0.8rem; font-weight: 800;
-  background: var(--info-bg); color: var(--info-text); white-space: nowrap;
-}
 .feedback-formula { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; text-align: center; font-size: clamp(0.95rem, 2.2vw, 1.15rem); }
 .t5-feedback { min-height: 2.2rem; }
 /* テスト1は不正解で式の行が増えても選択肢が動かないよう、2行分の高さを確保する */
 .t1-card .feedback-slot { min-height: 4.6rem; justify-content: flex-start; }
+/* テスト1 結果画面の「間違えた問題」(2026-09-30 本番に合わせて変更) */
+.t1-review { margin: 8px 0 16px; }
+.t1-review h2 { font-size: 1.1rem; margin: 0 0 8px; }
+.t1-review ol { margin: 0; padding-left: 1.4em; display: grid; gap: 10px; }
+.t1-review li p { margin: 0; }
+.t1-review-prompt { font-weight: 700; }
+.t1-review-formula { font-variant-numeric: tabular-nums; color: var(--muted); }

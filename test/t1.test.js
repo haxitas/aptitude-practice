@@ -6,7 +6,7 @@ import {
   PROBLEM_KINDS, lapMinutes, makeT1Choices, generateT1Problem, judgeT1,
   createT1Tally, recordT1Answer, summarizeT1, buildT1Record,
 } from '../js/logic/t1.js';
-import { t1Feedback, t1Formula, formatT1Answer, UNIT_VARIANT_IDS, POWER_UNIT_VARIANT_IDS, PRICE_VARIANTS, GEOMETRY_VARIANTS } from '../js/logic/t1.js';
+import { t1MistakeEntry, t1ReviewSummary, t1Formula, formatT1Answer, UNIT_VARIANT_IDS, POWER_UNIT_VARIANT_IDS, PRICE_VARIANTS, GEOMETRY_VARIANTS } from '../js/logic/t1.js';
 
 const P = DEFAULTS.t1;
 
@@ -232,19 +232,6 @@ test('記録はSPEC §4の形で、その回の設定を複製する', () => {
   assert.notEqual(record.settings, P);
 });
 
-// ---- 即時判定 ----
-
-test('即時判定: 正解は「○ 正解」、不正解は単位つきの正解を出す', () => {
-  const problem = { answer: 36, unit: '分', choices: [36, 6, 360, 3.6], correctIndex: 0 };
-  assert.deepEqual(t1Feedback(problem, true), { kind: 'correct', text: '○ 正解' });
-  assert.deepEqual(t1Feedback(problem, false), { kind: 'wrong', text: '× 正解は 36分' });
-  assert.deepEqual(t1Feedback({ ...problem, answer: 120, unit: '' }, false), { kind: 'wrong', text: '× 正解は 120' });
-});
-
-// ---- 不正解のときに出す式 ----
-
-const evaluate = expression => Function(`"use strict"; return (${expression});`)();
-
 test('式: 全種類で式を作り、式を計算すると正解と一致する(2000シード)', () => {
   const kinds = new Set();
   const speedVariants = new Set();
@@ -253,7 +240,7 @@ test('式: 全種類で式を作り、式を計算すると正解と一致する
     const problem = generateT1Problem(createRng(seed), P, null, kind);
     const formula = t1Formula(problem);
     assert.ok(formula.text.endsWith(` = ${formatT1Answer(problem, problem.answer)}`), `${kind}: ${formula.text}`);
-    assert.ok(Math.abs(evaluate(formula.expression) - problem.answer) < 1e-9, `${kind}: ${formula.expression} != ${problem.answer}`);
+    assert.ok(Math.abs(evaluateExpr(formula.expression) - problem.answer) < 1e-9, `${kind}: ${formula.expression} != ${problem.answer}`);
     kinds.add(problem.kind);
     if (problem.kind === 'speed') speedVariants.add(problem.variant);
   }
@@ -364,7 +351,7 @@ test('速さの答えは「時速◯km」の形で出す', () => {
     if (q.variant !== 'speed') continue;
     assert.equal(formatT1Answer(q, q.answer), `時速${q.answer}km`);
     assert.ok(t1Formula(q).text.endsWith(`= 時速${q.answer}km`), t1Formula(q).text);
-    assert.deepEqual(t1Feedback(q, false), { kind: 'wrong', text: `× 正解は 時速${q.answer}km` });
+    assert.equal(t1MistakeEntry(q, (q.correctIndex + 1) % 4).correctAnswer, `時速${q.answer}km`);
   }
 });
 
@@ -449,4 +436,43 @@ test('図形の式: 例のとおりに作る', () => {
   assert.equal(f('triangle-area', 20, 'cm²', { base: 8, height: 5 }), '8cm × 5cm ÷ 2 = 20cm²');
   assert.equal(f('trapezoid-area', 42, 'cm²', { top: 4, bottom: 10, height: 6 }), '(4cm + 10cm) × 6cm ÷ 2 = 42cm²');
   assert.equal(f('parallelogram-area', 63, 'cm²', { base: 7, height: 9 }), '7cm × 9cm = 63cm²');
+});
+
+// ---- 結果画面の「間違えた問題」(2026-09-30 本番に合わせて変更) ----
+
+test('間違えた問題: 正解なら記録せず、不正解なら問題文・あなたの答え・正解・式を持つ', () => {
+  const q = { kind: 'meeting', variant: 'opposite', prompt: '周囲4.2kmの池を…何分後に出会いますか?', answer: 36, unit: '分',
+    values: { length: 4.2, a: 4, b: 3 }, choices: [252, 36, 360, 3.6], correctIndex: 1 };
+  assert.equal(t1MistakeEntry(q, 1), null);
+  assert.deepEqual(t1MistakeEntry(q, 0), {
+    prompt: '周囲4.2kmの池を…何分後に出会いますか?',
+    yourAnswer: '252分',
+    correctAnswer: '36分',
+    formula: '4.2km ÷ (時速4km + 時速3km) × 60 = 36分',
+  });
+});
+
+test('間違えた問題: 速さの答えは「時速◯km」で出す', () => {
+  const q = { kind: 'speed', variant: 'speed', prompt: '10kmを5時間で進む速さは時速何kmですか?', answer: 2, unit: 'km', answerPrefix: '時速',
+    values: { speed: 2, hours: 5, distance: 10 }, choices: [2, 50, 15, 5], correctIndex: 0 };
+  const entry = t1MistakeEntry(q, 3);
+  assert.equal(entry.yourAnswer, '時速5km');
+  assert.equal(entry.correctAnswer, '時速2km');
+});
+
+test('間違えた問題の見出し: 0問なら「全問正解」、回答なしなら「回答した問題はありません」', () => {
+  assert.equal(t1ReviewSummary(12, []), '全問正解');
+  assert.equal(t1ReviewSummary(0, []), '回答した問題はありません');
+  assert.equal(t1ReviewSummary(12, [{}, {}, {}]), '間違えた問題(3問)');
+});
+
+test('生成した問題でも、不正解の記録の式を計算すると正解と一致する', () => {
+  for (let seed = 1; seed <= 300; seed++) {
+    const q = generateT1Problem(createRng(seed), P);
+    const wrong = (q.correctIndex + 1) % 4;
+    const entry = t1MistakeEntry(q, wrong);
+    assert.equal(entry.prompt, q.prompt);
+    assert.equal(entry.correctAnswer, formatT1Answer(q, q.answer));
+    assert.ok(close(evaluateExpr(t1Formula(q).expression), q.answer));
+  }
 });

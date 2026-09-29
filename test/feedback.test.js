@@ -1,20 +1,22 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DEFAULTS, resolveSettings } from '../js/core/settings.js';
+import * as feedback from '../js/core/feedback.js';
 import {
-  correctFeedback, wrongFeedback, missFeedback, feedbackExpired, recordSettingsWithFeedback,
+  correctFeedback, wrongFeedback, missFeedback, feedbackExpired,
 } from '../js/core/feedback.js';
 
-test('共通設定の既定値: 即時判定はオフ、表示時間は1200ms', () => {
-  assert.deepEqual(DEFAULTS.common, { instantFeedback: false, feedbackMs: 1200 });
+test('共通設定は判定の表示時間だけ。即時判定のオン/オフは廃止(2026-09-30 本番に合わせて変更)', () => {
+  assert.deepEqual(DEFAULTS.common, { feedbackMs: 1200 });
+  // 以前の保存値に instantFeedback が残っていても使わない(既定値にないキーは捨てる)
+  const r = resolveSettings({ common: { instantFeedback: true, feedbackMs: 800 } });
+  assert.deepEqual(r.settings.common, { feedbackMs: 800 });
+  assert.deepEqual(r.warnings, []);
 });
 
-test('共通設定は保存値と合成され、型が合わなければ既定値に戻る', () => {
-  assert.equal(resolveSettings({ common: { instantFeedback: true } }).settings.common.instantFeedback, true);
-  const bad = resolveSettings({ common: { instantFeedback: 'true', feedbackMs: 800 } });
-  assert.equal(bad.settings.common.instantFeedback, false);
-  assert.equal(bad.settings.common.feedbackMs, 800);
-  assert.deepEqual(bad.warnings, ['common.instantFeedback']);
+test('即時判定のバッジと、記録へ instantFeedback を入れる関数は無くなった', () => {
+  assert.equal('instantFeedbackBadge' in feedback, false);
+  assert.equal('recordSettingsWithFeedback' in feedback, false);
 });
 
 test('判定の文言: 正解・不正解・見逃しは記号つき', () => {
@@ -28,12 +30,4 @@ test('判定の表示時間: feedbackMs で消え、固定表示は消えない'
   assert.equal(feedbackExpired(1000, 2200, 1200), true);
   assert.equal(feedbackExpired(1000, 99999, 1200, true), false);
   assert.equal(feedbackExpired(null, 99999, 1200), false);
-});
-
-test('記録の settings に instantFeedback を入れ、元の設定は書き換えない', () => {
-  const params = { durationSec: 180 };
-  assert.deepEqual(recordSettingsWithFeedback(params, { instantFeedback: true }), { durationSec: 180, instantFeedback: true });
-  assert.deepEqual(recordSettingsWithFeedback(params, { instantFeedback: false }), { durationSec: 180, instantFeedback: false });
-  assert.deepEqual(recordSettingsWithFeedback(params, undefined), { durationSec: 180, instantFeedback: false });
-  assert.deepEqual(params, { durationSec: 180 });
 });

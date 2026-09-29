@@ -9,11 +9,7 @@ const duration = () => number('durationSec', '制限時間', 10, 3600, { integer
 
 export const SETTING_FIELDS = Object.freeze({
   common: Object.freeze([
-    { key: 'instantFeedback', label: '即時判定', type: 'select', hint: 'テスト1〜5で、答えるたびに正誤を表示します', options: [
-      { value: 'false', label: 'オフ', parsed: false },
-      { value: 'true', label: 'オン', parsed: true },
-    ] },
-    number('feedbackMs', '判定の表示時間', 100, 10000, { integer: true, unit: 'ms', hint: 'テスト4は次の決定まで表示' }),
+    number('feedbackMs', '判定の表示時間', 100, 10000, { integer: true, unit: 'ms', hint: '計器の読み取りと点の数は次に答えるまで表示' }),
   ]),
   t1: Object.freeze([
     duration(),
@@ -200,10 +196,12 @@ export function validateTestSettings(testId, raw, defaults) {
   return { ok: Object.keys(errors).length === 0, value, errors };
 }
 
-// ホームの即時判定スイッチ: common.instantFeedback だけを書き換える
-export function withInstantFeedback(saved, on) {
-  const base = saved ?? {};
-  return { ...base, common: { ...(base.common ?? {}), instantFeedback: on === true } };
+// 入力欄の刻み。ミリ秒(〜Ms)は矢印キーや上下ボタンで50ずつ変わる。検証は刻みと関係なく行う
+export const MS_INPUT_STEP = 50;
+export function inputStep(field) {
+  if (field.type === 'number' && /Ms$/.test(field.key)) return String(MS_INPUT_STEP);
+  if (field.integer) return '1';
+  return String(field.step ?? 'any');
 }
 
 export function resetTestOverrides(saved, testId) {

@@ -8,7 +8,6 @@ import {
   makeHistoryOverview,
   parseHistoryRoute,
 } from '../js/logic/history.js';
-import { recordUsedInstantFeedback } from '../js/logic/history.js';
 
 const BOX = Object.freeze({ left: 48, right: 16, top: 16, bottom: 36, preferredTickCount: 5 });
 
@@ -97,26 +96,12 @@ test('履歴モデルは対象テストの直近20件を選び、グラフだけ
   assert.equal(model.chartRecords.at(-1).score, 24);
 });
 
-// ---- 即時判定のラベル ----
+// ---- 即時判定のラベルは廃止(2026-09-30 本番に合わせて変更) ----
 
-test('即時判定: settings.instantFeedback が true の回だけラベルを付け、古い記録には付けない', () => {
-  assert.equal(recordUsedInstantFeedback(rec(0, 5, { durationSec: 120, instantFeedback: true })), true);
-  assert.equal(recordUsedInstantFeedback(rec(0, 5, { durationSec: 120, instantFeedback: false })), false);
-  assert.equal(recordUsedInstantFeedback(rec(0, 5, { durationSec: 120 })), false);
-  assert.equal(recordUsedInstantFeedback({ id: 'x', test: 't2' }), false);
-});
-
-test('即時判定: ラベルは既定値との違い(※)とは別に扱う', () => {
-  const model = makeHistoryModel([
-    rec(0, 5, { durationSec: 120, instantFeedback: true }),
-    rec(1, 6, { durationSec: 180, instantFeedback: false }),
-    rec(2, 7, { durationSec: 120 }),
-  ], 't2', { durationSec: 120 }, 20);
-  const byScore = Object.fromEntries(model.tableRecords.map(r => [r.score, r]));
-  assert.equal(byScore[5].instantFeedback, true);
-  assert.equal(byScore[5].customSettings, false);
-  assert.equal(byScore[6].instantFeedback, false);
-  assert.equal(byScore[6].customSettings, true);
-  assert.equal(byScore[7].instantFeedback, false);
-  assert.equal(byScore[7].customSettings, false);
+test('履歴モデルに即時判定の印は付けない(古い記録の settings は書き換えない)', () => {
+  const old = rec(0, 5, { durationSec: 120, instantFeedback: true });
+  const model = makeHistoryModel([old], 't2', { durationSec: 120 }, 20);
+  assert.equal('instantFeedback' in model.tableRecords[0], false);
+  assert.equal(model.tableRecords[0].customSettings, false);
+  assert.equal(old.settings.instantFeedback, true);
 });

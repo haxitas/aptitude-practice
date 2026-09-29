@@ -25,8 +25,8 @@ export const T6_COLOR_PRESETS = Object.freeze([
 
 export const DEFAULTS = Object.freeze({
   // 全テスト共通(2026-09-27 ユーザーの判断で追加)
+  // 即時判定はテスト2〜5で常にオン、テスト1(計算)は結果画面で振り返る(2026-09-30 本番に合わせて変更)
   common: Object.freeze({
-    instantFeedback: false, // 即時判定モード(テスト1〜5で、答えるたびに正誤を出す)
     feedbackMs: 1200, // 判定を出しておく時間(テスト4は次の決定まで出し続ける)
   }),
   t1: Object.freeze({

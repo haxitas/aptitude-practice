@@ -1,9 +1,8 @@
 // テスト1 計算: 4択表示、回答、時間管理、保存。
 
 import {
-  generateT1Problem, judgeT1, t1Feedback, t1Formula, formatT1Answer, createT1Tally, recordT1Answer, buildT1Record,
+  generateT1Problem, judgeT1, t1MistakeEntry, t1ReviewSummary, formatT1Answer, createT1Tally, recordT1Answer, buildT1Record,
 } from '../logic/t1.js';
-import { createFeedbackSlot, feedbackSlotHtml, instantFeedbackBadge, recordSettingsWithFeedback } from '../core/feedback.js';
 import { createRng, randomSeed } from '../core/rng.js';
 import { startTimer, formatDuration } from '../core/timer.js';
 import { appendRecord } from '../core/storage.js';
@@ -11,9 +10,35 @@ import { renderResult } from '../core/result.js';
 import { findTest, formatDetail } from '../core/catalog.js';
 import { mountCalculator } from '../calculator.js';
 
+// 結果画面の「間違えた問題」: 問題文・あなたの答え・正解・式
+function reviewSection(summary, mistakes) {
+  const section = document.createElement('section');
+  section.className = 't1-review';
+  const heading = document.createElement('h2');
+  heading.textContent = summary;
+  section.append(heading);
+  if (mistakes.length) {
+    const list = document.createElement('ol');
+    for (const m of mistakes) {
+      const item = document.createElement('li');
+      const prompt = document.createElement('p');
+      prompt.className = 't1-review-prompt';
+      prompt.textContent = m.prompt;
+      const answers = document.createElement('p');
+      answers.textContent = `あなたの答え: ${m.yourAnswer} / 正解: ${m.correctAnswer}`;
+      const formula = document.createElement('p');
+      formula.className = 't1-review-formula';
+      formula.textContent = m.formula;
+      item.append(prompt, answers, formula);
+      list.append(item);
+    }
+    section.append(list);
+  }
+  return section;
+}
+
 export function mount(root, ctx) {
   const params = ctx.settings.t1;
-  const common = ctx.settings.common;
   const meta = findTest('t1');
   let teardown = null;
 
@@ -55,7 +80,6 @@ export function mount(root, ctx) {
       <section class="t1-play">
         <div class="topbar">
           <span class="remaining" data-ref="remaining"></span>
-          ${instantFeedbackBadge(common)}
           <button class="btn btn-quiet" type="button" data-ref="quit">途中終了</button>
         </div>
         <div class="t1-main">
@@ -68,7 +92,6 @@ export function mount(root, ctx) {
             <button type="button" data-index="2"></button>
             <button type="button" data-index="3"></button>
           </div>
-          ${common.instantFeedback ? feedbackSlotHtml() : ''}
         </div>
         ${params.calculatorDuringTest ? '<div class="t1-calculator" data-ref="calculator"></div>' : ''}
         </div>
@@ -77,7 +100,7 @@ export function mount(root, ctx) {
     const choiceButtons = [...root.querySelectorAll('[data-index]')];
     const kindLabels = { unit: '単位換算', speed: '速さ', meeting: '出会い', catchup: '追いつき', percentage: '割合', inversePercentage: '割合の逆算', price: '単価と合計', average: '平均', elapsed: '経過時間', geometry: '図形' };
     const cleanupCalculator = params.calculatorDuringTest ? mountCalculator($('calculator')) : null;
-    const feedback = common.instantFeedback ? createFeedbackSlot($('feedback'), { durationMs: common.feedbackMs }) : null;
+    const mistakes = []; // 結果画面で振り返る(テスト中は正誤を出さない)
 
     function drawProblem() {
       $('kind').textContent = kindLabels[problem.kind];
@@ -91,16 +114,8 @@ export function mount(root, ctx) {
       const button = e.currentTarget;
       const correct = judgeT1(problem, Number(button.dataset.index));
       tally = recordT1Answer(tally, correct);
-      if (feedback) {
-        // 不正解のときだけ式を添え、式を読めるよう次に答えるまで残す
-        let formula = null;
-        if (!correct) {
-          formula = document.createElement('p');
-          formula.className = 'feedback-formula';
-          formula.textContent = t1Formula(problem).text;
-        }
-        feedback.show(t1Feedback(problem, correct), e.timeStamp, formula, { sticky: !correct });
-      }
+      const mistake = t1MistakeEntry(problem, Number(button.dataset.index));
+      if (mistake) mistakes.push(mistake);
       button.classList.add('is-pressed');
       pale.set(button, e.timeStamp);
       problem = generateT1Problem(rng, params, problem);
@@ -131,7 +146,6 @@ export function mount(root, ctx) {
           return;
         }
         lastFrameTs = ts;
-        feedback?.tick(ts);
         for (const [button, pressedAt] of pale) {
           if (ts - pressedAt >= params.answerFeedbackMs) {
             button.classList.remove('is-pressed');
@@ -140,7 +154,7 @@ export function mount(root, ctx) {
         }
       },
       onEnd() {
-        const record = buildT1Record({ date: new Date().toISOString(), tally, settings: recordSettingsWithFeedback(params, common) });
+        const record = buildT1Record({ date: new Date().toISOString(), tally, settings: params });
         const saveResult = appendRecord(ctx.store, record);
         setPhase(null);
         renderResult(root, {
@@ -149,6 +163,7 @@ export function mount(root, ctx) {
           details: meta.details.map(d => ({ label: d.label, value: formatDetail(d, record.detail[d.key]) })),
           saveResult,
           onRetry: showStart,
+          extra: reviewSection(t1ReviewSummary(tally.answered, mistakes), mistakes),
         });
         root.querySelector('.result .actions')?.insertAdjacentHTML('beforeend', '<a class="btn" href="#/calc">電卓</a>');
       },

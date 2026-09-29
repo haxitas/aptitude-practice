@@ -3,7 +3,8 @@
 
 // details: [{ label, value }](value は表示用の文字列)
 // saveResult: storage.appendRecord の戻り値
-export function renderResult(root, { testName, score, details, saveResult, onRetry }) {
+// extra: 保存の知らせの下に置く要素(テスト1の「間違えた問題」)
+export function renderResult(root, { testName, score, details, saveResult, onRetry, extra = null }) {
   root.innerHTML = `
     <section class="screen result">
       <h1 data-ref="title"></h1>
@@ -35,6 +36,7 @@ export function renderResult(root, { testName, score, details, saveResult, onRet
     save.setAttribute('role', 'alert');
     save.textContent = `保存できませんでした(${saveResult.message})`;
   }
+  if (extra) save.after(extra);
   $('retry').addEventListener('click', onRetry);
   // 「もう一度」にフォーカスを当てない。終了直後に押したスペースキーで結果画面が消えないようにする
   document.activeElement?.blur?.();

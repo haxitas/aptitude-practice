@@ -6,7 +6,7 @@ import {
   t5Feedback,
   createT5Tally, recordT5Answer, recordT5Unanswered, buildT5Record,
 } from '../logic/t5.js';
-import { createFeedbackSlot, feedbackSlotHtml, instantFeedbackBadge, recordSettingsWithFeedback } from '../core/feedback.js';
+import { createFeedbackSlot, feedbackSlotHtml } from '../core/feedback.js';
 import { createRng, randomSeed } from '../core/rng.js';
 import { startTimer, formatDuration } from '../core/timer.js';
 import { appendRecord } from '../core/storage.js';
@@ -93,19 +93,17 @@ export function mount(root, ctx) {
       <section class="t5-play">
         <div class="topbar">
           <span class="remaining" data-ref="remaining"></span>
-          ${instantFeedbackBadge(common)}
           <strong data-ref="question"></strong>
           <button class="btn btn-quiet" type="button" data-ref="quit">途中終了</button>
         </div>
         <div class="t5-stage"><canvas data-ref="canvas" aria-label="点を数える円"></canvas></div>
-        ${common.instantFeedback ? feedbackSlotHtml('feedback', 't5-feedback') : ''}
+        ${feedbackSlotHtml('feedback', 't5-feedback')}
         <div class="t5-buttons" data-ref="buttons"></div>
       </section>`;
     const $ = name => root.querySelector(`[data-ref="${name}"]`);
     const canvas = $('canvas');
     // テスト5の判定は、時間制限なしで数える間に見返せるよう次に答えるまで残す
-    const feedback = common.instantFeedback
-      ? createFeedbackSlot($('feedback'), { durationMs: common.feedbackMs, sticky: true }) : null;
+    const feedback = createFeedbackSlot($('feedback'), { durationMs: common.feedbackMs, sticky: true });
     for (let n = params.minDots; n <= params.maxDots; n++) {
       const button = document.createElement('button');
       button.type = 'button';
@@ -196,7 +194,7 @@ export function mount(root, ctx) {
         }
       },
       onEnd() {
-        const record = buildT5Record({ date: new Date().toISOString(), tally, settings: recordSettingsWithFeedback(params, common) });
+        const record = buildT5Record({ date: new Date().toISOString(), tally, settings: params });
         const saveResult = appendRecord(ctx.store, record);
         setPhase(null);
         renderResult(root, {

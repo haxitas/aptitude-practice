@@ -236,7 +236,7 @@ export function mount(root, ctx, hash = location.hash) {
 
     const cols = test.details.filter(d => d.inHistory !== false);
     const head = $('head');
-    head.replaceChildren(cell('th', '日時'), cell('th', '点数'), cell('th', '設定'), cell('th', 'モード'), ...cols.map(d => cell('th', d.label)));
+    head.replaceChildren(cell('th', '日時'), cell('th', '点数'), cell('th', '設定'), ...cols.map(d => cell('th', d.label)));
 
     const body = $('body');
     body.replaceChildren();
@@ -244,14 +244,7 @@ export function mount(root, ctx, hash = location.hash) {
     const rows = model.tableRecords;
     for (const r of rows) {
       const tr = document.createElement('tr');
-      const mode = cell('td', '');
-      if (r.instantFeedback) {
-        const label = document.createElement('span');
-        label.className = 'history-label';
-        label.textContent = '即時判定';
-        mode.append(label);
-      }
-      tr.append(cell('td', formatDate(r.date)), cell('td', String(r.score)), cell('td', r.customSettings ? '※' : ''), mode);
+      tr.append(cell('td', formatDate(r.date)), cell('td', String(r.score)), cell('td', r.customSettings ? '※' : ''));
       for (const d of cols) tr.append(cell('td', formatDetail(d, r.detail?.[d.key])));
       body.append(tr);
     }
@@ -269,7 +262,7 @@ export function mount(root, ctx, hash = location.hash) {
       .sort((a, b) => a.distance - b.distance)[0];
     if (nearest.distance > DISPLAY.historyChartHitRadius) return;
     const r = nearest.p.record;
-    $('chartDetail').textContent = `${formatDate(r.date)} / ${r.score}点 / ${r.customSettings ? '設定変更あり' : '既定値'}${r.instantFeedback ? ' / 即時判定' : ''}`;
+    $('chartDetail').textContent = `${formatDate(r.date)} / ${r.score}点 / ${r.customSettings ? '設定変更あり' : '既定値'}`;
   });
 
   const resizeObserver = new ResizeObserver(() => show());

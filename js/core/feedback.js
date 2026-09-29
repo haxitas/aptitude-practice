@@ -20,16 +20,6 @@ export function feedbackExpired(shownAt, now, durationMs, sticky = false) {
   return now - shownAt >= durationMs;
 }
 
-// 記録の settings に、その回の即時判定のオン/オフを入れる(元の設定は書き換えない)
-export function recordSettingsWithFeedback(params, common) {
-  return { ...params, instantFeedback: common?.instantFeedback === true };
-}
-
-// プレイ画面の上部に出す小さな表示
-export function instantFeedbackBadge(common) {
-  return common?.instantFeedback ? '<span class="feedback-badge">即時判定 ON</span>' : '';
-}
-
 // 判定を出す枠。回答ボタンの近くに置き、pointer-events を無効にして次の入力を邪魔しない。
 // 時間の管理はテストの rAF のループから tick(ts) を呼んで行う(setTimeout は使わない)。
 export function feedbackSlotHtml(ref = 'feedback', extraClass = '') {

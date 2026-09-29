@@ -7,7 +7,7 @@ import {
   createT3Tally, recordAnswer, recordUnanswered, buildT3Record,
   t3ShapeFeedback, t3CalcFeedback, t3AudioFeedback,
 } from '../logic/t3.js';
-import { createFeedbackSlot, feedbackSlotHtml, instantFeedbackBadge, recordSettingsWithFeedback } from '../core/feedback.js';
+import { createFeedbackSlot, feedbackSlotHtml } from '../core/feedback.js';
 import { createRng, randomSeed } from '../core/rng.js';
 import { startTimer, formatDuration } from '../core/timer.js';
 import { appendRecord } from '../core/storage.js';
@@ -75,7 +75,7 @@ export function mount(root, ctx) {
     const startBtn = $('start');
 
     if (!synth || typeof globalThis.SpeechSynthesisUtterance !== 'function') {
-      $('error').textContent = 'このブラウザは読み上げ(speechSynthesis)に対応していないため、テスト3を開始できません';
+      $('error').textContent = 'このブラウザは読み上げ(speechSynthesis)に対応していないため、テスト2(マルチタスク)を開始できません';
       $('error').hidden = false;
       startBtn.disabled = true;
       return;
@@ -113,7 +113,6 @@ export function mount(root, ctx) {
       <section class="t3-play">
         <div class="topbar">
           <span class="remaining" data-ref="remaining"></span>
-          ${instantFeedbackBadge(common)}
           <span class="muted small t3-voice" data-ref="voice"></span>
           <button class="btn btn-quiet" type="button" data-ref="quit">途中終了</button>
         </div>
@@ -125,7 +124,7 @@ export function mount(root, ctx) {
               <button class="t3-btn" type="button" data-dir="left" aria-label="左向き">◀</button>
               <button class="t3-btn" type="button" data-dir="right" aria-label="右向き">▶</button>
             </div>
-            ${common.instantFeedback ? feedbackSlotHtml('shapeFeedback') : ''}
+            ${feedbackSlotHtml('shapeFeedback')}
           </div>
           <div class="t3-panel t3-calc-task">
             <div class="t3-calc-expr" data-ref="expr"></div>
@@ -135,7 +134,7 @@ export function mount(root, ctx) {
               <button class="t3-btn" type="button" data-idx="2"></button>
               <button class="t3-btn" type="button" data-idx="3"></button>
             </div>
-            ${common.instantFeedback ? feedbackSlotHtml('calcFeedback') : ''}
+            ${feedbackSlotHtml('calcFeedback')}
           </div>
           <div class="t3-panel t3-audio-task">
             <div class="t3-audio-status" data-ref="audioStatus"></div>
@@ -143,7 +142,7 @@ export function mount(root, ctx) {
               <button class="t3-btn" type="button" data-dup="yes" disabled>重複あり</button>
               <button class="t3-btn" type="button" data-dup="no" disabled>重複なし</button>
             </div>
-            ${common.instantFeedback ? feedbackSlotHtml('audioFeedback') : ''}
+            ${feedbackSlotHtml('audioFeedback')}
           </div>
         </div>
       </section>`;
@@ -157,7 +156,7 @@ export function mount(root, ctx) {
     const audioStatus = $('audioStatus');
     const speechError = $('speechError');
     // 3つの枠それぞれに独立して判定を出す
-    const slot = ref => (common.instantFeedback ? createFeedbackSlot($(ref), { durationMs: common.feedbackMs }) : null);
+    const slot = ref => createFeedbackSlot($(ref), { durationMs: common.feedbackMs });
     const shapeFeedback = slot('shapeFeedback');
     const calcFeedback = slot('calcFeedback');
     const audioFeedback = slot('audioFeedback');
@@ -283,7 +282,7 @@ export function mount(root, ctx) {
 
     function onEnd() {
       // 終了時刻に残っていた問題・読み上げ中や回答待ちの組は数えない
-      const record = buildT3Record({ date: new Date().toISOString(), tally, settings: recordSettingsWithFeedback(params, common) });
+      const record = buildT3Record({ date: new Date().toISOString(), tally, settings: params });
       setPhase(null);
       const saveResult = appendRecord(ctx.store, record);
       renderResult(root, {
