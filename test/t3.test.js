@@ -11,7 +11,7 @@ import {
   createT3Tally, recordAnswer, recordUnanswered, summarizeT3, buildT3Record,
   shapeTimedOut, recordShapeUnanswered, skipAudio, recordSkip,
 } from '../js/logic/t3.js';
-import { t3ShapeFeedback, t3CalcFeedback, t3AudioFeedback } from '../js/logic/t3.js';
+import { t3ShapeFeedback, t3ShapeTimeoutFeedback, t3CalcFeedback, t3AudioFeedback } from '../js/logic/t3.js';
 
 const P = DEFAULTS.t3;
 
@@ -419,12 +419,18 @@ test('即時判定: 図形は正しい向きを記号と言葉で出す', () => 
   assert.deepEqual(t3ShapeFeedback({ items: [], answer: 'left' }, false), { kind: 'wrong', text: '× 正解は ◀(左向き)' });
 });
 
-test('即時判定: 計算は正しい値と表示された値を出す', () => {
-  const q = { answer: 17, shown: 19, shownCorrect: false, terms: [] };
-  assert.deepEqual(t3CalcFeedback(q, true), { kind: 'correct', text: '○ 正解' });
-  assert.deepEqual(t3CalcFeedback(q, false), { kind: 'wrong', text: '× 正しくは 17(表示は 19)' });
-  const right = { answer: 17, shown: 17, shownCorrect: true, terms: [] };
-  assert.deepEqual(t3CalcFeedback(right, false), { kind: 'wrong', text: '× 正しくは 17(表示は 17)' });
+test('即時判定: 図形の時間切れは「△ 時間切れ(正解は ▶)」', () => {
+  assert.deepEqual(t3ShapeTimeoutFeedback({ items: [], answer: 'right' }), { kind: 'miss', text: '△ 時間切れ(正解は ▶)' });
+  assert.deepEqual(t3ShapeTimeoutFeedback({ items: [], answer: 'left' }), { kind: 'miss', text: '△ 時間切れ(正解は ◀)' });
+});
+
+test('即時判定: 計算は、正しい式に「誤り」なら「× この式は正しい」、誤った式に「正しい」なら「× 誤り(正しくは 10)」', () => {
+  const wrongShown = { answer: 10, shown: 12, shownCorrect: false, terms: [] };
+  const rightShown = { answer: 17, shown: 17, shownCorrect: true, terms: [] };
+  assert.deepEqual(t3CalcFeedback(wrongShown, true), { kind: 'correct', text: '○ 正解' });
+  assert.deepEqual(t3CalcFeedback(rightShown, true), { kind: 'correct', text: '○ 正解' });
+  assert.deepEqual(t3CalcFeedback(wrongShown, false), { kind: 'wrong', text: '× 誤り(正しくは 10)' });
+  assert.deepEqual(t3CalcFeedback(rightShown, false), { kind: 'wrong', text: '× この式は正しい' });
 });
 
 test('即時判定: 音声は重複ありなら重複した語、なしなら「重複なし」', () => {

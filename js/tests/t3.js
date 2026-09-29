@@ -6,7 +6,7 @@ import {
   generateAudioSet, createAudioState, startAudioSet, stepAudio, audioEnded, answerAudio,
   createT3Tally, recordAnswer, recordUnanswered, buildT3Record,
   shapeTimedOut, recordShapeUnanswered, skipAudio, recordSkip,
-  t3ShapeFeedback, t3CalcFeedback, t3AudioFeedback,
+  t3ShapeFeedback, t3ShapeTimeoutFeedback, t3CalcFeedback, t3AudioFeedback,
 } from '../logic/t3.js';
 import { createFeedbackSlot, feedbackSlotHtml } from '../core/feedback.js';
 import { createRng, randomSeed } from '../core/rng.js';
@@ -296,6 +296,7 @@ export function mount(root, ctx) {
       // 図形は1問ごとの制限時間を過ぎたら未回答にして次の図形へ
       if (shapeTimedOut(shapeShownAt, ts, params)) {
         tally = recordShapeUnanswered(tally);
+        shapeFeedback.show(t3ShapeTimeoutFeedback(shapeQ), ts);
         nextShape(ts);
       }
       runAudio(ts);

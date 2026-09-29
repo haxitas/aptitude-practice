@@ -241,8 +241,16 @@ export function t3ShapeFeedback(problem, correct) {
   return wrongFeedback(problem.answer === 'left' ? '◀(左向き)' : '▶(右向き)');
 }
 
+// 図形の時間切れ(2026-09-30 本番に合わせて追加)
+export function t3ShapeTimeoutFeedback(problem) {
+  return { kind: 'miss', text: `△ 時間切れ(正解は ${problem.answer === 'left' ? '◀' : '▶'})` };
+}
+
+// 不正解: 正しい式に「誤り」→「× この式は正しい」、誤った式に「正しい」→「× 誤り(正しくは 10)」(2026-09-30 本番に合わせて変更)
 export function t3CalcFeedback(problem, correct) {
-  return correct ? correctFeedback() : { kind: 'wrong', text: `× 正しくは ${problem.answer}(表示は ${problem.shown})` };
+  if (correct) return correctFeedback();
+  if (problem.shownCorrect) return { kind: 'wrong', text: '× この式は正しい' };
+  return { kind: 'wrong', text: `× 誤り(正しくは ${problem.answer})` };
 }
 
 // 音声: 正しい答えが「重複あり」なら、2回出た語も添える
