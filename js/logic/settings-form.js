@@ -46,10 +46,10 @@ export const SETTING_FIELDS = Object.freeze({
   ]),
   t2: Object.freeze([
     duration(),
-    number('intervalMs', '切り替え間隔', 50, 10000, { integer: true, unit: 'ms' }),
+    number('intervalMs', '違う図形の切り替え間隔', 50, 10000, { integer: true, unit: 'ms' }),
     number('matchRate', '同じ組の確率', 0, 1, { step: 0.01 }),
     number('maxConsecutiveMatches', '一致の連続上限', 0, 1000, { integer: true, unit: '回' }),
-    number('falseAlarmPenalty', '誤押し1回の減点', 0, 100, { integer: true, unit: '点' }),
+    number('matchWaitMs', '同じ図形で待つ時間', 500, 60000, { integer: true, unit: 'ms', hint: '押せなければ最初からやり直し' }),
   ]),
   t3: Object.freeze([
     duration(),
@@ -170,11 +170,8 @@ export function validateTestSettings(testId, raw, defaults) {
     if (value.averageMax - value.averageMin < 2) errors.averageMax = '整数の平均を作るため、最小値より2以上大きくしてください';
     if (!Object.keys(errors).length && !lapCandidates(value).integer.length) errors.lapMultiplierMax = '整数の周回距離を作れる速度と倍率の組がありません';
   } else if (testId === 't2') {
-    const total = Math.floor((value.durationSec * 1000) / value.intervalMs);
-    if (total < 1) errors.intervalMs = '制限時間内に1回以上表示できる間隔にしてください';
-    const wanted = Math.round(total * value.matchRate);
-    const possible = total - Math.floor(total / (value.maxConsecutiveMatches + 1));
-    if (wanted > possible) errors.matchRate = `連続上限内に配置できません。一致は最大${possible}回です`;
+    // 系列は順に作るので、一致確率と連続上限の組み合わせに制限はない
+    if (value.durationSec * 1000 < value.intervalMs) errors.intervalMs = '制限時間より短い間隔にしてください';
   } else if (testId === 't3') {
     minMax(errors, value, 'calcTermMin', 'calcTermMax');
     if (value.calcMaxTwoDigitTerms > defaults.calcTermCount) errors.calcMaxTwoDigitTerms = `計算の項数${defaults.calcTermCount}以下にしてください`;

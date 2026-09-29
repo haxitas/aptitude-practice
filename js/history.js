@@ -19,6 +19,12 @@ function cell(tag, text) {
   return c;
 }
 
+// 内訳のうち emphasis のもの(同一図形の平均反応時間)を目立たせる
+function emphasize(element, detail) {
+  if (detail.emphasis) element.classList.add('is-emphasis');
+  return element;
+}
+
 function formatAxisDate(iso) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
@@ -236,7 +242,7 @@ export function mount(root, ctx, hash = location.hash) {
 
     const cols = test.details.filter(d => d.inHistory !== false);
     const head = $('head');
-    head.replaceChildren(cell('th', '日時'), cell('th', '点数'), cell('th', '設定'), ...cols.map(d => cell('th', d.label)));
+    head.replaceChildren(cell('th', '日時'), cell('th', '点数'), cell('th', '設定'), ...cols.map(d => emphasize(cell('th', d.label), d)));
 
     const body = $('body');
     body.replaceChildren();
@@ -245,7 +251,7 @@ export function mount(root, ctx, hash = location.hash) {
     for (const r of rows) {
       const tr = document.createElement('tr');
       tr.append(cell('td', formatDate(r.date)), cell('td', String(r.score)), cell('td', r.customSettings ? '※' : ''));
-      for (const d of cols) tr.append(cell('td', formatDetail(d, r.detail?.[d.key])));
+      for (const d of cols) tr.append(emphasize(cell('td', formatDetail(d, r.detail?.[d.key])), d));
       body.append(tr);
     }
     drawChart(model.chartRecords);

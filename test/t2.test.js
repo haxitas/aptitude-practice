@@ -1,14 +1,43 @@
+// テスト3 同一図形(内部 t2)。2026-09-30 本番に合わせて変更:
+// 一致の表示は押すまで止まり(最大 matchWaitMs)、押せなければやり直し。点数 = 的中 − 誤押し。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRng } from '../js/core/rng.js';
 import { DEFAULTS } from '../js/core/settings.js';
 import {
-  SHAPES, displayCount, matchCount, maxFeasibleMatches, generateSequence,
-  createDisplayState, registerPress, createTally, settleDisplay, score, summarizeTally, buildRecord,
+  SHAPES, createSequenceState, nextT2Display, validateT2Params,
+  createT2Run, pressT2, tickT2, scoreT2, summarizeT2, buildRecord, t2PressFeedback,
 } from '../js/logic/t2.js';
-import { t2PressFeedback, t2MissFeedback } from '../js/logic/t2.js';
 
 const P = DEFAULTS.t2;
+
+// ---- 既定値と図形 ----
+
+test('既定値: 2分・不一致は1000msで切り替え・一致25%・連続3回まで・一致は5秒待つ', () => {
+  assert.deepEqual(P, {
+    durationSec: 120, intervalMs: 1000, matchRate: 0.25, maxConsecutiveMatches: 3,
+    matchWaitMs: 5000, pressFeedbackMs: 300, stallAbortMs: 1000,
+  });
+});
+
+test('図形は △ ★ ○ □ ◇ 太い十字 の6種類で、中が抜けた星は出さない', () => {
+  assert.deepEqual([...SHAPES], ['triangle', 'starFilled', 'circle', 'square', 'diamond', 'thickCross']);
+  assert.equal(SHAPES.includes('starOutline'), false);
+});
+
+// ---- 系列(必要な分だけ順に作る) ----
+
+function makeSequence(seed, count, p = P) {
+  const rng = createRng(seed);
+  let state = createSequenceState();
+  const out = [];
+  for (let i = 0; i < count; i++) {
+    const r = nextT2Display(state, rng, p);
+    state = r.state;
+    out.push(r.display);
+  }
+  return out;
+}
 
 function longestMatchRun(seq) {
   let best = 0, run = 0;
@@ -16,178 +45,127 @@ function longestMatchRun(seq) {
   return best;
 }
 
-// ---- 採点 ----
-
-test('採点: SPEC の例 36/9/4 → 72', () => {
-  assert.equal(score({ hits: 36, misses: 9, falseAlarms: 4 }, P.falseAlarmPenalty), 72);
-});
-
-test('採点: 誤押しが多いと 0 で止まる', () => {
-  assert.equal(score({ hits: 1, misses: 0, falseAlarms: 60 }, P.falseAlarmPenalty), 0);
-});
-
-test('採点: 一致が0回(的中+見逃し=0)なら 0', () => {
-  assert.equal(score({ hits: 0, misses: 0, falseAlarms: 0 }, P.falseAlarmPenalty), 0);
-});
-
-test('採点: 四捨五入の境目 33.3→33、66.7→67', () => {
-  assert.equal(score({ hits: 1, misses: 2, falseAlarms: 0 }, P.falseAlarmPenalty), 33);
-  assert.equal(score({ hits: 2, misses: 1, falseAlarms: 0 }, P.falseAlarmPenalty), 67);
-});
-
-// ---- 判定 ----
-
-function play(isMatch, pressRts) {
-  let ds = createDisplayState();
-  for (const rt of pressRts) ds = registerPress(ds, rt).state;
-  return settleDisplay(createTally(), isMatch, ds);
-}
-
-test('判定: 一致で押す → 的中(反応時間を記録)', () => {
-  const t = play(true, [432]);
-  assert.deepEqual(t, { hits: 1, misses: 0, falseAlarms: 0, rts: [432] });
-});
-
-test('判定: 一致で押さない → 見逃し', () => {
-  assert.deepEqual(play(true, []), { hits: 0, misses: 1, falseAlarms: 0, rts: [] });
-});
-
-test('判定: 不一致で押す → 誤押し', () => {
-  assert.deepEqual(play(false, [300]), { hits: 0, misses: 0, falseAlarms: 1, rts: [] });
-});
-
-test('判定: 不一致で押さない → 数えない', () => {
-  assert.deepEqual(play(false, []), { hits: 0, misses: 0, falseAlarms: 0, rts: [] });
-});
-
-test('判定: 同じ表示の中で2回目に押しても数えない(反応時間は1回目)', () => {
-  let ds = createDisplayState();
-  const first = registerPress(ds, 400);
-  assert.equal(first.accepted, true);
-  const second = registerPress(first.state, 700);
-  assert.equal(second.accepted, false);
-  assert.deepEqual(settleDisplay(createTally(), true, second.state), { hits: 1, misses: 0, falseAlarms: 0, rts: [400] });
-  assert.deepEqual(settleDisplay(createTally(), false, second.state), { hits: 0, misses: 0, falseAlarms: 1, rts: [] });
-});
-
-test('判定: settleDisplay は元の集計を書き換えない', () => {
-  const t0 = createTally();
-  settleDisplay(t0, true, registerPress(createDisplayState(), 1).state);
-  assert.deepEqual(t0, createTally());
-});
-
-test('集計: 平均反応時間は整数ミリ秒、的中0回なら null', () => {
-  const a = summarizeTally({ hits: 3, misses: 1, falseAlarms: 0, rts: [400, 401, 403] }, P.falseAlarmPenalty);
-  assert.deepEqual(a, { score: 75, detail: { hits: 3, misses: 1, falseAlarms: 0, meanRtMs: 401 } });
-  const b = summarizeTally({ hits: 0, misses: 4, falseAlarms: 1, rts: [] }, P.falseAlarmPenalty);
-  assert.equal(b.detail.meanRtMs, null);
-});
-
-test('記録: SPEC §4 の形で、その回の T2 設定をすべて入れる', () => {
-  const date = '2026-09-23T10:15:00.000Z';
-  const r = buildRecord({ date, tally: { hits: 36, misses: 9, falseAlarms: 4, rts: [512] }, settings: P });
-  assert.deepEqual(r, {
-    id: '2026-09-23T10:15:00.000Z-t2', test: 't2', date, score: 72,
-    detail: { hits: 36, misses: 9, falseAlarms: 4, meanRtMs: 512 },
-    settings: { durationSec: 120, intervalMs: 1000, matchRate: 0.25, maxConsecutiveMatches: 1, falseAlarmPenalty: 2, pressFeedbackMs: 300 },
-  });
-  assert.notEqual(r.settings, P);
-});
-
-// ---- 生成 ----
-
-test('既定値: 表示回数 120、一致 30 回', () => {
-  assert.equal(displayCount(P), 120);
-  assert.equal(matchCount(P), 30);
-});
-
-test('表示回数は floor(制限時間 ÷ 間隔)、一致回数は Math.round(N×確率)', () => {
-  assert.equal(displayCount({ durationSec: 10, intervalMs: 3000 }), 3);
-  assert.equal(matchCount({ durationSec: 10, intervalMs: 1000, matchRate: 0.25 }), 3); // 2.5 → 3
-  assert.equal(matchCount({ durationSec: 10, intervalMs: 1000, matchRate: 0.33 }), 3);
-});
-
-test('生成(シード200種類): SPEC の条件をすべて満たす', () => {
+test('系列(シード200種類): 一致は左右が同じ、不一致は違う、直前とまったく同じ表示は出ない、連続は3回まで', () => {
+  let sawThree = false;
   for (let seed = 1; seed <= 200; seed++) {
-    const seq = generateSequence(P, createRng(seed));
-    assert.equal(seq.length, 120, `seed=${seed}`);
-    assert.equal(seq.filter(d => d.match).length, 30, `seed=${seed}`);
-    assert.ok(longestMatchRun(seq) < 2, `seed=${seed}: 一致が2回続いた`);
+    const seq = makeSequence(seed, 300);
     for (let i = 0; i < seq.length; i++) {
       const d = seq[i];
-      assert.ok(SHAPES.includes(d.left) && SHAPES.includes(d.right), `seed=${seed} i=${i}`);
+      assert.ok(SHAPES.includes(d.left) && SHAPES.includes(d.right));
       assert.equal(d.left === d.right, d.match, `seed=${seed} i=${i}`);
-      if (i > 0) {
-        const p = seq[i - 1];
-        assert.ok(!(p.left === d.left && p.right === d.right), `seed=${seed} i=${i}: 直前と同じ表示`);
-      }
+      if (i > 0) assert.ok(!(d.left === seq[i - 1].left && d.right === seq[i - 1].right), `seed=${seed} i=${i}`);
     }
-  }
-});
-
-test('生成: 図形は6種類で、SPEC の △ ★ ○ □ ◇ ☆ に対応する', () => {
-  assert.equal(SHAPES.length, 6);
-  assert.equal(new Set(SHAPES).size, 6);
-});
-
-test('生成: シードが同じなら同じ系列', () => {
-  assert.deepEqual(generateSequence(P, createRng(77)), generateSequence(P, createRng(77)));
-  assert.notDeepEqual(generateSequence(P, createRng(77)), generateSequence(P, createRng(78)));
-});
-
-test('生成: 実現できない設定(確率0.9)はエラーにし、使える確率の上限を示す', () => {
-  assert.throws(() => generateSequence({ ...P, matchRate: 0.9 }, createRng(1)), /上限.*0\.500/);
-});
-
-test('生成の境界: N=180, k=2 で m=120 は成功、m=121 はエラー', () => {
-  const base = { durationSec: 180, intervalMs: 1000, maxConsecutiveMatches: 2 };
-  assert.equal(maxFeasibleMatches(180, 2), 120);
-  for (let seed = 1; seed <= 20; seed++) {
-    const seq = generateSequence({ ...base, matchRate: 120 / 180 }, createRng(seed));
-    assert.equal(seq.filter(d => d.match).length, 120);
-    assert.ok(longestMatchRun(seq) <= 2);
-  }
-  assert.throws(() => generateSequence({ ...base, matchRate: 121 / 180 }, createRng(1)), /上限/);
-});
-
-test('生成: 連続上限は設定値 k に従う(k=3 なら 3連続まで可、4連続はない)', () => {
-  let sawThree = false;
-  for (let seed = 1; seed <= 50; seed++) {
-    const seq = generateSequence({ ...P, matchRate: 0.6, maxConsecutiveMatches: 3 }, createRng(seed));
     const run = longestMatchRun(seq);
-    assert.ok(run <= 3);
+    assert.ok(run <= 3, `seed=${seed}: ${run}回続いた`);
     if (run === 3) sawThree = true;
   }
-  assert.ok(sawThree);
+  assert.ok(sawThree, '一致が3回続くこともある');
 });
 
-test('生成: 不正な設定(間隔0・負の確率など)はエラー', () => {
-  assert.throws(() => generateSequence({ ...P, intervalMs: 0 }, createRng(1)));
-  assert.throws(() => generateSequence({ ...P, durationSec: 0 }, createRng(1)));
-  assert.throws(() => generateSequence({ ...P, matchRate: -0.1 }, createRng(1)));
-  assert.throws(() => generateSequence({ ...P, maxConsecutiveMatches: 1.5 }, createRng(1)));
+test('系列: 一致の割合は約25%(連続上限の分だけわずかに下がる)', () => {
+  const seq = makeSequence(7, 40000);
+  const rate = seq.filter(d => d.match).length / seq.length;
+  assert.ok(rate > 0.23 && rate < 0.26, `rate=${rate}`);
 });
 
-test('生成: 一致0回・一致確率1(k が十分大きい)でも作れる', () => {
-  const none = generateSequence({ ...P, matchRate: 0 }, createRng(3));
-  assert.equal(none.filter(d => d.match).length, 0);
-  // 一致が続く場合も「直前と同じ表示」は出ない
-  const all = generateSequence({ durationSec: 10, intervalMs: 1000, matchRate: 1, maxConsecutiveMatches: 10 }, createRng(3));
-  assert.equal(all.every(d => d.match), true);
-  for (let i = 1; i < all.length; i++) assert.notEqual(all[i].left, all[i - 1].left);
+test('系列: 太い十字も出る。シードが同じなら同じ系列', () => {
+  const seq = makeSequence(3, 2000);
+  assert.ok(seq.some(d => d.left === 'thickCross' || d.right === 'thickCross'));
+  assert.deepEqual(makeSequence(11, 50), makeSequence(11, 50));
+});
+
+test('設定の検証: 間隔・待ち時間・確率・連続上限が不正ならエラー', () => {
+  assert.doesNotThrow(() => validateT2Params(P));
+  assert.throws(() => validateT2Params({ ...P, intervalMs: 0 }));
+  assert.throws(() => validateT2Params({ ...P, matchWaitMs: 0 }));
+  assert.throws(() => validateT2Params({ ...P, matchRate: 1.2 }));
+  assert.throws(() => validateT2Params({ ...P, maxConsecutiveMatches: 1.5 }));
+});
+
+// ---- 進行: 一致は押すまで待ち、5秒でやり直し ----
+
+// 最初の表示を一致・不一致に固定して始める(rng を小さな値・大きな値に固定)
+const low = () => 0.01; // 一致を選ぶ
+const high = () => 0.99; // 不一致を選ぶ
+
+test('一致の表示: 押されるまで止まり、押したら反応時間を記録して次へ進む', () => {
+  let run = createT2Run(P, low, 1000);
+  assert.equal(run.display.match, true);
+  const t = tickT2(run, 1000 + P.intervalMs * 3, P, high);
+  assert.equal(t.event, null, '1000ms を過ぎても切り替わらない');
+  assert.equal(t.state.display, run.display);
+  const r = pressT2(t.state, 1000 + 3412, P, high);
+  assert.equal(r.result, 'hit');
+  assert.equal(r.rtMs, 3412);
+  assert.deepEqual(r.state.tally, { hits: 1, falseAlarms: 0, rts: [3412] });
+  assert.equal(r.state.display.match, false, '押したらすぐ次の表示');
+  assert.equal(r.state.shownAt, 1000 + 3412);
+});
+
+test('一致の表示: matchWaitMs(5秒)たっても押されなければやり直し', () => {
+  const run = createT2Run(P, low, 1000);
+  assert.equal(tickT2(run, 1000 + P.matchWaitMs - 1, P, high).event, null);
+  assert.equal(tickT2(run, 1000 + P.matchWaitMs, P, high).event, 'restart');
+});
+
+test('不一致の表示: intervalMs ごとに切り替わり、押したら誤押し(1回の表示で1回まで)', () => {
+  let run = createT2Run(P, high, 0);
+  assert.equal(run.display.match, false);
+  const p1 = pressT2(run, 300, P, high);
+  assert.equal(p1.result, 'falseAlarm');
+  const p2 = pressT2(p1.state, 400, P, high);
+  assert.equal(p2.result, 'ignored');
+  assert.deepEqual(p2.state.tally, { hits: 0, falseAlarms: 1, rts: [] });
+  assert.equal(tickT2(p2.state, 999, P, high).event, null);
+  const t = tickT2(p2.state, 1000, P, high);
+  assert.equal(t.event, 'advanced');
+  assert.equal(t.state.shownAt, 1000, '予定の時刻から次を数える(ずれをためない)');
+  assert.equal(t.state.pressed, false);
+});
+
+test('不一致の表示は押さなければ何も数えない。見逃しは起きない', () => {
+  let run = createT2Run(P, high, 0);
+  run = tickT2(run, 1000, P, high).state;
+  assert.deepEqual(run.tally, { hits: 0, falseAlarms: 0, rts: [] });
+});
+
+test('進行は元の状態を書き換えない', () => {
+  const run = createT2Run(P, low, 0);
+  const before = structuredClone(run);
+  pressT2(run, 500, P, high);
+  tickT2(run, 9999, P, high);
+  assert.deepEqual(run, before);
+});
+
+// ---- 採点と記録 ----
+
+test('採点: 点数 = 的中 − 誤押し(0未満は0)', () => {
+  assert.equal(scoreT2({ hits: 30, falseAlarms: 4 }), 26);
+  assert.equal(scoreT2({ hits: 2, falseAlarms: 5 }), 0);
+  assert.equal(scoreT2({ hits: 0, falseAlarms: 0 }), 0);
+});
+
+test('内訳: 的中・誤押し・平均反応時間・最速・最遅(的中0回なら null)', () => {
+  assert.deepEqual(summarizeT2({ hits: 3, falseAlarms: 1, rts: [400, 401, 520] }), {
+    score: 2, detail: { hits: 3, falseAlarms: 1, meanRtMs: 440, minRtMs: 400, maxRtMs: 520 },
+  });
+  assert.deepEqual(summarizeT2({ hits: 0, falseAlarms: 2, rts: [] }).detail,
+    { hits: 0, falseAlarms: 2, meanRtMs: null, minRtMs: null, maxRtMs: null });
+});
+
+test('記録: その回の設定をすべて入れる', () => {
+  const date = '2026-09-30T10:15:00.000Z';
+  const r = buildRecord({ date, tally: { hits: 3, falseAlarms: 1, rts: [400, 401, 520] }, settings: P });
+  assert.equal(r.id, `${date}-t2`);
+  assert.equal(r.test, 't2');
+  assert.equal(r.score, 2);
+  assert.deepEqual(r.settings, { ...P });
+  assert.notEqual(r.settings, P);
 });
 
 // ---- 即時判定 ----
 
-test('即時判定: 一致で押せば「○ 正解」、不一致で押せば「× 一致していません」', () => {
-  assert.deepEqual(t2PressFeedback(true), { kind: 'correct', text: '○ 正解' });
+test('即時判定: 一致で押せば「○ 正解(◯ms)」、不一致で押せば「× 一致していません」', () => {
+  assert.deepEqual(t2PressFeedback(true, 412), { kind: 'correct', text: '○ 正解(412ms)' });
   assert.deepEqual(t2PressFeedback(false), { kind: 'wrong', text: '× 一致していません' });
-});
-
-test('即時判定: 一致を押さずに見送ったときだけ「△ 見逃し」', () => {
-  const pressed = registerPress(createDisplayState(), 300).state;
-  assert.deepEqual(t2MissFeedback(true, createDisplayState()), { kind: 'miss', text: '△ 見逃し' });
-  assert.equal(t2MissFeedback(true, pressed), null);
-  assert.equal(t2MissFeedback(false, createDisplayState()), null);
-  assert.equal(t2MissFeedback(false, pressed), null);
 });

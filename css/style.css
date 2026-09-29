@@ -578,3 +578,7 @@ h1 { font-size: 1.6rem; margin: 0 0 16px; }
 .t1-review li p { margin: 0; }
 .t1-review-prompt { font-weight: 700; }
 .t1-review-formula { font-variant-numeric: tabular-nums; color: var(--muted); }
+/* 目立たせる内訳(同一図形の平均反応時間。2026-09-30 本番に合わせて変更) */
+.result-details dt.is-emphasis { color: var(--text); font-weight: 800; }
+.result-details dd.is-emphasis { font-size: 1.8rem; font-weight: 800; color: var(--accent); line-height: 1.2; }
+.history-table th.is-emphasis, .history-table td.is-emphasis { color: var(--accent); font-weight: 800; }

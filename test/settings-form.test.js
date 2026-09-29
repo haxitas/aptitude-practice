@@ -38,12 +38,13 @@ test('T1 の電卓は既定で表示し、設定で非表示にできる', () =>
   assert.equal(hidden.value.calculatorDuringTest, false);
 });
 
-test('T2 は一致を連続上限内で置けない組み合わせを保存しない', () => {
-  const bad = validateTestSettings('t2', raw('t2', { durationSec: 120, intervalMs: 1000, matchRate: 0.9, maxConsecutiveMatches: 1 }), DEFAULTS.t2);
+test('同一図形(t2)は系列を順に作るので、一致確率と連続上限の組み合わせを制限しない。一致の待ち時間を設定できる', () => {
+  const high = validateTestSettings('t2', raw('t2', { durationSec: 120, intervalMs: 1000, matchRate: 0.9, maxConsecutiveMatches: 1 }), DEFAULTS.t2);
+  assert.equal(high.ok, true, JSON.stringify(high));
+  assert.ok(SETTING_FIELDS.t2.some(f => f.key === 'matchWaitMs'));
+  assert.equal(SETTING_FIELDS.t2.some(f => f.key === 'falseAlarmPenalty'), false);
+  const bad = validateTestSettings('t2', raw('t2', { matchWaitMs: 0 }), DEFAULTS.t2);
   assert.equal(bad.ok, false);
-  assert.match(bad.errors.matchRate, /配置/);
-  const edge = validateTestSettings('t2', raw('t2', { durationSec: 120, intervalMs: 1000, matchRate: 0.5, maxConsecutiveMatches: 1 }), DEFAULTS.t2);
-  assert.equal(edge.ok, true, JSON.stringify(edge));
 });
 
 test('T3 は2桁の個数と誤答差の整数・重複を検証する', () => {

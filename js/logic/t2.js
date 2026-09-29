@@ -1,160 +1,125 @@
-// テスト2 同一図形の検出: 系列の生成・1回ごとの判定・採点。DOM に触れない。
-import { correctFeedback, missFeedback } from '../core/feedback.js';
+// テスト3 同一図形の検出(内部 id t2): 表示の系列・進行・判定・採点。DOM に触れない。
+// 2026-09-30 本番に合わせて変更: 一致の表示は押すまで止まり(最大 matchWaitMs)、押せなければやり直し。
+// 不一致の表示は intervalMs ごとに切り替わる。点数 = 的中 − 誤押し。
+import { correctFeedback } from '../core/feedback.js';
 
-// SPEC の △ ★ ○ □ ◇ ☆ に対応する。描画は js/tests/t2.js(SVG)
-export const SHAPES = Object.freeze(['triangle', 'starFilled', 'circle', 'square', 'diamond', 'starOutline']);
+// △ ★ ○ □ ◇ 太い十字。描画は js/tests/t2.js(SVG)
+export const SHAPES = Object.freeze(['triangle', 'starFilled', 'circle', 'square', 'diamond', 'thickCross']);
 
 const NONMATCH_PAIRS = SHAPES.flatMap(a => SHAPES.filter(b => b !== a).map(b => [a, b]));
 
-// 表示回数 N = floor(制限時間 ÷ 切り替え間隔)
-export function displayCount({ durationSec, intervalMs }) {
-  return Math.floor((durationSec * 1000) / intervalMs);
-}
-
-// 一致の回数 m = Math.round(N × 一致確率)
-export function matchCount(params) {
-  return Math.round(displayCount(params) * params.matchRate);
-}
-
-// 一致が最大 k 回までしか続かない条件で置ける一致の最大数。
-// 不一致が N−m 回あると、一致を入れられる隙間は N−m+1 か所で、各 k 回まで → m ≤ k(N−m+1)
-export function maxFeasibleMatches(N, k) {
-  return Math.min(N, Math.floor((k * (N + 1)) / (k + 1)));
-}
-
-function validate(p) {
+export function validateT2Params(p) {
   const bad = [];
   if (!(Number.isFinite(p.durationSec) && p.durationSec > 0)) bad.push(`制限時間 durationSec=${p.durationSec}`);
   if (!(Number.isFinite(p.intervalMs) && p.intervalMs > 0)) bad.push(`切り替え間隔 intervalMs=${p.intervalMs}`);
+  if (!(Number.isFinite(p.matchWaitMs) && p.matchWaitMs > 0)) bad.push(`一致の待ち時間 matchWaitMs=${p.matchWaitMs}`);
   if (!(Number.isFinite(p.matchRate) && p.matchRate >= 0 && p.matchRate <= 1)) bad.push(`一致確率 matchRate=${p.matchRate}`);
   if (!(Number.isInteger(p.maxConsecutiveMatches) && p.maxConsecutiveMatches >= 0)) {
     bad.push(`連続の上限 maxConsecutiveMatches=${p.maxConsecutiveMatches}`);
   }
   if (bad.length) throw new Error(`テスト3(同一図形)の設定が不正です: ${bad.join('、')}`);
-  if (displayCount(p) < 1) throw new Error('テスト3(同一図形)の設定が不正です: 制限時間が切り替え間隔より短いため、1回も表示できません');
 }
 
-// 一致・不一致の並びを作る。棄却サンプリングは使わず、構成的に置く:
-// 不一致 N−m 個の間と両端(N−m+1 か所)に、各か所 k 個までの容量で一致を1個ずつランダムに配る。
-function matchFlags(N, m, k, rng) {
-  const n = N - m;
-  const counts = new Array(n + 1).fill(0);
-  const open = counts.map((_, i) => i); // まだ容量が残っている隙間
-  for (let t = 0; t < m; t++) {
-    const j = Math.floor(rng() * open.length);
-    const slot = open[j];
-    counts[slot]++;
-    if (counts[slot] === k) {
-      open[j] = open[open.length - 1];
-      open.pop();
-    }
+// ---- 表示の系列(必要な分だけ順に作る) ----
+
+export function createSequenceState() {
+  return { prev: null, run: 0 };
+}
+
+// 一致は確率 matchRate。一致が maxConsecutiveMatches 回続いたら不一致にする。直前とまったく同じ表示は避ける
+export function nextT2Display(state, rng, p) {
+  const canMatch = state.run < p.maxConsecutiveMatches;
+  const match = canMatch && rng() < p.matchRate;
+  const prev = state.prev;
+  let display;
+  if (match) {
+    const cands = SHAPES.filter(s => !(prev && prev.left === s && prev.right === s));
+    const s = cands[Math.floor(rng() * cands.length)];
+    display = { left: s, right: s, match: true };
+  } else {
+    const cands = NONMATCH_PAIRS.filter(([a, b]) => !(prev && prev.left === a && prev.right === b));
+    const [a, b] = cands[Math.floor(rng() * cands.length)];
+    display = { left: a, right: b, match: false };
   }
-  const flags = [];
-  for (let s = 0; s <= n; s++) {
-    for (let c = 0; c < counts[s]; c++) flags.push(true);
-    if (s < n) flags.push(false);
+  return { display, state: { prev: display, run: match ? state.run + 1 : 0 } };
+}
+
+// ---- 進行 ----
+// 状態: { seq, display, shownAt, pressed, tally }。時刻はすべて performance.now() の基準。
+
+export function createT2Tally() {
+  return { hits: 0, falseAlarms: 0, rts: [] };
+}
+
+function advance(state, shownAt, rng, p) {
+  const next = nextT2Display(state.seq, rng, p);
+  return { ...state, seq: next.state, display: next.display, shownAt, pressed: false };
+}
+
+export function createT2Run(p, rng, now) {
+  validateT2Params(p);
+  return advance({ seq: createSequenceState(), tally: createT2Tally() }, now, rng, p);
+}
+
+// 押したとき。一致なら的中(反応時間を記録)してすぐ次へ、不一致なら誤押し(1回の表示で1回まで)
+// { state, result: 'hit' | 'falseAlarm' | 'ignored', rtMs? }
+export function pressT2(state, now, p, rng) {
+  if (state.display.match) {
+    const rtMs = Math.max(0, now - state.shownAt);
+    const tally = { ...state.tally, hits: state.tally.hits + 1, rts: [...state.tally.rts, rtMs] };
+    return { state: advance({ ...state, tally }, now, rng, p), result: 'hit', rtMs };
   }
-  return flags;
+  if (state.pressed) return { state, result: 'ignored' };
+  const tally = { ...state.tally, falseAlarms: state.tally.falseAlarms + 1, rts: state.tally.rts.slice() };
+  return { state: { ...state, tally, pressed: true }, result: 'falseAlarm' };
 }
 
-// [{ left, right, match }, ...](長さ N)。実現できない設定なら Error を投げる
-export function generateSequence(params, rng) {
-  validate(params);
-  const N = displayCount(params);
-  const m = matchCount(params);
-  const k = params.maxConsecutiveMatches;
-  const maxM = maxFeasibleMatches(N, k);
-  if (m > maxM) {
-    throw new Error(
-      `一致確率 ${params.matchRate} では一致が ${m} 回になり、一致の連続を ${k} 回までにして並べられません。` +
-      `この設定で使える一致確率の上限は ${(maxM / N).toFixed(3)}(${N}回中${maxM}回)です`,
-    );
+// 毎フレーム。不一致は intervalMs で次へ(予定の時刻から数え、ずれをためない)。
+// 一致は matchWaitMs たったら 'restart'(やり直し)。{ state, event: null | 'advanced' | 'restart' }
+export function tickT2(state, now, p, rng) {
+  if (state.display.match) {
+    return { state, event: now - state.shownAt >= p.matchWaitMs ? 'restart' : null };
   }
-  const seq = [];
-  let prev = null;
-  for (const match of matchFlags(N, m, k, rng)) {
-    // 直前とまったく同じ表示は候補から外す
-    let d;
-    if (match) {
-      const cands = SHAPES.filter(s => !(prev && prev.left === s && prev.right === s));
-      const s = cands[Math.floor(rng() * cands.length)];
-      d = { left: s, right: s, match: true };
-    } else {
-      const cands = NONMATCH_PAIRS.filter(([a, b]) => !(prev && prev.left === a && prev.right === b));
-      const [a, b] = cands[Math.floor(rng() * cands.length)];
-      d = { left: a, right: b, match: false };
-    }
-    seq.push(d);
-    prev = d;
+  let s = state;
+  let event = null;
+  while (!s.display.match && now - s.shownAt >= p.intervalMs) {
+    s = advance(s, s.shownAt + p.intervalMs, rng, p);
+    event = 'advanced';
   }
-  return seq;
-}
-
-// ---- 1回の表示ごとの判定 ----
-
-export function createDisplayState() {
-  return { pressed: false, rtMs: null };
-}
-
-// 1回の表示中に受け付けるのは最初の1回だけ
-export function registerPress(state, rtMs) {
-  if (state.pressed) return { accepted: false, state };
-  return { accepted: true, state: { pressed: true, rtMs } };
-}
-
-export function createTally() {
-  return { hits: 0, misses: 0, falseAlarms: 0, rts: [] };
-}
-
-// 表示が切り替わるときに、その表示の判定を確定する(元の集計は変えない)
-export function settleDisplay(tally, isMatch, state) {
-  const t = { ...tally, rts: tally.rts.slice() };
-  if (isMatch) {
-    if (state.pressed) {
-      t.hits++;
-      t.rts.push(state.rtMs);
-    } else {
-      t.misses++;
-    }
-  } else if (state.pressed) {
-    t.falseAlarms++;
-  }
-  return t;
+  return { state: s, event };
 }
 
 // ---- 即時判定 ----
 
-// 押した直後: 一致なら正解、不一致なら誤押し
-export function t2PressFeedback(isMatch) {
-  return isMatch ? correctFeedback() : { kind: 'wrong', text: '× 一致していません' };
-}
-
-// 表示が切り替わる瞬間: 一致を押さずに見送ったときだけ見逃しを出す
-export function t2MissFeedback(isMatch, state) {
-  return isMatch && !state.pressed ? missFeedback() : null;
+export function t2PressFeedback(isMatch, rtMs = null) {
+  if (!isMatch) return { kind: 'wrong', text: '× 一致していません' };
+  return rtMs === null ? correctFeedback() : { kind: 'correct', text: `○ 正解(${Math.round(rtMs)}ms)` };
 }
 
 // ---- 採点 ----
 
-// 点数 = max(0, 的中率% − 誤押し数 × 減点) を四捨五入。一致が0回なら 0
-export function score({ hits, misses, falseAlarms }, penalty) {
-  const denom = hits + misses;
-  if (denom === 0) return 0;
-  return Math.round(Math.max(0, (hits * 100) / denom - falseAlarms * penalty));
+// 点数 = 的中 − 誤押し(0未満は0)
+export function scoreT2({ hits, falseAlarms }) {
+  return Math.max(0, hits - falseAlarms);
 }
 
-export function summarizeTally(tally, penalty) {
-  const meanRtMs = tally.rts.length
-    ? Math.round(tally.rts.reduce((s, v) => s + v, 0) / tally.rts.length)
-    : null;
+export function summarizeT2(tally) {
+  const rts = tally.rts;
+  const has = rts.length > 0;
   return {
-    score: score(tally, penalty),
-    detail: { hits: tally.hits, misses: tally.misses, falseAlarms: tally.falseAlarms, meanRtMs },
+    score: scoreT2(tally),
+    detail: {
+      hits: tally.hits,
+      falseAlarms: tally.falseAlarms,
+      meanRtMs: has ? Math.round(rts.reduce((s, v) => s + v, 0) / rts.length) : null,
+      minRtMs: has ? Math.round(Math.min(...rts)) : null,
+      maxRtMs: has ? Math.round(Math.max(...rts)) : null,
+    },
   };
 }
 
-// SPEC §4 の形の記録。settings にはその回に使った T2 の設定値をすべて入れる
+// 記録。settings にはその回に使った設定値をすべて入れる
 export function buildRecord({ date, tally, settings }) {
-  const { score: sc, detail } = summarizeTally(tally, settings.falseAlarmPenalty);
-  return { id: `${date}-t2`, test: 't2', date, score: sc, detail, settings: { ...settings } };
+  const { score, detail } = summarizeT2(tally);
+  return { id: `${date}-t2`, test: 't2', date, score, detail, settings: { ...settings } };
 }

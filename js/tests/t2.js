@@ -1,9 +1,9 @@
-// テスト2 同一図形の検出: 開始 → 本番 → 結果 の描画と入力。
-// 判定・採点・系列の生成は js/logic/t2.js(純粋関数)に任せる。
+// テスト3 同一図形の検出(内部 id t2): 開始 → 本番 → 結果 の描画と入力。
+// 系列・進行・判定・採点は js/logic/t2.js(純粋関数)に任せる。
+// 2026-09-30 本番に合わせて変更: 同じ図形は押すまで止まり、matchWaitMs 以内に押せなければ最初からやり直し。
 
 import {
-  generateSequence, displayCount, createDisplayState, registerPress, createTally, settleDisplay, buildRecord,
-  t2PressFeedback, t2MissFeedback,
+  validateT2Params, createT2Run, pressT2, tickT2, createT2Tally, buildRecord, t2PressFeedback,
 } from '../logic/t2.js';
 import { createFeedbackSlot, feedbackSlotHtml } from '../core/feedback.js';
 import { createRng, randomSeed } from '../core/rng.js';
@@ -29,7 +29,8 @@ const SHAPE_SVG = {
   circle: { label: '○', body: '<circle cx="50" cy="50" r="41" fill="none"/>' },
   square: { label: '□', body: '<rect x="13" y="13" width="74" height="74" fill="none"/>' },
   diamond: { label: '◇', body: '<polygon points="50,5 95,50 50,95 5,50" fill="none"/>' },
-  starOutline: { label: '☆', body: `<polygon points="${STAR}" fill="none"/>` },
+  // 太い十字: □の四隅を欠いたような、線のとても太い十字(2026-09-30 中が抜けた星の代わりに追加)
+  thickCross: { label: '太い十字', body: '<polygon points="30,8 70,8 70,30 92,30 92,70 70,70 70,92 30,92 30,70 8,70 8,30 30,30" fill="currentColor"/>' },
 };
 
 function drawShape(container, id) {
@@ -56,11 +57,13 @@ export function mount(root, ctx) {
     teardown = cleanup ?? null;
   }
 
-  function showStart() {
+  // notice: やり直しになったときの知らせ
+  function showStart(notice = '') {
     setPhase(null);
     root.innerHTML = `
       <section class="screen t2-start">
         <h1 data-ref="title"></h1>
+        <p class="notice notice-warn" data-ref="notice" hidden></p>
         <p data-ref="desc"></p>
         <p class="notice notice-error" data-ref="error" hidden></p>
         <div class="actions">
@@ -70,13 +73,17 @@ export function mount(root, ctx) {
       </section>`;
     const $ = name => root.querySelector(`[data-ref="${name}"]`);
     $('title').textContent = meta.name;
+    if (notice) {
+      $('notice').textContent = notice;
+      $('notice').hidden = false;
+    }
     $('desc').textContent =
       `左右の図形が同じときだけ「同じ」を押します(キーボードはスペースキー)。` +
-      `表示は ${params.intervalMs / 1000} 秒ごとに切り替わり、制限時間は${formatDuration(params.durationSec)}です。`;
+      `同じ図形は押すまで止まり、${params.matchWaitMs / 1000}秒以内に押せないと最初からやり直しです。` +
+      `違う図形は ${params.intervalMs / 1000} 秒ごとに切り替わり、押すと誤押しになります。制限時間は${formatDuration(params.durationSec)}です。`;
 
-    // 設定が実現できるかを先に確かめる
     try {
-      generateSequence(params, createRng(1));
+      validateT2Params(params);
     } catch (e) {
       $('error').textContent = e.message;
       $('error').hidden = false;
@@ -88,8 +95,7 @@ export function mount(root, ctx) {
   }
 
   function startPlay() {
-    const seq = generateSequence(params, createRng(randomSeed()));
-    const N = seq.length;
+    const rng = createRng(randomSeed());
 
     root.innerHTML = `
       <section class="t2-play has-feedback">
@@ -112,17 +118,13 @@ export function mount(root, ctx) {
     const sameBtn = $('same');
     const feedback = createFeedbackSlot($('feedback'), { durationMs: common.feedbackMs });
 
-    let cur = -1; // いま表示している番号
-    let frameTs = 0; // その表示を描いたフレームの時刻
-    let ds = createDisplayState();
-    let tally = createTally();
+    let run = null; // 最初のフレームで始める
+    let lastFrameTs = null;
 
     // フォーカスのあるボタンがスペースキーで押されないように外しておく
     document.activeElement?.blur?.();
 
-    // 押したことを見せる: 受け付けた押下のあと、その表示が終わるまで、かつ押してから
-    // pressFeedbackMs たつまではボタンを薄くする(表示が切り替わっても最低時間は保つ)。
-    // 時間の管理は rAF のループ(onFrame)で行う。正誤は出さない。
+    // 押したことを見せる: 誤押しの表示が終わるまで、かつ押してから pressFeedbackMs たつまで薄くする
     let lastPressTs = -Infinity;
     let pale = false;
     function setPale(on) {
@@ -131,63 +133,65 @@ export function mount(root, ctx) {
       sameBtn.classList.toggle('is-pressed', on);
     }
 
+    function draw() {
+      drawShape(leftEl, run.display.left);
+      drawShape(rightEl, run.display.right);
+    }
+
     function press(ts) {
-      if (cur < 0) return;
-      // 判定は押した時点の表示に対して行う(薄いあいだでも、新しい表示なら受け付ける)
-      const r = registerPress(ds, Math.max(0, ts - frameTs));
-      if (!r.accepted) return;
-      ds = r.state;
+      if (!run) return;
+      const r = pressT2(run, ts, params, rng);
+      if (r.result === 'ignored') return;
+      run = r.state;
       lastPressTs = ts;
       setPale(true);
-      feedback?.show(t2PressFeedback(seq[cur].match), ts);
+      if (r.result === 'hit') {
+        feedback.show(t2PressFeedback(true, r.rtMs), ts);
+        draw(); // 押したらすぐ次の表示
+      } else {
+        feedback.show(t2PressFeedback(false), ts);
+      }
     }
 
-    // 描画が止まって表示が1つ以上飛んだ回は、非表示のときと同じく中断して保存しない
-    function abortStalled() {
+    function abort(message) {
       setPhase(null);
-      ctx.navigate('#/', '描画が止まったため中断しました(記録は保存していません)');
+      ctx.navigate('#/', message);
     }
 
-    function onFrame(elapsed, ts) {
-      const i = Math.min(N - 1, Math.floor(elapsed / params.intervalMs));
-      if (i !== cur) {
-        if (i > cur + 1) {
-          abortStalled();
+    function onFrame(_elapsed, ts) {
+      if (lastFrameTs !== null && ts - lastFrameTs > params.stallAbortMs) {
+        abort('描画が止まったため中断しました(記録は保存していません)');
+        return;
+      }
+      lastFrameTs = ts;
+      if (!run) {
+        run = createT2Run(params, rng, ts);
+        draw();
+      } else {
+        const t = tickT2(run, ts, params, rng);
+        if (t.event === 'restart') {
+          // 同じ図形を時間内に押せなかった: この回は保存せず、開始画面に戻る
+          showStart(`${params.matchWaitMs / 1000}秒以内に押せなかったため、最初からやり直します`);
           return;
         }
-        // 前の表示の判定を確定してから次を描く。一致を見送っていたら、切り替わる瞬間に見逃しを出す
-        if (cur >= 0) {
-          const miss = t2MissFeedback(seq[cur].match, ds);
-          if (miss) feedback?.show(miss, ts);
-          tally = settleDisplay(tally, seq[cur].match, ds);
-        }
-        cur = i;
-        ds = createDisplayState();
-        drawShape(leftEl, seq[i].left);
-        drawShape(rightEl, seq[i].right);
-        frameTs = ts;
+        run = t.state;
+        if (t.event === 'advanced') draw();
       }
-      feedback?.tick(ts);
-      // いまの表示で押したか、押してから最低時間がたっていなければ薄いまま
-      setPale(ds.pressed || ts - lastPressTs < params.pressFeedbackMs);
+      feedback.tick(ts);
+      setPale(run.pressed || ts - lastPressTs < params.pressFeedbackMs);
     }
 
     function onEnd() {
-      // 止まっている間に終了時刻を過ぎ、最後の表示まで描けていない場合も中断する
-      if (cur < N - 1) {
-        abortStalled();
-        return;
-      }
-      tally = settleDisplay(tally, seq[cur].match, ds);
+      const tally = run ? run.tally : createT2Tally();
       const record = buildRecord({ date: new Date().toISOString(), tally, settings: params });
       const saveResult = appendRecord(ctx.store, record);
       setPhase(null); // 入力の受け付けを外す
       renderResult(root, {
         testName: meta.name,
         score: record.score,
-        details: meta.details.map(d => ({ label: d.label, value: formatDetail(d, record.detail[d.key]) })),
+        details: meta.details.map(d => ({ label: d.label, value: formatDetail(d, record.detail[d.key]), emphasis: d.emphasis })),
         saveResult,
-        onRetry: showStart,
+        onRetry: () => showStart(),
       });
     }
 
@@ -207,8 +211,7 @@ export function mount(root, ctx) {
     // アプリ切り替え・画面ロックは途中終了として扱い、保存しない
     function onVisibility() {
       if (document.visibilityState === 'hidden') {
-        setPhase(null);
-        ctx.navigate('#/', `${meta.name}は、画面が切り替わったため中断しました(記録は保存していません)`);
+        abort(`${meta.name}は、画面が切り替わったため中断しました(記録は保存していません)`);
       }
     }
     function onQuit() {
@@ -222,8 +225,9 @@ export function mount(root, ctx) {
     window.addEventListener('keyup', onKeyUp);
     document.addEventListener('visibilitychange', onVisibility);
 
+    // 制限時間は、同じ図形で止まっている間も進む
     const timer = startTimer({
-      durationMs: N * params.intervalMs, // 終了は N×間隔の時点
+      durationMs: params.durationSec * 1000,
       onFrame,
       onEnd,
       remainingEl: $('remaining'),

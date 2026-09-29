@@ -1,7 +1,7 @@
 // 共通の結果画面: 点数・内訳・保存の結果・「もう一度」「ホーム」
 // 静的な枠は HTML で書き、値はすべて textContent で入れる。
 
-// details: [{ label, value }](value は表示用の文字列)
+// details: [{ label, value, emphasis? }](value は表示用の文字列。emphasis は目立たせる)
 // saveResult: storage.appendRecord の戻り値
 // extra: 保存の知らせの下に置く要素(テスト1の「間違えた問題」)
 export function renderResult(root, { testName, score, details, saveResult, onRetry, extra = null }) {
@@ -25,6 +25,10 @@ export function renderResult(root, { testName, score, details, saveResult, onRet
     dt.textContent = d.label;
     const dd = document.createElement('dd');
     dd.textContent = d.value;
+    if (d.emphasis) {
+      dt.classList.add('is-emphasis');
+      dd.classList.add('is-emphasis');
+    }
     $('details').append(dt, dd);
   }
   const save = $('save');

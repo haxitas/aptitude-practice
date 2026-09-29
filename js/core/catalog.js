@@ -1,5 +1,6 @@
 // テスト一覧。メニューと履歴画面が共用する。
-// details: 結果画面に出す内訳(record.detail のキーと表示名)。inHistory: false のものは履歴の表に出さない
+// details: 結果画面に出す内訳(record.detail のキーと表示名)。inHistory: false のものは履歴の表に出さない。
+// emphasis: 結果画面と履歴で目立たせる
 
 // 並び順と番号は本番の順(2026-09-30 本番の順に合わせて変更)。内部の id・記録・設定のキー・ハッシュは変えない
 export const TESTS = Object.freeze([
@@ -37,10 +38,12 @@ export const TESTS = Object.freeze([
     name: 'テスト3 同一図形の検出',
     implemented: true,
     details: [
+      // 2026-09-30 本番に合わせて変更: 見逃しは起きない(やり直しになる)。平均反応時間を目立たせる
+      { key: 'meanRtMs', label: '平均反応時間', unit: 'ms', emphasis: true },
       { key: 'hits', label: '的中' },
-      { key: 'misses', label: '見逃し' },
       { key: 'falseAlarms', label: '誤押し' },
-      { key: 'meanRtMs', label: '平均反応時間', unit: 'ms' },
+      { key: 'minRtMs', label: '最速', unit: 'ms' },
+      { key: 'maxRtMs', label: '最遅', unit: 'ms' },
     ],
   },
   {

@@ -72,11 +72,12 @@ export const DEFAULTS = Object.freeze({
   }),
   t2: Object.freeze({
     durationSec: 120, // 2026-09-22 ユーザーの判断で 180 → 120
-    intervalMs: 1000,
+    intervalMs: 1000, // 不一致の表示の切り替え間隔
     matchRate: 0.25,
-    maxConsecutiveMatches: 1, // 一致が続いてよい最大回数(2026-09-22 ユーザーの判断で「2回続けて出さない」)
-    falseAlarmPenalty: 2, // 誤押し1回あたりの減点
+    maxConsecutiveMatches: 3, // 一致が続いてよい最大回数(2026-09-30 本番に合わせて 1 → 3)
+    matchWaitMs: 5000, // 一致の表示は押すまで止まる。この時間で押せなければやり直し(2026-09-30 本番に合わせて追加)
     pressFeedbackMs: 300, // 押したあとボタンを薄くしておく最低の時間
+    stallAbortMs: 1000, // フレームの間隔がこれを超えたら描画が止まったとみなして中断する
   }),
   t3: Object.freeze({
     durationSec: 240,
