@@ -602,11 +602,15 @@ test('速さと時間: 答えは分が整数になる組だけで、「◯時間
     const { speed1, hours1, speed2 } = q.values;
     assert.equal((speed1 * hours1 * 60) % speed2, 0, q.prompt);
     assert.equal(q.answer, speed1 * hours1 * 60 / speed2);
-    assert.match(formatT1Answer(q, q.answer), /^\d+時間\d+分$/);
+    assert.match(formatT1Answer(q, q.answer), /^(\d+時間)?(\d+分)?$/);
+    for (const c of q.choices) assert.ok(!/(^|\D)0分$/.test(formatT1Answer(q, c)) && !/^0時間/.test(formatT1Answer(q, c)), formatT1Answer(q, c));
     assert.ok(q.prompt.endsWith('何時間何分かかりますか?'), q.prompt);
   }
   assert.equal(formatT1Answer({ kind: 'speedTime', unit: '', answerFormat: 'hm' }, 624), '10時間24分');
   assert.equal(formatT1Answer({ kind: 'speedTime', unit: '', answerFormat: 'hm' }, 605), '10時間5分');
+  // ちょうどの時間は「◯時間」、0時間なら「◯分」(2026-09-30 追加の直し)
+  assert.equal(formatT1Answer({ kind: 'speedTime', unit: '', answerFormat: 'hm' }, 420), '7時間');
+  assert.equal(formatT1Answer({ kind: 'speedTime', unit: '', answerFormat: 'hm' }, 45), '45分');
   assert.equal(t1Formula({ kind: 'speedTime', variant: 'basic', answer: 624, unit: '', answerFormat: 'hm', values: { speed1: 780, hours1: 10, speed2: 750 } }).text,
     '時速780km × 10時間 × 60 ÷ 時速750km = 10時間24分');
 });
@@ -652,7 +656,7 @@ test('円筒: 円周率3.14、上から下げた分を引き、小数第1位で�
 test('新しい4種類の「間違えた問題」: 答えの形のまま出す', () => {
   const st = { kind: 'speedTime', variant: 'basic', prompt: '…', answer: 624, unit: '', answerFormat: 'hm',
     values: { speed1: 780, hours1: 10, speed2: 750 }, choices: [600, 624, 650, 684], correctIndex: 1 };
-  assert.equal(t1MistakeEntry(st, 0).yourAnswer, '10時間0分');
+  assert.equal(t1MistakeEntry(st, 0).yourAnswer, '10時間');
   assert.equal(t1MistakeEntry(st, 0).correctAnswer, '10時間24分');
   const cy = { kind: 'cylinder', variant: 'fuel', prompt: '…', answer: 14.2, unit: 'L', answerPrefix: '約',
     values: { diameter: 13, heightM: 1.2, gap: 13, pi: 3.14 }, choices: [14.2, 15.9, 56.8, 4.5], correctIndex: 0 };
@@ -699,4 +703,28 @@ test('単位換算: t↔kg は「メートルトン」の言い方も使い、�
     }
   }
   assert.deepEqual([...words].sort(), ['t', 'メートルトン']);
+});
+
+// ---- 2026-09-30 追加の直し ----
+
+test('速さと時間: ちょうどの時間は選択肢・間違えた問題・式のすべてで「◯時間」と出す', () => {
+  const q = { kind: 'speedTime', variant: 'basic', prompt: '…', answer: 480, unit: '', answerFormat: 'hm',
+    values: { speed1: 800, hours1: 6, speed2: 600 }, choices: [480, 360, 420, 490], correctIndex: 0 };
+  assert.equal(t1Formula(q).text, '時速800km × 6時間 × 60 ÷ 時速600km = 8時間');
+  assert.equal(t1MistakeEntry(q, 1).yourAnswer, '6時間');
+  assert.equal(t1MistakeEntry(q, 1).correctAnswer, '8時間');
+  assert.deepEqual(q.choices.map(v => formatT1Answer(q, v)), ['8時間', '6時間', '7時間', '8時間10分']);
+});
+
+test('速さ: 時間を求める問題では距離と速さを同じ数にしない(答えが「1時間」になる組を出さない)', () => {
+  let time = 0;
+  for (let seed = 1; seed <= 3000; seed++) {
+    const q = generateT1Problem(createRng(seed), P, null, 'speed');
+    if (q.variant !== 'time') continue;
+    time++;
+    assert.notEqual(q.values.distance, q.values.speed, q.prompt);
+    assert.notEqual(q.answer, 1, q.prompt);
+    assert.ok(q.answer >= P.speedHoursMin && q.answer <= P.speedHoursMax);
+  }
+  assert.ok(time > 500, `時間を求める問題 ${time}`);
 });

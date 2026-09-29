@@ -239,9 +239,11 @@ function unitProblem(rng, p, forcedVariant = null) {
 
 function speedProblem(rng, p) {
   const speed = randInt(rng, p.speedMin, p.speedMax);
-  const hours = randInt(rng, p.speedHoursMin, p.speedHoursMax);
-  const distance = speed * hours;
+  let hours = randInt(rng, p.speedHoursMin, p.speedHoursMax);
   const variant = ['distance', 'time', 'speed'][randInt(rng, 0, 2)];
+  // 時間を求める問題で距離 = 速さ(答えが1時間)にならないよう、1時間は選び直す(2026-09-30 追加の直し)
+  if (variant === 'time' && hours === 1 && p.speedHoursMax >= 2) hours = randInt(rng, Math.max(2, p.speedHoursMin), p.speedHoursMax);
+  const distance = speed * hours;
   const index = randInt(rng, 0, 2);
   const scene = `speed:${index}`;
   const vehicle = ['旅客機', 'トラック', '船'][index];
@@ -689,7 +691,13 @@ export function t1ReviewSummary(answered, mistakes) {
 
 // 答え・選択肢の書き方(速さは「時速◯km」、円筒は「約◯L」、速さと時間は「◯時間◯分」)
 export function formatT1Answer(problem, value) {
-  if (problem.answerFormat === 'hm') return `${Math.floor(value / 60)}時間${value % 60}分`;
+  if (problem.answerFormat === 'hm') {
+    // ちょうどの時間は「◯時間」、0時間なら「◯分」(2026-09-30 追加の直し)
+    const hours = Math.floor(value / 60);
+    const minutes = value % 60;
+    if (minutes === 0) return `${hours}時間`;
+    return hours === 0 ? `${minutes}分` : `${hours}時間${minutes}分`;
+  }
   return `${problem.answerPrefix ?? ''}${formatNumber(value)}${problem.unit}`;
 }
 
