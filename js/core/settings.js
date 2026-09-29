@@ -58,9 +58,9 @@ export const DEFAULTS = Object.freeze({
     clockStartHourMax: 18,
     elapsedMinutesMin: 15,
     elapsedMinutesMax: 180,
-    // 単位換算の選ばれやすさ(他の種類は1)。同じ種類を続けて出さない決まりの下で、
-    // 種類が10(他が9)なら重み8で単位換算が長い目で見て約1/3になる。2026-09-28 ユーザーの判断で追加
-    unitKindWeight: 8,
+    // 単位換算が全体に占める割合(残りの種類は均等)。2026-09-28 ユーザーの判断で追加(重み unitKindWeight)。
+    // 2026-09-30 本番に合わせて変更: 重みをやめて割合で持つ(1問目だけを数えても約1/3になるように)
+    unitKindShare: 0.33,
     // 図形(2026-09-28 ユーザーの判断で追加)
     geometryLengthMin: 2, // 三角形・台形・平行四辺形の辺と高さ(cm)
     geometryLengthMax: 20,
@@ -69,6 +69,28 @@ export const DEFAULTS = Object.freeze({
     circleAreaRadiusUnit: 10, // 円の面積の問題の半径は10の倍数(面積が整数になる)
     circleMultiplierMax: 6,
     circleAreaMultiplierMax: 3,
+    // 本番に出た形(2026-09-30 本番に合わせて追加)
+    workWorkersMin: 2, // 仕事算の人数
+    workWorkersMax: 9,
+    workHoursMin: 2, // 仕事算の時間
+    workHoursMax: 15,
+    flightSpeedMin: 600, // 速さと時間の時速(km)
+    flightSpeedMax: 900,
+    flightSpeedDiffMax: 60, // 2つの時速の差の上限
+    flightHoursMin: 2,
+    flightHoursMax: 12,
+    wageHoursMin: 4, // 時給の問題の時間
+    wageHoursMax: 40,
+    wageDollarCentsMin: 1000, // 時給(ドル)をセントで。10.00〜50.00ドル
+    wageDollarCentsMax: 5000,
+    wageYenMin: 900, // 時給(円)。10円刻み
+    wageYenMax: 2500,
+    cylinderDiameterMin: 8, // 円筒の直径(cm)
+    cylinderDiameterMax: 40,
+    cylinderHeightTenthsMin: 5, // 円筒の高さ(0.1m 単位。5 → 0.5m)
+    cylinderHeightTenthsMax: 20,
+    cylinderGapMin: 5, // 上から下げる長さ(cm)
+    cylinderGapMax: 20,
   }),
   t2: Object.freeze({
     durationSec: 120, // 2026-09-22 ユーザーの判断で 180 → 120

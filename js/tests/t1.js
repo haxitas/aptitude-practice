@@ -54,7 +54,7 @@ export function mount(root, ctx) {
     root.innerHTML = `
       <section class="screen">
         <h1 data-ref="title"></h1>
-        <p>単位換算、速さ、出会い、追いつき、割合、割合の逆算、単価と合計、平均、経過時間、図形の10種類を4択で答えます。</p>
+        <p>単位換算、速さ、出会い、追いつき、割合、割合の逆算、単価と合計、平均、経過時間、図形、仕事算、速さと時間、時給、円筒の容積の14種類の文章題を4択で答えます。</p>
         <p>回答するとすぐ次の問題へ進みます。制限時間は <span data-ref="duration"></span>です。</p>
         <div class="actions">
           <button class="btn btn-primary btn-large" type="button" data-ref="start">開始</button>
@@ -98,7 +98,8 @@ export function mount(root, ctx) {
       </section>`;
     const $ = name => root.querySelector(`[data-ref="${name}"]`);
     const choiceButtons = [...root.querySelectorAll('[data-index]')];
-    const kindLabels = { unit: '単位換算', speed: '速さ', meeting: '出会い', catchup: '追いつき', percentage: '割合', inversePercentage: '割合の逆算', price: '単価と合計', average: '平均', elapsed: '経過時間', geometry: '図形' };
+    const kindLabels = { unit: '単位換算', speed: '速さ', meeting: '出会い', catchup: '追いつき', percentage: '割合', inversePercentage: '割合の逆算', price: '単価と合計', average: '平均', elapsed: '経過時間', geometry: '図形',
+      work: '仕事算', speedTime: '速さと時間', wage: '時給', cylinder: '円筒の容積' };
     const cleanupCalculator = params.calculatorDuringTest ? mountCalculator($('calculator')) : null;
     const mistakes = []; // 結果画面で振り返る(テスト中は正誤を出さない)
 
