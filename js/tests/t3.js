@@ -5,6 +5,7 @@ import {
   pickVoice, generateShapeProblem, judgeShape, generateCalcProblem, judgeCalc, formatCalc,
   generateAudioSet, createAudioState, startAudioSet, stepAudio, audioEnded, answerAudio,
   createT3Tally, recordAnswer, recordUnanswered, buildT3Record,
+  shapeTimedOut, recordShapeUnanswered, skipAudio, recordSkip,
   t3ShapeFeedback, t3CalcFeedback, t3AudioFeedback,
 } from '../logic/t3.js';
 import { createFeedbackSlot, feedbackSlotHtml } from '../core/feedback.js';
@@ -56,9 +57,9 @@ export function mount(root, ctx) {
         <h1 data-ref="title"></h1>
         <p>本来は横画面で行います。画面をタップして開始します(音が出ます)</p>
         <ul>
-          <li>図形: 三角形が左右どちらを向いているかを答える</li>
-          <li>計算: 4つの数の足し算・引き算の答えを4択から選ぶ</li>
-          <li>音声: 英単語5つの中に同じ語が2回出たかを答える</li>
+          <li>図形: 三角形が左右どちらを向いているかを ◀ ▶ で答える(1問<span data-ref="shapeLimit"></span>秒。過ぎると未回答で次の図形へ)</li>
+          <li>計算: <span data-ref="termCount"></span>つの数の足し算・引き算の式と右辺の答えを見て、答えが合っていれば「正しい」、違えば「誤り」を押す</li>
+          <li>音声: 英単語5つの中に同じ語が2回出たかを答える。「スキップ」を押すとその組を飛ばして次の組へ進む(正答には数えない)</li>
         </ul>
         <p data-ref="desc"></p>
         <p class="muted small" data-ref="voice"></p>
@@ -70,6 +71,8 @@ export function mount(root, ctx) {
       </section>`;
     const $ = name => root.querySelector(`[data-ref="${name}"]`);
     $('title').textContent = meta.name;
+    $('shapeLimit').textContent = String(params.shapeLimitMs / 1000);
+    $('termCount').textContent = String(params.calcTermCount);
     $('desc').textContent =
       `3つは同時に進みます。制限時間は${formatDuration(params.durationSec)}です。`;
     const startBtn = $('start');
@@ -128,11 +131,9 @@ export function mount(root, ctx) {
           </div>
           <div class="t3-panel t3-calc-task">
             <div class="t3-calc-expr" data-ref="expr"></div>
-            <div class="t3-choices" data-ref="choices">
-              <button class="t3-btn" type="button" data-idx="0"></button>
-              <button class="t3-btn" type="button" data-idx="1"></button>
-              <button class="t3-btn" type="button" data-idx="2"></button>
-              <button class="t3-btn" type="button" data-idx="3"></button>
+            <div class="t3-choices t3-judge-buttons">
+              <button class="t3-btn" type="button" data-calc="yes">正しい</button>
+              <button class="t3-btn" type="button" data-calc="no">誤り</button>
             </div>
             ${feedbackSlotHtml('calcFeedback')}
           </div>
@@ -141,6 +142,7 @@ export function mount(root, ctx) {
             <div class="t3-audio-buttons">
               <button class="t3-btn" type="button" data-dup="yes" disabled>重複あり</button>
               <button class="t3-btn" type="button" data-dup="no" disabled>重複なし</button>
+              <button class="t3-btn t3-skip" type="button" data-ref="skip" disabled>スキップ</button>
             </div>
             ${feedbackSlotHtml('audioFeedback')}
           </div>
@@ -150,7 +152,8 @@ export function mount(root, ctx) {
     $('voice').textContent = voiceLabel(pick, params.speechLang);
     const shapesEl = $('shapes');
     const exprEl = $('expr');
-    const choiceBtns = [...root.querySelectorAll('[data-idx]')];
+    const calcBtns = [...root.querySelectorAll('[data-calc]')];
+    const skipBtn = $('skip');
     const dirBtns = [...root.querySelectorAll('[data-dir]')];
     const dupBtns = [...root.querySelectorAll('[data-dup]')];
     const audioStatus = $('audioStatus');
@@ -163,6 +166,7 @@ export function mount(root, ctx) {
 
     let tally = createT3Tally();
     let shapeQ = null;
+    let shapeShownAt = 0; // 図形の1問ごとの制限時間を数える起点
     let calcQ = null;
     let audio = createAudioState();
     let lastFrameTs = null;
@@ -170,14 +174,14 @@ export function mount(root, ctx) {
     const utterances = []; // onend が来なくなるのを防ぐため、組が終わるまで参照を持つ
     const pale = new Map(); // 押したボタン → 押した時刻(rAF のループで元に戻す)
 
-    function nextShape() {
+    function nextShape(ts) {
       shapeQ = generateShapeProblem(rng, params, shapeQ);
+      shapeShownAt = ts;
       shapesEl.innerHTML = shapeQ.items.map(it => `<div class="t3-shape">${shapeSvg(it)}</div>`).join('');
     }
     function nextCalc() {
       calcQ = generateCalcProblem(rng, params);
-      exprEl.textContent = `${formatCalc(calcQ)} =`;
-      choiceBtns.forEach((b, i) => { b.textContent = String(calcQ.choices[i]); });
+      exprEl.textContent = `${formatCalc(calcQ)} = ${calcQ.shown}`;
     }
     function markPressed(btn, ts) {
       btn.classList.add('is-pressed');
@@ -185,6 +189,10 @@ export function mount(root, ctx) {
     }
     function setAudioButtons(enabled) {
       dupBtns.forEach(b => { b.disabled = !enabled; });
+    }
+    // スキップは読み上げ中と回答待ちのときだけ押せる
+    function setSkip(enabled) {
+      skipBtn.disabled = !enabled;
     }
 
     function speakWord(word, index, setSeq) {
@@ -215,6 +223,7 @@ export function mount(root, ctx) {
       for (const a of r.actions) {
         if (a.type === 'newSet') {
           utterances.length = 0;
+          setSkip(true);
         } else if (a.type === 'speak') {
           audioStatus.textContent = `聞いてください(${a.index + 1}/${audio.set.words.length})`;
           speakWord(a.word, a.index, audio.setSeq);
@@ -224,6 +233,7 @@ export function mount(root, ctx) {
         } else if (a.type === 'timeout') {
           tally = recordUnanswered(tally);
           setAudioButtons(false);
+          setSkip(false);
           audioStatus.textContent = '次の単語を待っています';
         }
       }
@@ -235,11 +245,11 @@ export function mount(root, ctx) {
       tally = recordAnswer(tally, 'shape', correct);
       shapeFeedback?.show(t3ShapeFeedback(shapeQ, correct), e.timeStamp);
       markPressed(btn, e.timeStamp);
-      nextShape();
+      nextShape(e.timeStamp);
     }
-    function onChoice(e) {
+    function onCalc(e) {
       const btn = e.currentTarget;
-      const correct = judgeCalc(calcQ, Number(btn.dataset.idx));
+      const correct = judgeCalc(calcQ, btn.dataset.calc === 'yes');
       tally = recordAnswer(tally, 'calc', correct);
       calcFeedback?.show(t3CalcFeedback(calcQ, correct), e.timeStamp);
       markPressed(btn, e.timeStamp);
@@ -254,6 +264,19 @@ export function mount(root, ctx) {
       tally = recordAnswer(tally, 'audio', r.correct);
       markPressed(btn, e.timeStamp);
       setAudioButtons(false);
+      setSkip(false);
+      audioStatus.textContent = '次の単語を待っています';
+    }
+    // スキップ: その組を飛ばす(正答には数えない)。読み上げ中なら止め、speechNextDelayMs 後に次の組
+    function onSkip(e) {
+      const r = skipAudio(audio, e.timeStamp);
+      if (!r.accepted) return;
+      audio = r.state;
+      tally = recordSkip(tally);
+      synth.cancel();
+      markPressed(skipBtn, e.timeStamp);
+      setAudioButtons(false);
+      setSkip(false);
       audioStatus.textContent = '次の単語を待っています';
     }
 
@@ -270,6 +293,11 @@ export function mount(root, ctx) {
         return;
       }
       lastFrameTs = ts;
+      // 図形は1問ごとの制限時間を過ぎたら未回答にして次の図形へ
+      if (shapeTimedOut(shapeShownAt, ts, params)) {
+        tally = recordShapeUnanswered(tally);
+        nextShape(ts);
+      }
       runAudio(ts);
       for (const f of [shapeFeedback, calcFeedback, audioFeedback]) f?.tick(ts);
       for (const [btn, t] of pale) {
@@ -305,15 +333,17 @@ export function mount(root, ctx) {
     }
 
     dirBtns.forEach(b => b.addEventListener('click', onDir));
-    choiceBtns.forEach(b => b.addEventListener('click', onChoice));
+    calcBtns.forEach(b => b.addEventListener('click', onCalc));
+    skipBtn.addEventListener('click', onSkip);
     dupBtns.forEach(b => b.addEventListener('click', onDup));
     $('quit').addEventListener('click', onQuit);
     document.addEventListener('visibilitychange', onVisibility);
 
-    nextShape();
-    nextCalc();
     // 1組目の1語目は、この click の処理の中で読み始める
     const now = performance.now();
+    nextShape(now);
+    nextCalc();
+    setSkip(true);
     audio = startAudioSet(audio, generateAudioSet(rng, params), now);
     runAudio(now);
 

@@ -23,6 +23,7 @@ export const TESTS = Object.freeze([
       { key: 'shapeCorrect', label: '図形 正答' },
       { key: 'shapeAnswered', label: '図形 回答', inHistory: false },
       { key: 'shapeAccuracy', label: '図形 正答率', unit: '%', inHistory: false },
+      { key: 'shapeUnanswered', label: '図形 未回答' },
       { key: 'calcCorrect', label: '計算 正答' },
       { key: 'calcAnswered', label: '計算 回答', inHistory: false },
       { key: 'calcAccuracy', label: '計算 正答率', unit: '%', inHistory: false },
@@ -30,6 +31,7 @@ export const TESTS = Object.freeze([
       { key: 'audioAnswered', label: '音声 回答', inHistory: false },
       { key: 'audioAccuracy', label: '音声 正答率', unit: '%', inHistory: false },
       { key: 'audioUnanswered', label: '音声 未回答' },
+      { key: 'audioSkipped', label: '音声 スキップ' },
     ],
   },
   {

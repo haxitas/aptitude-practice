@@ -582,3 +582,6 @@ h1 { font-size: 1.6rem; margin: 0 0 16px; }
 .result-details dt.is-emphasis { color: var(--text); font-weight: 800; }
 .result-details dd.is-emphasis { font-size: 1.8rem; font-weight: 800; color: var(--accent); line-height: 1.2; }
 .history-table th.is-emphasis, .history-table td.is-emphasis { color: var(--accent); font-weight: 800; }
+/* マルチタスクの計算は「正しい」「誤り」の2つ、音声はスキップを足した3つ(2026-09-30 本番に合わせて変更) */
+.t3-judge-buttons { grid-template-columns: 1fr 1fr; }
+.t3-audio-buttons .t3-skip { flex: 0.8; }

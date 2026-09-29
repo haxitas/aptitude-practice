@@ -47,13 +47,14 @@ test('同一図形(t2)は系列を順に作るので、一致確率と連続上�
   assert.equal(bad.ok, false);
 });
 
-test('T3 は2桁の個数と誤答差の整数・重複を検証する', () => {
-  const tooMany = validateTestSettings('t3', raw('t3', { calcMaxTwoDigitTerms: 5 }), DEFAULTS.t3);
+test('マルチタスク(t3)は2桁の個数を項数以下にし、右辺の設定と図形の制限時間を持つ', () => {
+  const tooMany = validateTestSettings('t3', raw('t3', { calcMaxTwoDigitTerms: 6 }), DEFAULTS.t3);
   assert.equal(tooMany.ok, false);
-  assert.match(tooMany.errors.calcMaxTwoDigitTerms, /4/);
-  const duplicate = validateTestSettings('t3', raw('t3', { calcDistractorOffsets: '1,2,2' }), DEFAULTS.t3);
-  assert.equal(duplicate.ok, false);
-  assert.match(duplicate.errors.calcDistractorOffsets, /重複/);
+  assert.match(tooMany.errors.calcMaxTwoDigitTerms, /5/);
+  const keys = SETTING_FIELDS.t3.map(f => f.key);
+  assert.equal(keys.includes('calcDistractorOffsets'), false);
+  for (const key of ['calcShowCorrectRate', 'calcWrongOffsetMax', 'shapeLimitMs']) assert.ok(keys.includes(key), key);
+  assert.equal(validateTestSettings('t3', raw('t3', { calcWrongOffsetMax: 0 }), DEFAULTS.t3).ok, false);
 });
 
 test('T5 は個数の順序と点の大きさ・最小間隔の組み合わせを検証する', () => {

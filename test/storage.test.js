@@ -140,13 +140,13 @@ test('loadSettings の結果を書き換えても DEFAULTS は変わらない', 
 });
 
 test('配列の設定値は、数値だけの配列なら使い、それ以外は既定値に戻す', () => {
-  const ok = resolveSettings({ t3: { calcDistractorOffsets: [3, 4, 5] } });
-  assert.deepEqual(ok.settings.t3.calcDistractorOffsets, [3, 4, 5]);
+  const ok = resolveSettings({ t1: { percentagePercents: [3, 4, 5] } });
+  assert.deepEqual(ok.settings.t1.percentagePercents, [3, 4, 5]);
   assert.deepEqual(ok.warnings, []);
   for (const bad of ['1,2,10', { 0: 1 }, [1, 'a', 3], [1, NaN, 3]]) {
-    const r = resolveSettings({ t3: { calcDistractorOffsets: bad } });
-    assert.deepEqual(r.settings.t3.calcDistractorOffsets, DEFAULTS.t3.calcDistractorOffsets, JSON.stringify(bad));
-    assert.deepEqual(r.warnings, ['t3.calcDistractorOffsets']);
+    const r = resolveSettings({ t1: { percentagePercents: bad } });
+    assert.deepEqual(r.settings.t1.percentagePercents, DEFAULTS.t1.percentagePercents, JSON.stringify(bad));
+    assert.deepEqual(r.warnings, ['t1.percentagePercents']);
   }
 });
 

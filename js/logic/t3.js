@@ -1,4 +1,4 @@
-// テスト3 マルチタスク: 図形・計算・音声の問題の生成、判定、音声タスクの進行、採点。DOM に触れない。
+// テスト2 マルチタスク(内部 id t3): 図形・計算・音声の問題の生成、判定、音声タスクの進行、採点。DOM に触れない。
 import { randInt, shuffle } from '../core/rng.js';
 import { correctFeedback, wrongFeedback } from '../core/feedback.js';
 
@@ -74,9 +74,16 @@ export function judgeShape(problem, answer) {
   return answer === problem.answer;
 }
 
+// 1問ごとの制限時間(2026-09-30 本番に合わせて追加)。過ぎたら未回答にして次の図形へ
+export function shapeTimedOut(shownAt, now, p) {
+  return now - shownAt >= p.shapeLimitMs;
+}
+
 // ---- 計算問題 ----
 
-// { terms: [{ op: '+'|'-', n } ×4](先頭は '+'), answer, choices: [4], correctIndex }
+// 2026-09-30 本番に合わせて変更: 左辺は calcTermCount(5)個の数の足し算・引き算、右辺に答えを表示し、
+// 「正しい」「誤り」で判定する。右辺は確率 calcShowCorrectRate で正しい値、それ以外は正しい値 ±1〜calcWrongOffsetMax(0未満にしない)。
+// { terms: [{ op: '+'|'-', n }](先頭は '+'), answer, shown, shownCorrect }
 export function generateCalcProblem(rng, p) {
   const twoDigitCount = randInt(rng, 0, Math.min(p.calcMaxTwoDigitTerms, p.calcTermCount));
   const positions = shuffle(rng, Array.from({ length: p.calcTermCount }, (_, i) => i));
@@ -102,19 +109,23 @@ export function generateCalcProblem(rng, p) {
     }
   }
   const answer = r;
-  const cands = [...new Set(p.calcDistractorOffsets.flatMap(o => [answer + o, answer - o]))]
-    .filter(c => c >= 0 && c !== answer);
-  if (cands.length < 3) throw new Error('テスト2(マルチタスク)の設定が不正です: 誤答の候補が3つ未満です(calcDistractorOffsets)');
-  const choices = shuffle(rng, [answer, ...shuffle(rng, cands).slice(0, 3)]);
-  return { terms, answer, choices, correctIndex: choices.indexOf(answer) };
+  let shown = answer;
+  if (rng() >= p.calcShowCorrectRate) {
+    const offsets = [];
+    for (let d = 1; d <= p.calcWrongOffsetMax; d++) offsets.push(d, -d);
+    const cands = offsets.map(d => answer + d).filter(v => v >= 0);
+    shown = cands[Math.floor(rng() * cands.length)];
+  }
+  return { terms, answer, shown, shownCorrect: shown === answer };
 }
 
 export function evaluateCalc(problem) {
   return problem.terms.reduce((r, t) => (t.op === '+' ? r + t.n : r - t.n), 0);
 }
 
-export function judgeCalc(problem, choiceIndex) {
-  return problem.choices[choiceIndex] === problem.answer;
+// saysCorrect: 「正しい」を押したら true、「誤り」なら false
+export function judgeCalc(problem, saysCorrect) {
+  return saysCorrect === problem.shownCorrect;
 }
 
 // 表示用の式(例: 13 + 8 − 4 + 2)
@@ -205,6 +216,13 @@ export function stepAudio(state, now, p, rng, { idle = false } = {}) {
   return { state: s, actions };
 }
 
+// スキップ(2026-09-30 本番に合わせて追加)。読み上げ中・回答待ちのときだけ受け付け、
+// その組は答えずに次の組までの待ちに入る(次の組は speechNextDelayMs 後に stepAudio が始める)
+export function skipAudio(state, now) {
+  if (state.phase !== 'speaking' && state.phase !== 'answering') return { accepted: false, state };
+  return { accepted: true, state: { ...state, phase: 'waiting', waitFrom: now } };
+}
+
 // 回答待ちのときだけ受け付ける。{ accepted, correct?, state }
 // 次の組は、回答の speechNextDelayMs 後に stepAudio が始める
 export function answerAudio(state, now, saysDuplicate) {
@@ -224,7 +242,7 @@ export function t3ShapeFeedback(problem, correct) {
 }
 
 export function t3CalcFeedback(problem, correct) {
-  return correct ? correctFeedback() : wrongFeedback(String(problem.answer));
+  return correct ? correctFeedback() : { kind: 'wrong', text: `× 正しくは ${problem.answer}(表示は ${problem.shown})` };
 }
 
 // 音声: 正しい答えが「重複あり」なら、2回出た語も添える
@@ -239,9 +257,9 @@ export function t3AudioFeedback(set, correct) {
 
 export function createT3Tally() {
   return {
-    shape: { correct: 0, answered: 0 },
+    shape: { correct: 0, answered: 0, unanswered: 0 },
     calc: { correct: 0, answered: 0 },
-    audio: { correct: 0, answered: 0, unanswered: 0 },
+    audio: { correct: 0, answered: 0, unanswered: 0, skipped: 0 },
   };
 }
 
@@ -256,6 +274,16 @@ export function recordUnanswered(tally) {
   return { ...tally, audio: { ...tally.audio, unanswered: tally.audio.unanswered + 1 } };
 }
 
+// 図形の時間切れ(正答にも回答数にも入れない)
+export function recordShapeUnanswered(tally) {
+  return { ...tally, shape: { ...tally.shape, unanswered: tally.shape.unanswered + 1 } };
+}
+
+// 音声のスキップ(正答にも回答数にも入れない)
+export function recordSkip(tally) {
+  return { ...tally, audio: { ...tally.audio, skipped: tally.audio.skipped + 1 } };
+}
+
 function accuracy({ correct, answered }) {
   return answered ? Math.round((correct * 100) / answered) : null;
 }
@@ -267,9 +295,10 @@ export function summarizeT3(tally) {
     score: shape.correct + calc.correct + audio.correct,
     detail: {
       shapeCorrect: shape.correct, shapeAnswered: shape.answered, shapeAccuracy: accuracy(shape),
+      shapeUnanswered: shape.unanswered,
       calcCorrect: calc.correct, calcAnswered: calc.answered, calcAccuracy: accuracy(calc),
       audioCorrect: audio.correct, audioAnswered: audio.answered, audioAccuracy: accuracy(audio),
-      audioUnanswered: audio.unanswered,
+      audioUnanswered: audio.unanswered, audioSkipped: audio.skipped,
     },
   };
 }

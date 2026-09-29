@@ -82,13 +82,15 @@ export const DEFAULTS = Object.freeze({
   t3: Object.freeze({
     durationSec: 240,
     triangleTiltMaxDeg: 10, // 三角形の傾きの最大(±)
-    calcTermCount: 4, // 計算の数の個数
+    calcTermCount: 5, // 計算の数の個数(2026-09-30 本番に合わせて 4 → 5)
     calcTermMin: 1,
     calcTermMax: 20,
     calcMaxTwoDigitTerms: 2, // 1問に入る2桁の数の最大個数
     calcSingleDigitMax: 9,
     calcSubtractRate: 0.5, // 引き算を選べるときに選ぶ確率
-    calcDistractorOffsets: Object.freeze([1, 2, 10]), // 誤答は正解 ± これらの値から作る
+    calcShowCorrectRate: 0.5, // 右辺に正しい値を出す確率(2026-09-30 本番に合わせて4択から変更)
+    calcWrongOffsetMax: 3, // 右辺が誤りのときは正しい値に ±1〜この値を足す
+    shapeLimitMs: 5000, // 図形の1問ごとの制限時間。過ぎたら未回答(2026-09-30 本番に合わせて追加)
     speechWordCount: 5,
     speechGapMs: 500, // 前の語を読み終えてから次の語まで
     speechRate: 0.9,

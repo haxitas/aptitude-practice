@@ -9,6 +9,7 @@ import {
   generateAudioSet,
   createAudioState, startAudioSet, stepAudio, audioEnded, answerAudio,
   createT3Tally, recordAnswer, recordUnanswered, summarizeT3, buildT3Record,
+  shapeTimedOut, recordShapeUnanswered, skipAudio, recordSkip,
 } from '../js/logic/t3.js';
 import { t3ShapeFeedback, t3CalcFeedback, t3AudioFeedback } from '../js/logic/t3.js';
 
@@ -19,12 +20,15 @@ const P = DEFAULTS.t3;
 test('T3 の既定値: SPEC §6 の数値と承認済みの追加分', () => {
   assert.equal(P.durationSec, 240);
   assert.equal(P.triangleTiltMaxDeg, 10);
-  assert.equal(P.calcTermCount, 4);
+  assert.equal(P.calcTermCount, 5); // 2026-09-30 本番に合わせて 4 → 5
   assert.equal(P.calcTermMin, 1);
   assert.equal(P.calcTermMax, 20);
   assert.equal(P.calcMaxTwoDigitTerms, 2);
   assert.equal(P.calcSingleDigitMax, 9);
-  assert.deepEqual(P.calcDistractorOffsets, [1, 2, 10]);
+  assert.equal('calcDistractorOffsets' in P, false); // 4択をやめたため
+  assert.equal(P.calcShowCorrectRate, 0.5);
+  assert.equal(P.calcWrongOffsetMax, 3);
+  assert.equal(P.shapeLimitMs, 5000);
   assert.equal(P.speechWordCount, 5);
   assert.equal(P.speechGapMs, 500);
   assert.equal('speechIntervalMs' in P, false);
@@ -124,12 +128,12 @@ test('図形: シードが同じなら同じ問題、判定は向きで決まる
 
 // ---- 計算問題 ----
 
-test('計算(シード1000種類): 2桁は最大2つ、残りは1〜9、すべて20以下で途中の値が負にならない', () => {
+test('計算(シード1000種類): 5項、2桁は最大2つ・残りは1〜9、途中の値が負にならない(2026-09-30 本番に合わせて変更)', () => {
   const seenTwoDigitCounts = new Set();
   const seenTwoDigitPositions = new Set();
   for (let seed = 1; seed <= 1000; seed++) {
     const q = generateCalcProblem(createRng(seed), P);
-    assert.equal(q.terms.length, 4);
+    assert.equal(q.terms.length, 5);
     const twoDigitPositions = q.terms.flatMap((t, i) => t.n >= 10 ? [i] : []);
     assert.ok(twoDigitPositions.length <= 2, `seed=${seed}: 2桁が${twoDigitPositions.length}個`);
     seenTwoDigitCounts.add(twoDigitPositions.length);
@@ -137,54 +141,66 @@ test('計算(シード1000種類): 2桁は最大2つ、残りは1〜9、すべ�
     let r = 0;
     q.terms.forEach((t, i) => {
       assert.ok(Number.isInteger(t.n) && t.n >= 1 && t.n <= 20, `seed=${seed} n=${t.n}`);
-      if (t.n < 10) assert.ok(t.n <= 9, `seed=${seed} n=${t.n}`);
       if (i === 0) assert.equal(t.op, '+');
       r = t.op === '+' ? r + t.n : r - t.n;
       assert.ok(r >= 0, `seed=${seed}: 途中の値が負 ${r}`);
     });
     assert.equal(q.answer, r);
     assert.equal(evaluateCalc(q), r);
-    assert.equal(q.choices.length, 4);
-    assert.equal(new Set(q.choices).size, 4, `seed=${seed}`);
-    assert.equal(q.choices.filter(c => c === q.answer).length, 1);
-    assert.equal(q.choices[q.correctIndex], q.answer);
-    for (const c of q.choices) {
-      assert.ok(Number.isInteger(c) && c >= 0, `seed=${seed}`);
-      if (c !== q.answer) assert.ok([1, 2, 10].includes(Math.abs(c - q.answer)), `seed=${seed} c=${c}`);
-    }
   }
   assert.deepEqual([...seenTwoDigitCounts].sort(), [0, 1, 2]);
-  assert.deepEqual([...seenTwoDigitPositions].sort(), [0, 1, 2, 3]);
+  assert.deepEqual([...seenTwoDigitPositions].sort(), [0, 1, 2, 3, 4]);
 });
 
-test('計算: 最終の答えが0以上でも、各項の途中の値が負でないことを確認する', () => {
-  const q = generateCalcProblem(createRng(1), P);
-  assert.ok(q.answer >= 0, `最終の答えが負 ${q.answer}`);
-  let r = 0;
-  q.terms.forEach((t, i) => {
-    r = t.op === '+' ? r + t.n : r - t.n;
-    assert.ok(r >= 0, `項${i + 1}: 途中の値が負 ${r} (最終の答え ${q.answer})`);
-  });
+test('計算: 右辺は約50%で正しい値、それ以外は正しい値に ±1〜3 を足した値(0未満にしない)', () => {
+  let correct = 0;
+  const offsets = new Set();
+  const total = 4000;
+  for (let seed = 1; seed <= total; seed++) {
+    const q = generateCalcProblem(createRng(seed), P);
+    assert.equal(q.shownCorrect, q.shown === q.answer);
+    assert.ok(Number.isInteger(q.shown) && q.shown >= 0, `seed=${seed} shown=${q.shown}`);
+    if (q.shownCorrect) correct++;
+    else {
+      const d = q.shown - q.answer;
+      assert.ok(Math.abs(d) >= 1 && Math.abs(d) <= 3, `seed=${seed}: 答え${q.answer} 表示${q.shown}`);
+      offsets.add(d);
+    }
+  }
+  assert.ok(correct / total > 0.47 && correct / total < 0.53, `正しい表示の割合 ${correct / total}`);
+  assert.deepEqual([...offsets].sort((a, b) => a - b), [-3, -2, -1, 1, 2, 3]);
 });
 
-test('計算: 引き算も足し算も出る、答えが0の問題でも4択を作れる', () => {
+test('計算: 引き算も足し算も出る。答えが0でも右辺は0以上', () => {
   let sawMinus = false, sawPlus = false, sawZero = false;
-  for (let seed = 1; seed <= 3000; seed++) {
+  for (let seed = 1; seed <= 5000; seed++) {
     const q = generateCalcProblem(createRng(seed), P);
     if (q.terms.slice(1).some(t => t.op === '-')) sawMinus = true;
     if (q.terms.slice(1).some(t => t.op === '+')) sawPlus = true;
-    if (q.answer === 0) {
-      sawZero = true;
-      assert.deepEqual([...q.choices].sort((a, b) => a - b), [0, 1, 2, 10]);
-    }
+    if (q.answer === 0) sawZero = true;
+    assert.ok(q.shown >= 0);
   }
   assert.ok(sawMinus && sawPlus && sawZero);
 });
 
-test('計算: 判定は選んだ選択肢の値で決まる', () => {
-  const q = generateCalcProblem(createRng(3), P);
-  assert.equal(judgeCalc(q, q.correctIndex), true);
-  assert.equal(judgeCalc(q, (q.correctIndex + 1) % 4), false);
+test('計算: 「正しい」「誤り」の判定は、右辺が正しいかどうかで決まる', () => {
+  const right = { terms: [], answer: 17, shown: 17, shownCorrect: true };
+  const wrong = { terms: [], answer: 17, shown: 19, shownCorrect: false };
+  assert.equal(judgeCalc(right, true), true);
+  assert.equal(judgeCalc(right, false), false);
+  assert.equal(judgeCalc(wrong, false), true);
+  assert.equal(judgeCalc(wrong, true), false);
+});
+
+// ---- 図形の制限時間(2026-09-30 本番に合わせて追加) ----
+
+test('図形: 1問ごとに shapeLimitMs(5秒)の制限時間。過ぎたら未回答に数える', () => {
+  assert.equal(shapeTimedOut(1000, 1000 + P.shapeLimitMs - 1, P), false);
+  assert.equal(shapeTimedOut(1000, 1000 + P.shapeLimitMs, P), true);
+  const t = recordShapeUnanswered(createT3Tally());
+  assert.equal(t.shape.unanswered, 1);
+  assert.equal(t.shape.answered, 0);
+  assert.equal(t.shape.correct, 0);
 });
 
 // ---- 音声の5語 ----
@@ -366,12 +382,14 @@ test('採点: 点数は3タスクの正答数の合計、正答率は整数%(回
   t = recordAnswer(t, 'shape', false);
   t = recordAnswer(t, 'calc', true);
   t = recordUnanswered(t);
+  t = recordShapeUnanswered(t);
+  t = recordSkip(t);
   const s = summarizeT3(t);
   assert.equal(s.score, 3);
   assert.deepEqual(s.detail, {
-    shapeCorrect: 2, shapeAnswered: 3, shapeAccuracy: 67,
+    shapeCorrect: 2, shapeAnswered: 3, shapeAccuracy: 67, shapeUnanswered: 1,
     calcCorrect: 1, calcAnswered: 1, calcAccuracy: 100,
-    audioCorrect: 0, audioAnswered: 0, audioAccuracy: null, audioUnanswered: 1,
+    audioCorrect: 0, audioAnswered: 0, audioAccuracy: null, audioUnanswered: 1, audioSkipped: 1,
   });
 });
 
@@ -401,10 +419,12 @@ test('即時判定: 図形は正しい向きを記号と言葉で出す', () => 
   assert.deepEqual(t3ShapeFeedback({ items: [], answer: 'left' }, false), { kind: 'wrong', text: '× 正解は ◀(左向き)' });
 });
 
-test('即時判定: 計算は正しい答えの数を出す', () => {
-  const q = { answer: 17, choices: [16, 17, 19, 27], correctIndex: 1, terms: [] };
+test('即時判定: 計算は正しい値と表示された値を出す', () => {
+  const q = { answer: 17, shown: 19, shownCorrect: false, terms: [] };
   assert.deepEqual(t3CalcFeedback(q, true), { kind: 'correct', text: '○ 正解' });
-  assert.deepEqual(t3CalcFeedback(q, false), { kind: 'wrong', text: '× 正解は 17' });
+  assert.deepEqual(t3CalcFeedback(q, false), { kind: 'wrong', text: '× 正しくは 17(表示は 19)' });
+  const right = { answer: 17, shown: 17, shownCorrect: true, terms: [] };
+  assert.deepEqual(t3CalcFeedback(right, false), { kind: 'wrong', text: '× 正しくは 17(表示は 17)' });
 });
 
 test('即時判定: 音声は重複ありなら重複した語、なしなら「重複なし」', () => {
@@ -413,4 +433,37 @@ test('即時判定: 音声は重複ありなら重複した語、なしなら「
   assert.deepEqual(t3AudioFeedback(dup, true), { kind: 'correct', text: '○ 正解' });
   assert.deepEqual(t3AudioFeedback(dup, false), { kind: 'wrong', text: '× 重複あり(Alfa)' });
   assert.deepEqual(t3AudioFeedback(none, false), { kind: 'wrong', text: '× 重複なし' });
+});
+
+// ---- 音声のスキップ(2026-09-30 本番に合わせて追加) ----
+
+const SKIP_SET = { words: ['Alfa', 'Bravo', 'Charlie', 'Delta', 'Alfa'], hasDuplicate: true };
+
+test('スキップ: 読み上げ中も回答待ちも受け付け、speechNextDelayMs 後に次の組を始める', () => {
+  const rng = createRng(1);
+  let r = stepAudio(startAudioSet(createAudioState(), SKIP_SET, 0), 0, P, rng);
+  assert.equal(r.state.phase, 'speaking');
+  const k = skipAudio(r.state, 300);
+  assert.equal(k.accepted, true);
+  assert.equal(k.state.phase, 'waiting');
+  assert.equal(answerAudio(k.state, 400, true).accepted, false, 'スキップした組には答えられない');
+  assert.deepEqual(stepAudio(k.state, 300 + P.speechNextDelayMs - 1, P, rng).actions.map(a => a.type), []);
+  assert.deepEqual(stepAudio(k.state, 300 + P.speechNextDelayMs, P, rng).actions.map(a => a.type), ['newSet', 'speak']);
+  const answering = { ...r.state, phase: 'answering', answerDeadline: null };
+  assert.equal(skipAudio(answering, 500).accepted, true);
+});
+
+test('スキップ: 次の組までの待ちの間は受け付けない', () => {
+  const waiting = { ...startAudioSet(createAudioState(), SKIP_SET, 0), phase: 'waiting', waitFrom: 0 };
+  assert.equal(skipAudio(waiting, 100).accepted, false);
+  assert.equal(skipAudio(createAudioState(), 100).accepted, false);
+});
+
+test('スキップは正答にも回答数にも入れず、スキップ数として数える', () => {
+  const t = recordSkip(createT3Tally());
+  assert.equal(t.audio.skipped, 1);
+  assert.equal(t.audio.correct, 0);
+  assert.equal(t.audio.answered, 0);
+  assert.equal(summarizeT3(t).score, 0);
+  assert.equal(summarizeT3(t).detail.audioSkipped, 1);
 });
