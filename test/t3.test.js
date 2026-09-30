@@ -9,7 +9,7 @@ import {
   generateAudioSet,
   createAudioState, startAudioSet, stepAudio, audioEnded, answerAudio,
   createT3Tally, recordAnswer, recordUnanswered, summarizeT3, buildT3Record,
-  shapeTimedOut, shapeRemainingRatio, recordShapeUnanswered, skipAudio, recordSkip,
+  shapeTimedOut, shapeElapsedRatio, recordShapeUnanswered, skipAudio, recordSkip,
 } from '../js/logic/t3.js';
 import { t3ShapeFeedback, t3ShapeTimeoutFeedback, t3CalcFeedback, t3AudioFeedback } from '../js/logic/t3.js';
 
@@ -194,12 +194,16 @@ test('計算: 「正しい」「誤り」の判定は、右辺が正しいかど
 
 // ---- 図形の制限時間(2026-09-30 本番に合わせて追加) ----
 
-test('図形: 残り時間の割合は、表示した直後が1、半分で0.5、制限時間で0(それ以降も0)', () => {
-  assert.equal(shapeRemainingRatio(1000, 1000, P), 1);
-  assert.equal(shapeRemainingRatio(1000, 1000 + P.shapeLimitMs / 2, P), 0.5);
-  assert.equal(shapeRemainingRatio(1000, 1000 + P.shapeLimitMs, P), 0);
-  assert.equal(shapeRemainingRatio(1000, 1000 + P.shapeLimitMs * 3, P), 0);
-  assert.equal(shapeRemainingRatio(1000, 900, P), 1);
+test('図形: 棒の長さ(経過時間の割合)は、表示した直後が0、半分で0.5、制限時間で1(それ以降も1)。下から上へ増え、いっぱいで時間切れ', () => {
+  assert.equal(shapeElapsedRatio(1000, 1000, P), 0);
+  assert.equal(shapeElapsedRatio(1000, 1000 + P.shapeLimitMs / 4, P), 0.25);
+  assert.equal(shapeElapsedRatio(1000, 1000 + P.shapeLimitMs / 2, P), 0.5);
+  assert.equal(shapeElapsedRatio(1000, 1000 + P.shapeLimitMs, P), 1);
+  assert.equal(shapeElapsedRatio(1000, 1000 + P.shapeLimitMs * 3, P), 1);
+  assert.equal(shapeElapsedRatio(1000, 900, P), 0);
+  // いっぱいになったときに時間切れ
+  assert.equal(shapeTimedOut(1000, 1000 + P.shapeLimitMs, P), true);
+  assert.equal(shapeTimedOut(1000, 1000 + P.shapeLimitMs - 1, P), false);
 });
 
 test('図形: 1問ごとに shapeLimitMs(7秒)の制限時間。過ぎたら未回答に数える', () => {

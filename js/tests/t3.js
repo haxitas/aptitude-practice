@@ -5,7 +5,7 @@ import {
   pickVoice, generateShapeProblem, judgeShape, generateCalcProblem, judgeCalc, formatCalc,
   generateAudioSet, createAudioState, startAudioSet, stepAudio, audioEnded, answerAudio,
   createT3Tally, recordAnswer, recordUnanswered, buildT3Record,
-  shapeTimedOut, shapeRemainingRatio, recordShapeUnanswered, skipAudio, recordSkip,
+  shapeTimedOut, shapeElapsedRatio, recordShapeUnanswered, skipAudio, recordSkip,
   t3ShapeFeedback, t3ShapeTimeoutFeedback, t3CalcFeedback, t3AudioFeedback,
 } from '../logic/t3.js';
 import { createFeedbackSlot, feedbackSlotHtml } from '../core/feedback.js';
@@ -127,7 +127,7 @@ export function mount(root, ctx) {
               <button class="t3-btn" type="button" data-dir="left" aria-label="左向き">◀</button>
               <button class="t3-btn" type="button" data-dir="right" aria-label="右向き">▶</button>
             </div>
-            <div class="t3-shape-timer" role="progressbar" aria-label="図形の残り時間" aria-valuemin="0" aria-valuemax="100" data-ref="shapeTimer">
+            <div class="t3-shape-timer" role="progressbar" aria-label="図形の経過時間" aria-valuemin="0" aria-valuemax="100" data-ref="shapeTimer">
               <div class="t3-shape-timer-fill" data-ref="shapeTimerFill"></div>
             </div>
             ${feedbackSlotHtml('shapeFeedback')}
@@ -161,9 +161,9 @@ export function mount(root, ctx) {
     const skipBtn = $('skip');
     const shapeTimer = $('shapeTimer');
     const shapeTimerFill = $('shapeTimerFill');
-    // 残り時間の棒(縦長。時間とともに下へ縮む)
+    // 経過時間の棒(縦長。下から上へ増え、いっぱいで時間切れ)
     function drawShapeTimer(ts) {
-      const ratio = shapeRemainingRatio(shapeShownAt, ts, params);
+      const ratio = shapeElapsedRatio(shapeShownAt, ts, params);
       if (shapeTimerFill.style) shapeTimerFill.style.transform = `scaleY(${ratio})`;
       shapeTimer.setAttribute?.('aria-valuenow', String(Math.round(ratio * 100)));
     }

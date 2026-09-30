@@ -79,9 +79,10 @@ export function shapeTimedOut(shownAt, now, p) {
   return now - shownAt >= p.shapeLimitMs;
 }
 
-// 残り時間の割合(1 → 0)。◀ ▶ の下の棒の長さに使う(2026-09-30 ユーザーの実機の感想で追加)
-export function shapeRemainingRatio(shownAt, now, p) {
-  return Math.min(1, Math.max(0, 1 - (now - shownAt) / p.shapeLimitMs));
+// 経過時間の割合(0 → 1)。◀ ▶ の下の棒の長さに使う。いっぱい(1)で時間切れ
+// (2026-09-30 ユーザーの実機の感想で追加。2026-10-01 同じく感想で、減る向きから下から上へ増える向きに変更)
+export function shapeElapsedRatio(shownAt, now, p) {
+  return Math.min(1, Math.max(0, (now - shownAt) / p.shapeLimitMs));
 }
 
 // ---- 計算問題 ----

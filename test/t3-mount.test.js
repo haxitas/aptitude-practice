@@ -47,6 +47,8 @@ test('開始画面の余白タップの処理中に最初のspeakを呼ぶ(縦�
   const at = text => html.indexOf(text);
   assert.ok(at('class="t3-dir-buttons"') >= 0 && at('class="t3-shape-timer"') > at('class="t3-dir-buttons"'), '残り時間の棒は ◀ ▶ の下');
   assert.match(html, /class="t3-shape-timer"[^>]*role="progressbar"/);
+  // 2026-10-01 ユーザーの実機の感想で変更: 棒は経過時間(下から上へ増え、いっぱいで時間切れ)
+  assert.match(html, /class="t3-shape-timer"[^>]*aria-label="図形の経過時間"/);
   assert.match(html, /<div class="t3-shape-timer-fill" data-ref="shapeTimerFill"><\/div>/);
   const dup = at('data-dup="no"');
   const skip = at('data-ref="skip"');
