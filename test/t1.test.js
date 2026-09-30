@@ -7,7 +7,7 @@ import {
   createT1Tally, recordT1Answer, summarizeT1, buildT1Record,
 } from '../js/logic/t1.js';
 import { t1MistakeEntry, t1ReviewSummary, t1Formula, formatT1Answer, UNIT_VARIANT_IDS, POWER_UNIT_VARIANT_IDS, PRICE_VARIANTS, GEOMETRY_VARIANTS } from '../js/logic/t1.js';
-import { T1_CATEGORIES, generateT1Round, T1_CONVERSIONS, DISCOUNT_VARIANTS, isRoundNumber, significantDigits, unitVariantsFor } from '../js/logic/t1.js';
+import { T1_CATEGORIES, generateT1Round, T1_CONVERSIONS, DISCOUNT_VARIANTS, isRoundNumber, significantDigits, unitVariantsFor, isPowerOfTenUnit } from '../js/logic/t1.js';
 
 const P = DEFAULTS.t1;
 
@@ -127,7 +127,7 @@ test('T1 の既定値は承認済みの数値(2026-09-30 本番の記憶で15問
     calculatorDuringTest: true,
     answerFeedbackMs: 300,
     stallAbortMs: 1000,
-    promptNumberMin: 10, promptNumberMax: 9999, unitAnswerMax: 1000000,
+    promptNumberMin: 10, promptNumberMax: 9999, unitAnswerMax: 1000000, unitPowerOfTenMax: 2,
     speedMin: 11, speedMax: 79, speedMinutesMin: 21, speedMinutesMax: 299, speedHoursMin: 1.1, speedHoursMax: 9.9,
     lapSpeedMin: 51, lapSpeedMax: 249, lapMinutesMin: 5, lapMinutesMax: 60,
     percentBaseMin: 101, percentBaseMax: 4999, percentMin: 11, percentMax: 89,
@@ -182,6 +182,35 @@ test('1回は15問で、単位変換5 → 割合5 → 計算5 の順。分野の
   }
   assert.equal(firstRatio.size, RATIO_KINDS.length, '割合の1問目はどの種類にもなる');
   assert.ok(firstCalc.size >= 8, [...firstCalc].join(','));
+});
+
+// ---- 桁をずらすだけの換算を減らす(2026-10-01 7回目) ----
+
+test('単位変換: 10の累乗だけの換算か(時速↔分速・秒速、時間↔分、分↔秒、日↔時間は違う)', () => {
+  const notPower = ['hours-to-minutes', 'minutes-to-hours', 'minutes-to-seconds', 'seconds-to-minutes', 'days-to-hours', 'hours-to-days',
+    'kmh-to-mpm', 'mpm-to-kmh', 'mps-to-kmh', 'kmh-to-mps'];
+  for (const id of UNIT_VARIANT_IDS) {
+    const ratio = UNIT_RATIOS[id];
+    const power = Math.abs(Math.log10(ratio) - Math.round(Math.log10(ratio))) < 1e-9;
+    assert.equal(isPowerOfTenUnit(id), power, id);
+    assert.equal(isPowerOfTenUnit(id), !notPower.includes(id), id);
+  }
+  assert.equal(P.unitPowerOfTenMax, 2);
+});
+
+test('単位変換: 多数のシードで、1回の5問のうち10の累乗だけの換算は2問まで。残りは60や3.6を使う換算', () => {
+  const nonPowerSeen = new Set();
+  let atMax = 0;
+  for (let seed = 1; seed <= 1000; seed++) {
+    const unit = generateT1Round(createRng(seed), P).slice(0, 5);
+    const powers = unit.filter(q => isPowerOfTenUnit(q.variant)).length;
+    assert.ok(powers <= 2, `seed=${seed}: ${unit.map(q => q.variant)}`);
+    if (powers === 2) atMax++;
+    unit.filter(q => !isPowerOfTenUnit(q.variant)).forEach(q => nonPowerSeen.add(q.variant));
+    assert.equal(new Set(unit.map(q => q.variant)).size, 5, '違う換算');
+  }
+  assert.equal(nonPowerSeen.size, 10, [...nonPowerSeen].join(','));
+  assert.ok(atMax > 900, `10の累乗の換算も2問は出す: ${atMax}`);
 });
 
 test('制限時間は5分(300秒)', () => {

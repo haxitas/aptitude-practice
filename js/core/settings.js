@@ -40,6 +40,7 @@ export const DEFAULTS = Object.freeze({
     promptNumberMin: 10, // 問題文の数値は2〜4桁の整数(2026-10-01 追加)
     promptNumberMax: 9999,
     unitAnswerMax: 1000000, // 単位変換の答えの上限
+    unitPowerOfTenMax: 2, // 1回の単位変換のうち、10の累乗だけの換算(桁をずらすだけ)の問題数の上限(2026-10-01 7回目で追加)
     speedMin: 11, // 速さ(時速km、整数)
     speedMax: 79,
     speedMinutesMin: 21, // 速さの問題の時間(分、整数)

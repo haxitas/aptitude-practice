@@ -364,6 +364,14 @@ function unitCandidates(v, p) {
   return list;
 }
 
+// 10の累乗だけの換算か(2026-10-01 7回目で追加)。時速↔分速・秒速、時間↔分、分↔秒、日↔時間は 60・24・3.6 を使うので違う
+export function isPowerOfTenUnit(id) {
+  const v = UNIT_VARIANTS.find(x => x.id === id);
+  if (!v) throw new RangeError(`不明な単位換算です: ${id}`);
+  const exponent = Math.log10(v.num / v.den);
+  return Math.abs(exponent - Math.round(exponent)) < 1e-9;
+}
+
 // 設定 p で作れる単位変換の種類(2026-10-01 追加)
 export function unitVariantsFor(p) {
   return UNIT_VARIANTS.filter(v => unitCandidates(v, p).length > 0).map(v => v.id);
@@ -960,13 +968,31 @@ export function generateT1Problem(rng, p, previous = null, forcedKind = null, fo
 
 // 1回分の問題(2026-09-30 本番の記憶で変更): 単位変換 → 割合 → 計算 の順に、各 questionsPerCategory 問(既定5問、計15問)。
 // 分野の中の順番はランダム。単位変換は違う換算を、割合と計算は違う種類を出す(種類が足りなければ一巡してから繰り返す)
+// 単位変換のうち10の累乗だけの換算(桁をずらすだけ)は unitPowerOfTenMax(2)問までにし、残りは 60 や 3.6 を使う換算にする
+// (2026-10-01 7回目で追加)
+function unitRoundOrder(rng, p, n) {
+  const available = unitVariantsFor(p);
+  const repeat = (pool, count) => {
+    const out = [];
+    while (out.length < count && pool.length) out.push(...shuffle(rng, pool));
+    return out.slice(0, count);
+  };
+  const powerCount = Math.min(p.unitPowerOfTenMax, n);
+  const others = repeat(available.filter(id => !isPowerOfTenUnit(id)), n - powerCount);
+  const powers = repeat(available.filter(id => isPowerOfTenUnit(id)), n - others.length);
+  return shuffle(rng, [...others, ...powers]);
+}
+
 export function generateT1Round(rng, p) {
   const n = p.questionsPerCategory;
   const out = [];
   for (const category of T1_CATEGORIES) {
-    const pool = category.id === 'unit' ? unitVariantsFor(p) : category.kinds;
-    const order = [];
-    while (order.length < n) order.push(...shuffle(rng, pool));
+    let order;
+    if (category.id === 'unit') order = unitRoundOrder(rng, p, n);
+    else {
+      order = [];
+      while (order.length < n) order.push(...shuffle(rng, category.kinds));
+    }
     for (const pick of order.slice(0, n)) {
       const problem = category.id === 'unit' ? GENERATORS.unit(rng, p, pick) : GENERATORS[pick](rng, p);
       out.push({ ...problem, category: category.id });
