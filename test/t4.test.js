@@ -1,6 +1,5 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { createRng } from '../js/core/rng.js';
 import { DEFAULTS } from '../js/core/settings.js';
 import {
@@ -8,94 +7,71 @@ import {
   createT4Example,
   createT4Selection, selectT4Position, selectT4Heading, canSubmitT4,
   judgeT4, createT4Tally, recordT4Answer, summarizeT4, buildT4Record,
-  compassNeedleAngle, compassNeedleVertices, planeRotationDeg,
+  gyroCardRotationDeg, gyroDirectionAtTop, rbiNeedleDeg, rbiReading, planeRotationDeg,
   createT4Practice, answerT4Practice, advanceT4Practice, explainT4Solution,
 } from '../js/logic/t4.js';
 import { findTest, formatDetail } from '../js/core/catalog.js';
-import { instrumentSvg, planeSvg } from '../js/tests/t4.js';
+import { gyroSvg, rbiSvg, planeSvg, mount } from '../js/tests/t4.js';
 import { t4Feedback } from '../js/logic/t4.js';
 
 const P = DEFAULTS.t4;
 
-test('8等分の補助線は両配色の境界色を使い、従来より濃い', () => {
-  const css = readFileSync(new URL('../css/style.css', import.meta.url), 'utf8');
-  assert.match(css, /\.t4-guide\s*\{[^}]*stroke:\s*var\(--border\);[^}]*stroke-width:\s*1\.5;[^}]*opacity:\s*0\.7;/);
+// ---- GYRO と RBI(2026-09-30 本番に合わせて変更) ----
+
+test('例題は機首NE・RBI 9(右90°)・自機NWのマス・向きNE', () => {
+  const example = createT4Example();
+  assert.deepEqual(example.problem, { headingIndex: 1, relativeIndex: 2 });
+  assert.deepEqual(example.selection, { position: 'NW', heading: 'NE' });
+  assert.equal(judgeT4(example.problem, example.selection).correct, true);
 });
 
-test('例題は流儀にかかわらず機首NE・ADF右90度・自機NW/NE', () => {
-  const nose = createT4Example('noseUp');
-  const north = createT4Example('northUp');
-  assert.deepEqual(north.problem, { headingIndex: 1, relativeIndex: 2 });
-  assert.deepEqual(north.selection, { position: 'NW', heading: 'NE' });
-  assert.deepEqual(nose, north);
-  assert.deepEqual(createT4Example(), north);
-  for (const example of [nose, north]) assert.equal(judgeT4(example.problem, example.selection).correct, true);
-});
-
-test('流儀ごとの針角度は8方位で逆向きになり、不正入力を拒否する', () => {
+test('GYRO: 文字盤は −(機首の方位)だけ回り、上の▲の位置に来る方位が機首になる(8方位すべて)', () => {
   for (let i = 0; i < 8; i++) {
-    const north = compassNeedleAngle(i, 'northUp');
-    const nose = compassNeedleAngle(i, 'noseUp');
-    assert.equal(north, i * 45);
-    assert.equal(nose, (360 - i * 45) % 360);
-    assert.ok(north + nose === 0 || north + nose === 360);
+    assert.equal(gyroCardRotationDeg(i), 0 - i * 45);
+    assert.equal(gyroDirectionAtTop(gyroCardRotationDeg(i)), DIRECTIONS[i].key);
   }
-  for (const [index, north, nose] of [[0, 0, 0], [1, 45, 315], [2, 90, 270], [5, 225, 135]]) {
-    assert.equal(compassNeedleAngle(index, 'northUp'), north);
-    assert.equal(compassNeedleAngle(index, 'noseUp'), nose);
-  }
-  assert.throws(() => compassNeedleAngle(-1, 'northUp'));
-  assert.throws(() => compassNeedleAngle(1, 'other'));
-  for (const [mode, values] of [
-    ['noseUp', [[0, 0], [6, 90], [1, 315]]],
-    ['northUp', [[0, 0], [6, 270], [1, 45]]],
-  ]) for (const [index, expected] of values) assert.equal(compassNeedleAngle(index, mode), expected);
+  // 機首 NE なら、N と E の間(NE)の目盛りが▲に来る
+  assert.equal(gyroDirectionAtTop(-45), 'NE');
+  assert.throws(() => gyroCardRotationDeg(8));
 });
 
-test('固定文字盤は両流儀・全機首で同じ8文字と座標を持ち、針先の北文字はない', () => {
-  const labels = svg => [...svg.matchAll(/<text x="([^"]+)" y="([^"]+)" text-anchor="middle" dominant-baseline="central">([^<]+)<\/text>/g)]
-    .map(([, x, y, key]) => [key, x, y]);
-  const baseline = labels(instrumentSvg(0, false, 'northUp'));
-  assert.deepEqual(baseline.map(([key]) => key), DIRECTIONS.map(d => d.key));
-  for (const mode of ['northUp', 'noseUp']) for (let i = 0; i < 8; i++) {
-    const svg = instrumentSvg(i, false, mode);
-    assert.deepEqual(labels(svg), baseline);
-    assert.doesNotMatch(svg, /t4-north-label|>北<\/text>/);
+test('GYRO の絵: 回る文字盤に N・E・S・W の4文字と45°ごとの目盛り8本、固定の▲と中央の飛行機マーク', () => {
+  for (let i = 0; i < 8; i++) {
+    const svg = gyroSvg(i);
+    const card = svg.match(/<g class="t4-gyro-card" transform="rotate\(([-\d.]+) 100 100\)">([\s\S]*?)<\/g>/);
+    assert.ok(card, svg);
+    assert.equal(Number(card[1]), 0 - i * 45);
+    const letters = [...card[2].matchAll(/>([^<>]+)<\/text>/g)].map(m => m[1]);
+    assert.deepEqual(letters, ['N', 'E', 'S', 'W']);
+    assert.equal((card[2].match(/class="t4-gyro-tick"/g) ?? []).length, 8);
+    assert.doesNotMatch(svg, /\d+°|>\d+</, '細かい数字は入れない');
+    // ▲と飛行機マークは回る文字盤の外(固定)
+    const outside = svg.replace(card[0], '');
+    assert.match(outside, /class="t4-lubber"/);
+    assert.match(outside, /class="t4-gyro-plane"/);
+    assert.match(svg, /aria-label="GYRO"/);
   }
 });
 
-test('左の計器は流儀ごとに機首印を変え、ADFは尖った針のまま', () => {
-  const north = instrumentSvg(1, false, 'northUp');
-  assert.match(north, /class="t4-compass-red"/);
-  assert.match(north, /class="t4-compass-pale"/);
-  assert.match(north, />NE<\/text>/);
-  assert.doesNotMatch(north, /class="t4-nose"/);
-  const nose = instrumentSvg(1, false, 'noseUp');
-  assert.match(nose, /class="t4-nose"/);
-  assert.match(nose, /<path class="t4-nose" d="M100 1 L94 13 L106 13 Z"\/>/);
-  assert.doesNotMatch(nose, /<text x="100" y="25" text-anchor="middle" class="t4-nose"/);
-  assert.match(nose, />NE<\/text>/);
-  const adf = instrumentSvg(2, true);
-  assert.match(adf, /rotate\(90 100 100\)/);
-  assert.match(adf, /class="t4-adf-needle"/);
-  for (const svg of [north, nose, adf]) {
-    assert.equal((svg.match(/class="t4-guide"/g) ?? []).length, 4);
-    assert.doesNotMatch(svg, /\d+°/);
-  }
+test('RBI: 針の角度は相対方位、読みは相対方位÷10(例題は 9)', () => {
+  for (let i = 0; i < 8; i++) assert.equal(rbiNeedleDeg(i), i * 45);
+  assert.equal(rbiReading(2), '9');
+  assert.equal(rbiReading(0), '0');
+  assert.equal(rbiReading(1), '4.5');
+  assert.equal(rbiReading(6), '27');
 });
 
-test('コンパスの針は両流儀の全8方位で中心を通り、先端と尾端が点対称', () => {
-  for (const mode of ['northUp', 'noseUp']) for (let i = 0; i < 8; i++) {
-    const { tip, tail, right, left, center, pointingHalf, oppositeHalf } = compassNeedleVertices(i, mode);
-    assert.deepEqual(center, { x: 100, y: 100 });
-    for (const [a, b] of [[tip, tail], [right, left]]) {
-      assert.ok(Math.abs(a.x + b.x - 200) < 1e-9);
-      assert.ok(Math.abs(a.y + b.y - 200) < 1e-9);
-    }
-    assert.deepEqual(pointingHalf[2], center);
-    assert.deepEqual(oppositeHalf[2], center);
-    assert.ok(Math.abs(Math.hypot(tip.x - 100, tip.y - 100) - 62) < 1e-9);
-  }
+test('RBI の絵: 0 が上に固定の文字盤、数字は 0・3・…・33、目盛りは10°ごと(30°ごとに長く)、青い針が相対方位', () => {
+  const svg = rbiSvg(2);
+  const numbers = [...svg.matchAll(/<text[^>]*class="t4-rbi-number"[^>]*>(\d+)<\/text>/g)].map(m => m[1]);
+  assert.deepEqual(numbers, ['0', '3', '6', '9', '12', '15', '18', '21', '24', '27', '30', '33']);
+  assert.equal((svg.match(/class="t4-rbi-tick"/g) ?? []).length, 36 - 12);
+  assert.equal((svg.match(/class="t4-rbi-tick is-long"/g) ?? []).length, 12);
+  assert.match(svg, /<g class="t4-rbi-needle" transform="rotate\(90 100 100\)">/);
+  assert.match(svg, /aria-label="RBI"/);
+  // 文字盤は回らない(針の角度が変わっても数字の位置は同じ)
+  const positions = s => [...s.matchAll(/<text x="([^"]+)" y="([^"]+)"[^>]*class="t4-rbi-number"/g)].map(m => `${m[1]},${m[2]}`);
+  assert.deepEqual(positions(rbiSvg(5)), positions(svg));
 });
 
 test('飛行機SVGの機首は上が0度で、8方位に45度刻みで回る', () => {
@@ -140,21 +116,64 @@ test('練習は回答→解説→次問を3回繰り返して終了し、やり�
   assert.notDeepEqual(afterExample.problem, createT4Example().problem);
 });
 
-test('導き方は流儀ごとに機首の読み方を変え、塔と自機の正解は共通', () => {
-  const nose = explainT4Solution({ headingIndex: 1, relativeIndex: 2 }, 'noseUp');
-  assert.equal(nose.length, 3);
-  assert.match(nose[0], /北を指す針.*左上.*機首.*NE/);
-  assert.match(nose[1], /ADF.*右.*塔.*SE/);
-  assert.match(nose[2], /NWのマス.*NE/);
-  const north = explainT4Solution({ headingIndex: 1, relativeIndex: 2 }, 'northUp');
-  assert.match(north[0], /コンパスの針の先が機首.*NE/);
-  assert.match(north[1], /ADF.*右.*塔.*SE/);
-  assert.match(north[2], /NWのマス.*NE/);
-  for (const line of [...nose, ...north]) assert.doesNotMatch(line, /\d+°/);
+test('解説は GYRO と RBI の読み方で書く(例題の文)', () => {
+  assert.deepEqual(explainT4Solution({ headingIndex: 1, relativeIndex: 2 }), [
+    '1. GYRO の▲の位置が機首 → 機首は NE',
+    '2. RBI の針は 9(機首の右)→ NDB は NE の右90° = SE',
+    '3. 自機は NDB の反対の NW のマス。向きは機首のまま NE',
+  ]);
 });
 
-test('T4 の既定値は承認済みの数値', () => {
-  assert.deepEqual(P, { durationSec: 180, answerFeedbackMs: 300, compassMode: 'noseUp' });
+test('解説: RBI の8方向の言い方と、NDB と自機のマスは正解の計算と一致する', () => {
+  const where = ['機首の方向', '機首の右前', '機首の右', '機首の右後ろ', '機首の真後ろ', '機首の左後ろ', '機首の左', '機首の左前'];
+  const turn = ['正面', '右45°', '右90°', '右135°', '真後ろ', '左135°', '左90°', '左45°'];
+  for (let h = 0; h < 8; h++) for (let r = 0; r < 8; r++) {
+    const lines = explainT4Solution({ headingIndex: h, relativeIndex: r });
+    const { towerDirection, position, heading } = solutionFor(h, r);
+    assert.equal(lines[0], `1. GYRO の▲の位置が機首 → 機首は ${heading}`);
+    assert.equal(lines[1], `2. RBI の針は ${rbiReading(r)}(${where[r]})→ NDB は ${heading} の${turn[r]} = ${DIRECTIONS[towerDirection].key}`);
+    assert.equal(lines[2], `3. 自機は NDB の反対の ${position} のマス。向きは機首のまま ${heading}`);
+    for (const line of lines) assert.doesNotMatch(line, /塔|ADF|コンパス/);
+  }
+});
+
+test('T4 の既定値は承認済みの数値(compassMode は廃止)', () => {
+  assert.deepEqual(P, { durationSec: 180, answerFeedbackMs: 300 });
+});
+
+test('compassMode がなくなっても正解の計算は変わらない(古い設定が残っていても同じ)', () => {
+  const expected = [];
+  for (let h = 0; h < 8; h++) for (let r = 0; r < 8; r++) {
+    const t = (h + r) % 8;
+    expected.push({ towerDirection: t, position: DIRECTIONS[(t + 4) % 8].key, heading: DIRECTIONS[h].key });
+  }
+  const got = [];
+  for (let h = 0; h < 8; h++) for (let r = 0; r < 8; r++) got.push(solutionFor(h, r));
+  assert.deepEqual(got, expected);
+  assert.equal(solutionFor.length, 2);
+  assert.equal(explainT4Solution({ headingIndex: 1, relativeIndex: 2 }, 'northUp')[0], explainT4Solution({ headingIndex: 1, relativeIndex: 2 })[0]);
+});
+
+test('画面の文言: 計器は GYRO と RBI、中央は NDB(「塔」は使わない)', () => {
+  const nodes = new Map();
+  const make = () => ({ textContent: '', innerHTML: '', className: '', dataset: {}, classList: { add() {}, toggle() {}, remove() {} },
+    append() {}, setAttribute() {}, addEventListener() {}, focus() {} });
+  const root = { innerHTML: '', querySelector(sel) { if (!nodes.has(sel)) nodes.set(sel, make()); return nodes.get(sel); }, querySelectorAll() { return []; } };
+  const created = [];
+  const previous = globalThis.document;
+  globalThis.document = { createElement: () => { const n = make(); created.push(n); return n; }, addEventListener() {}, removeEventListener() {} };
+  try {
+    const cleanup = mount(root, { settings: { t4: P, common: DEFAULTS.common }, store: null, navigate() {} });
+    const html = root.innerHTML + nodes.get('[data-ref="exampleSteps"]').textContent + created.map(n => n.textContent).join('');
+    assert.match(html, /<figcaption>GYRO<\/figcaption>/);
+    assert.match(html, /<figcaption>RBI<\/figcaption>/);
+    assert.ok(html.includes('自機の位置(中央が NDB)'), '解答欄の見出し');
+    assert.ok(created.some(n => n.textContent === 'NDB'), '解答欄の中央は NDB');
+    assert.doesNotMatch(html, /塔|コンパス|ADF/);
+    cleanup();
+  } finally {
+    globalThis.document = previous;
+  }
 });
 
 test('方位は N から時計回りの8方向', () => {
@@ -209,7 +228,7 @@ test('マス・向きは選び直せ、両方がそろうまで決定できな�
   assert.equal(selectT4Heading(complete, 'SW').heading, 'SW');
 });
 
-test('中央の塔や不明な方位は選択できない', () => {
+test('中央の NDB や不明な方位は選択できない', () => {
   assert.throws(() => selectT4Position(createT4Selection(), 'CENTER'));
   assert.throws(() => selectT4Heading(createT4Selection(), 'north'));
 });
@@ -240,7 +259,7 @@ test('記録はSPEC §4の形で、その回の設定を複製する', () => {
   assert.deepEqual(record, {
     id: `${date}-t4`, test: 't4', date, score: 2,
     detail: { answered: 4, correct: 2, positionOnlyCorrect: 1, headingOnlyCorrect: 1 },
-    settings: { durationSec: 180, answerFeedbackMs: 300, compassMode: 'noseUp' },
+    settings: { durationSec: 180, answerFeedbackMs: 300 },
   });
   assert.notEqual(record.settings, P);
 });

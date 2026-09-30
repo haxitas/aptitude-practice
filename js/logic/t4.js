@@ -1,4 +1,6 @@
-// テスト4 計器の読み取り: 問題生成、方位計算、選択状態、採点。DOMには触れない。
+// テスト5 計器の読み取り(内部 id t4): 問題生成、方位計算、選択状態、採点。DOMには触れない。
+// 2026-09-30 本番に合わせて変更: 左の計器は GYRO(文字盤が回る方向指示器)、右は RBI。電波局は NDB と呼ぶ。
+// 問題の作り方・正解の計算・採点は変えていない。
 import { correctFeedback } from '../core/feedback.js';
 
 export const DIRECTIONS = Object.freeze([
@@ -42,29 +44,33 @@ export function generateT4Problem(rng, previous = null) {
   return { ...candidates[Math.floor(rng() * candidates.length)] };
 }
 
-export function compassNeedleAngle(headingIndex, compassMode) {
-  if (!Number.isInteger(headingIndex) || headingIndex < 0 || headingIndex >= DIRECTIONS.length) {
-    throw new RangeError('機首の方位は0以上8未満の整数で指定してください');
+function checkIndex(index, name) {
+  if (!Number.isInteger(index) || index < 0 || index >= DIRECTIONS.length) {
+    throw new RangeError(`${name}は0以上8未満の整数で指定してください`);
   }
-  if (compassMode === 'northUp') return headingIndex * 45;
-  if (compassMode === 'noseUp') return (360 - headingIndex * 45) % 360;
-  throw new RangeError(`不明な計器の流儀です: ${compassMode}`);
 }
 
-export function compassNeedleVertices(headingIndex, compassMode) {
-  const radians = compassNeedleAngle(headingIndex, compassMode) * Math.PI / 180;
-  const rotate = (x, y) => ({
-    x: 100 + (x - 100) * Math.cos(radians) - (y - 100) * Math.sin(radians),
-    y: 100 + (x - 100) * Math.sin(radians) + (y - 100) * Math.cos(radians),
-  });
-  const center = { x: 100, y: 100 };
-  const tip = rotate(100, 38);
-  const tail = rotate(100, 162);
-  const right = rotate(106, 100);
-  const left = rotate(94, 100);
-  return { tip, tail, right, left, center,
-    pointingHalf: [tip, right, center, left],
-    oppositeHalf: [tail, left, center, right] };
+// GYRO: 文字盤を −(機首の方位)だけ回す。上の固定の▲の位置に来た方位が機首
+export function gyroCardRotationDeg(headingIndex) {
+  checkIndex(headingIndex, '機首の方位');
+  return 0 - headingIndex * 45; // 機首 N で -0 にしない
+}
+
+// 文字盤を rotationDeg 回したとき、上の▲の位置に来る方位
+export function gyroDirectionAtTop(rotationDeg) {
+  const deg = ((-rotationDeg % 360) + 360) % 360;
+  return DIRECTIONS[Math.round(deg / 45) % 8].key;
+}
+
+// RBI: 0 を上に固定した文字盤で、針が NDB の相対方位を指す
+export function rbiNeedleDeg(relativeIndex) {
+  checkIndex(relativeIndex, '相対方位');
+  return relativeIndex * 45;
+}
+
+// RBI の読み(文字盤の数字は ×10°。例: 90° → 9)
+export function rbiReading(relativeIndex) {
+  return String(rbiNeedleDeg(relativeIndex) / 10);
 }
 
 export function planeRotationDeg(heading) {
@@ -73,25 +79,23 @@ export function planeRotationDeg(heading) {
   return index * 45;
 }
 
-export function createT4Example(compassMode = 'noseUp') {
-  compassNeedleAngle(0, compassMode);
+export function createT4Example() {
   const problem = { headingIndex: 1, relativeIndex: 2 };
   const { position, heading } = solutionFor(problem.headingIndex, problem.relativeIndex);
   return { problem, selection: { position, heading } };
 }
 
-export function explainT4Solution(problem, compassMode) {
+const RBI_WHERE = Object.freeze(['機首の方向', '機首の右前', '機首の右', '機首の右後ろ', '機首の真後ろ', '機首の左後ろ', '機首の左', '機首の左前']);
+const RBI_TURN = Object.freeze(['正面', '右45°', '右90°', '右135°', '真後ろ', '左135°', '左90°', '左45°']);
+
+// 解説(例題・練習・判定): GYRO と RBI の読み方で書く
+export function explainT4Solution(problem) {
   const { towerDirection, position, heading } = solutionFor(problem.headingIndex, problem.relativeIndex);
-  const northAngle = compassNeedleAngle(problem.headingIndex, compassMode);
-  const northPosition = ['上', '右上', '右', '右下', '下', '左下', '左', '左上'][northAngle / 45];
-  const compassStep = compassMode === 'noseUp'
-    ? `1. 北を指す針が${northPosition} → 機首は${heading}。`
-    : `1. コンパスの針の先が機首 → 機首は${heading}。`;
-  const adfPosition = ['上', '右上', '右', '右下', '下', '左下', '左', '左上'][problem.relativeIndex];
+  const r = problem.relativeIndex;
   return [
-    compassStep,
-    `2. ADFの針は機首の${adfPosition} → 塔は${DIRECTIONS[towerDirection].key}。`,
-    `3. 塔から見た自機は反対の${position}のマス。向きは機首のまま${heading}。`,
+    `1. GYRO の▲の位置が機首 → 機首は ${heading}`,
+    `2. RBI の針は ${rbiReading(r)}(${RBI_WHERE[r]})→ NDB は ${heading} の${RBI_TURN[r]} = ${DIRECTIONS[towerDirection].key}`,
+    `3. 自機は NDB の反対の ${position} のマス。向きは機首のまま ${heading}`,
   ];
 }
 

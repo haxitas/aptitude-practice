@@ -128,7 +128,7 @@ export const DEFAULTS = Object.freeze({
   t4: Object.freeze({
     durationSec: 180,
     answerFeedbackMs: 300,
-    compassMode: 'noseUp',
+    // compassMode(北が上/機首が上の切り替え)は廃止。左の計器は GYRO だけ(2026-09-30 本番に合わせて変更)
   }),
   t5: Object.freeze({
     durationSec: 180,

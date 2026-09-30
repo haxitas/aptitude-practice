@@ -1,10 +1,11 @@
 // このファイルは単体テストからも読み込むため、読み込んだだけで DOM に触れないこと。
-// テスト4 計器の読み取り: SVG描画、3段階の解答操作、時間管理、保存。
+// テスト5 計器の読み取り(内部 id t4): SVG描画、3段階の解答操作、時間管理、保存。
+// 2026-09-30 本番に合わせて変更: 左は GYRO、右は RBI。中央の電波局は NDB。
 
 import {
   DIRECTIONS, generateT4Problem, createT4Selection, createT4Example,
   selectT4Position, selectT4Heading, canSubmitT4,
-  judgeT4, compassNeedleVertices, planeRotationDeg,
+  judgeT4, gyroCardRotationDeg, rbiNeedleDeg, planeRotationDeg,
   createT4Practice, answerT4Practice, advanceT4Practice, explainT4Solution,
   createT4Tally, recordT4Answer, buildT4Record, t4Feedback,
 } from '../logic/t4.js';
@@ -21,34 +22,49 @@ export function planeSvg(heading) {
   </svg>`;
 }
 
-export function instrumentSvg(index, relative = false, compassMode = 'noseUp') {
-  const angle = index * 45;
-  const labels = !relative ? DIRECTIONS.map((d, i) => {
-    const a = i * 45 * Math.PI / 180;
-    const x = 100 + Math.sin(a) * 75;
-    const y = 100 - Math.cos(a) * 75;
-    return `<text x="${x}" y="${y}" text-anchor="middle" dominant-baseline="central">${d.key}</text>`;
-  }).join('') : '';
-  const guide = [0, 45, 90, 135].map(deg => `<line class="t4-guide" x1="100" y1="12" x2="100" y2="188" transform="rotate(${deg} 100 100)"/>`).join('');
-  const points = polygon => polygon.map(p => `${p.x},${p.y}`).join(' ');
-  const needle = relative
-    ? `<g transform="rotate(${angle} 100 100)" class="t4-adf-needle"><line x1="100" y1="118" x2="100" y2="42"/><path d="M100 28 L91 48 L109 48 Z"/></g>`
-    : (() => {
-      const shape = compassNeedleVertices(index, compassMode);
-      return `<polygon class="t4-compass-pale" points="${points(shape.oppositeHalf)}"/>
-        <polygon class="t4-compass-red" points="${points(shape.pointingHalf)}"/>`;
-    })();
-  return `<svg class="t4-instrument" viewBox="0 0 200 200" role="img" aria-label="${relative ? '相対方位計' : 'コンパス'}">
+const polar = (deg, r) => {
+  const a = deg * Math.PI / 180;
+  return { x: +(100 + Math.sin(a) * r).toFixed(2), y: +(100 - Math.cos(a) * r).toFixed(2) };
+};
+const tick = (deg, outer, inner, className) => {
+  const a = polar(deg, outer);
+  const b = polar(deg, inner);
+  return `<line class="${className}" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"/>`;
+};
+
+// GYRO: 文字盤(N・E・S・W と45°ごとの目盛り)が −機首 だけ回る。上の▲と中央の飛行機マークは固定
+export function gyroSvg(headingIndex) {
+  const ticks = Array.from({ length: 8 }, (_, i) => tick(i * 45, 90, 74, 't4-gyro-tick')).join('');
+  const letters = ['N', 'E', 'S', 'W'].map((key, i) => {
+    const p = polar(i * 90, 60);
+    return `<text x="${p.x}" y="${p.y}" text-anchor="middle" dominant-baseline="central" transform="rotate(${i * 90} ${p.x} ${p.y})">${key}</text>`;
+  }).join('');
+  return `<svg class="t4-instrument" viewBox="0 0 200 200" role="img" aria-label="GYRO">
     <circle cx="100" cy="100" r="92" class="t4-dial"/>
-    ${guide}
-    ${labels}
-    ${relative ? '<text x="100" y="25" text-anchor="middle" class="t4-nose">▲</text>' : compassMode === 'noseUp' ? '<path class="t4-nose" d="M100 1 L94 13 L106 13 Z"/>' : ''}
-    ${needle}
+    <g class="t4-gyro-card" transform="rotate(${gyroCardRotationDeg(headingIndex)} 100 100)">${ticks}${letters}</g>
+    <path class="t4-lubber" d="M100 12 L92 0 L108 0 Z"/>
+    <path class="t4-gyro-plane" d="M100 78 L104 94 L126 104 L126 109 L104 104 L103 118 L110 123 L110 127 L100 124 L90 127 L90 123 L97 118 L96 104 L74 109 L74 104 L96 94 Z"/>
+  </svg>`;
+}
+
+// RBI: 0 を上に固定した文字盤(数字は ×10°、目盛りは10°ごとで30°ごとに長い)。青い針が NDB の相対方位を指す
+export function rbiSvg(relativeIndex) {
+  const ticks = Array.from({ length: 36 }, (_, i) => (i % 3 === 0
+    ? tick(i * 10, 90, 76, 't4-rbi-tick is-long')
+    : tick(i * 10, 90, 83, 't4-rbi-tick'))).join('');
+  const numbers = Array.from({ length: 12 }, (_, i) => {
+    const p = polar(i * 30, 64);
+    return `<text x="${p.x}" y="${p.y}" text-anchor="middle" dominant-baseline="central" class="t4-rbi-number">${i * 3}</text>`;
+  }).join('');
+  return `<svg class="t4-instrument" viewBox="0 0 200 200" role="img" aria-label="RBI">
+    <circle cx="100" cy="100" r="92" class="t4-dial"/>
+    ${ticks}${numbers}
+    <g class="t4-rbi-needle" transform="rotate(${rbiNeedleDeg(relativeIndex)} 100 100)"><line x1="100" y1="128" x2="100" y2="44"/><path d="M100 30 L91 50 L109 50 Z"/></g>
     <circle cx="100" cy="100" r="6" class="t4-hub"/>
   </svg>`;
 }
 
-// 即時判定の不正解で出す小さな3×3のイラスト。中央が塔で、正しいマスに正しい向きの飛行機を描く
+// 即時判定の不正解で出す小さな3×3のイラスト。中央が NDB で、正しいマスに正しい向きの飛行機を描く
 function solutionMiniMap(solution) {
   const map = document.createElement('div');
   map.className = 't4-mini-map';
@@ -60,7 +76,7 @@ function solutionMiniMap(solution) {
       cell.className = 't4-mini-cell';
       if (row === 1 && col === 1) {
         cell.classList.add('is-tower');
-        cell.textContent = '塔';
+        cell.textContent = 'NDB';
       } else if (DIRECTIONS.find(d => d.row === row && d.col === col).key === solution.position) {
         cell.classList.add('is-answer');
         cell.innerHTML = planeSvg(solution.heading);
@@ -108,7 +124,7 @@ export function mount(root, ctx) {
     const isPractice = mode === 'practice';
     const explaining = isPractice && practice.phase === 'explanation';
     const rng = createRng(randomSeed());
-    const sample = createT4Example(params.compassMode);
+    const sample = createT4Example();
     let problem = example ? sample.problem : isPractice ? practice.problem : generateT4Problem(rng);
     let selection = createT4Selection();
     let tally = createT4Tally();
@@ -124,11 +140,11 @@ export function mount(root, ctx) {
           <span class="t4-explanation" data-ref="exampleSteps"></span><br>
           本番はマス→向き→決定。制限時間${formatDuration(params.durationSec)}は「始める」から数えます。</p>` : ''}
         <div class="t4-instruments">
-          <figure><figcaption>コンパス</figcaption><div data-ref="compass"></div></figure>
-          <figure><figcaption>ADF</figcaption><div data-ref="adf"></div></figure>
+          <figure><figcaption>GYRO</figcaption><div data-ref="gyro"></div></figure>
+          <figure><figcaption>RBI</figcaption><div data-ref="rbi"></div></figure>
         </div>
         <div class="t4-answer">
-          <div class="t4-answer-field"><p>自機の位置(中央が塔)</p><div class="t4-map" data-ref="map" aria-label="自機の位置"></div></div>
+          <div class="t4-answer-field"><p>自機の位置(中央が NDB)</p><div class="t4-map" data-ref="map" aria-label="自機の位置"></div></div>
           <div class="t4-answer-field"><p>自機の機首の向き</p><div class="t4-headings" data-ref="headings" aria-label="機首の向き"></div></div>
           ${!example && !explaining ? '<button class="btn btn-primary t4-submit" type="button" data-ref="submit" disabled>決定</button>' : ''}
           ${mode === 'test' ? feedbackSlotHtml('feedback', 't4-feedback') : ''}
@@ -142,14 +158,14 @@ export function mount(root, ctx) {
     // テスト4の判定は、イラストを読む時間が要るため次の決定まで出し続ける
     const feedback = mode === 'test'
       ? createFeedbackSlot($('feedback'), { durationMs: common.feedbackMs, sticky: true }) : null;
-    if (example) $('exampleSteps').textContent = explainT4Solution(sample.problem, params.compassMode).join('\n');
+    if (example) $('exampleSteps').textContent = explainT4Solution(sample.problem).join('\n');
 
     for (let row = 0; row < 3; row++) {
       for (let col = 0; col < 3; col++) {
         if (row === 1 && col === 1) {
           const tower = document.createElement('div');
           tower.className = 't4-tower';
-          tower.textContent = '塔';
+          tower.textContent = 'NDB';
           $('map').append(tower);
           continue;
         }
@@ -191,8 +207,8 @@ export function mount(root, ctx) {
     }
 
     function drawProblem() {
-      $('compass').innerHTML = instrumentSvg(problem.headingIndex, false, params.compassMode);
-      $('adf').innerHTML = instrumentSvg(problem.relativeIndex, true);
+      $('gyro').innerHTML = gyroSvg(problem.headingIndex);
+      $('rbi').innerHTML = rbiSvg(problem.relativeIndex);
       selection = example ? { ...sample.selection } : explaining
         ? { position: practice.feedback.solution.position, heading: practice.feedback.solution.heading }
         : createT4Selection();
@@ -254,7 +270,7 @@ export function mount(root, ctx) {
         $('practiceFeedback').textContent = [
           `あなたの答え: ${feedback.selection.position}のマス / 向き ${feedback.selection.heading}　${feedback.correct ? '○' : '×'}`,
           `正解: ${feedback.solution.position}のマス / 向き ${feedback.solution.heading}`,
-          ...explainT4Solution(practice.problem, params.compassMode),
+          ...explainT4Solution(practice.problem),
         ].join('\n');
         $('next').addEventListener('click', () => {
           const next = advanceT4Practice(practice, practiceRng);

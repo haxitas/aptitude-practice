@@ -168,23 +168,16 @@ test('T6の障害物色と縁色は各4種類だけ保存し、おすすめ3組�
   assert.ok(legacy.warnings.includes('t6.obstacleColor'));
 });
 
-test('T4の計器の流儀はnorthUp/noseUpだけを保存する', () => {
-  for (const mode of ['northUp', 'noseUp']) {
-    const result = validateTestSettings('t4', raw('t4', { compassMode: mode }), DEFAULTS.t4);
-    assert.equal(result.ok, true, JSON.stringify(result));
-    assert.equal(result.value.compassMode, mode);
-  }
-  const bad = validateTestSettings('t4', raw('t4', { compassMode: 'southUp' }), DEFAULTS.t4);
-  assert.equal(bad.ok, false);
-  assert.ok(bad.errors.compassMode);
-});
-
-test('T4の不要な基準角・前問表示は設定項目にも保存値にも入らない', () => {
+test('T4の計器の流儀(compassMode)・基準角・前問表示は設定項目にも保存値にも入らない(2026-09-30 compassMode 廃止)', () => {
   const fields = SETTING_FIELDS.t4.map(field => field.key);
-  assert.deepEqual(fields, ['durationSec', 'compassMode']);
-  const result = validateTestSettings('t4', raw('t4', { planeGlyphBaseDeg: 90, showPreviousAnswer: 'true' }), DEFAULTS.t4);
+  assert.deepEqual(fields, ['durationSec']);
+  const result = validateTestSettings('t4', raw('t4', { compassMode: 'northUp', planeGlyphBaseDeg: 90, showPreviousAnswer: 'true' }), DEFAULTS.t4);
   assert.equal(result.ok, true, JSON.stringify(result));
-  assert.deepEqual(result.value, { durationSec: DEFAULTS.t4.durationSec, compassMode: DEFAULTS.t4.compassMode });
+  assert.deepEqual(result.value, { durationSec: DEFAULTS.t4.durationSec });
+  // 以前に保存した compassMode は読み込みで無視する(警告も出さない)
+  const legacy = resolveSettings({ t4: { compassMode: 'northUp', durationSec: 120 } });
+  assert.deepEqual(legacy.settings.t4, { durationSec: 120, answerFeedbackMs: 300 });
+  assert.deepEqual(legacy.warnings, []);
 });
 
 // ---- 共通の設定と入力の刻み(2026-09-30 本番に合わせて変更) ----
