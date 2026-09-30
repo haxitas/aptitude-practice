@@ -435,13 +435,15 @@ h1 { font-size: 1.6rem; margin: 0 0 16px; }
 .t4-dial { fill: var(--surface); stroke: var(--border); stroke-width: 3; }
 .t4-instrument text { fill: currentColor; font-size: 12px; font-weight: 700; }
 /* GYRO と RBI(2026-09-30 本番に合わせて変更) */
-.t4-instrument .t4-gyro-card text { font-size: 20px; }
 .t4-gyro-tick, .t4-rbi-tick { stroke: currentColor; stroke-width: 2; }
 .t4-rbi-tick { stroke-width: 1.2; opacity: 0.75; }
 .t4-rbi-tick.is-long { stroke-width: 2.4; opacity: 1; }
 .t4-instrument .t4-rbi-number { font-size: 13px; }
 .t4-lubber { fill: #e08a00; }
-.t4-gyro-plane { fill: #e08a00; }
+.t4-gyro-plane { fill: var(--border); opacity: 0.8; }
+/* GYRO の針: 赤が北、白が南(2026-10-01 ユーザーの本番の記憶で確定) */
+.t4-gyro-north { fill: #d33232; stroke: #972222; stroke-width: 1; }
+.t4-gyro-south { fill: #e8eaee; stroke: #777e89; stroke-width: 1; }
 .t4-rbi-needle line { stroke: #1969ba; stroke-width: 6; stroke-linecap: round; }
 .t4-rbi-needle path { fill: #1969ba; }
 .t4-hub { fill: #5e6774; }

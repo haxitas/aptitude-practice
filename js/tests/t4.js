@@ -5,7 +5,7 @@
 import {
   DIRECTIONS, generateT4Problem, headingIndexes, createT4Selection, createT4Example,
   selectT4Position, selectT4Heading, canSubmitT4,
-  judgeT4, gyroCardRotationDeg, rbiNeedleDeg, planeRotationDeg,
+  judgeT4, gyroNorthNeedleDeg, rbiNeedleDeg, planeRotationDeg,
   createT4Practice, answerT4Practice, advanceT4Practice, explainT4Solution,
   createT4Tally, recordT4Answer, buildT4Record, t4Feedback,
 } from '../logic/t4.js';
@@ -32,18 +32,18 @@ const tick = (deg, outer, inner, className) => {
   return `<line class="${className}" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"/>`;
 };
 
-// GYRO: 文字盤(N・E・S・W と45°ごとの目盛り)が −機首 だけ回る。上の▲と中央の飛行機マークは固定
+// GYRO: 文字盤(45°ごとの目盛り)は固定で上が機首。上に機首の印▲、中央に上向きの飛行機。
+// 赤い針(北)と白い針(南)が、機首から見た北の方向を指す(2026-10-01 ユーザーの本番の記憶で確定。
+// 以前の「機首が上」の羅針盤の針の形を元にした)
 export function gyroSvg(headingIndex) {
-  const ticks = Array.from({ length: 8 }, (_, i) => tick(i * 45, 90, 74, 't4-gyro-tick')).join('');
-  const letters = ['N', 'E', 'S', 'W'].map((key, i) => {
-    const p = polar(i * 90, 60);
-    return `<text x="${p.x}" y="${p.y}" text-anchor="middle" dominant-baseline="central" transform="rotate(${i * 90} ${p.x} ${p.y})">${key}</text>`;
-  }).join('');
+  const ticks = Array.from({ length: 8 }, (_, i) => tick(i * 45, 90, 76, 't4-gyro-tick')).join('');
   return `<svg class="t4-instrument" viewBox="0 0 200 200" role="img" aria-label="GYRO">
     <circle cx="100" cy="100" r="92" class="t4-dial"/>
-    <g class="t4-gyro-card" transform="rotate(${gyroCardRotationDeg(headingIndex)} 100 100)">${ticks}${letters}</g>
+    ${ticks}
     <path class="t4-lubber" d="M100 12 L92 0 L108 0 Z"/>
-    <path class="t4-gyro-plane" d="M100 78 L104 94 L126 104 L126 109 L104 104 L103 118 L110 123 L110 127 L100 124 L90 127 L90 123 L97 118 L96 104 L74 109 L74 104 L96 94 Z"/>
+    <path class="t4-gyro-plane" d="M100 58 L106 88 L140 104 L140 111 L106 103 L104 128 L116 136 L116 142 L100 137 L84 142 L84 136 L96 128 L94 103 L60 111 L60 104 L94 88 Z"/>
+    <g class="t4-gyro-needle" transform="rotate(${gyroNorthNeedleDeg(headingIndex)} 100 100)"><polygon class="t4-gyro-south" points="100,164 93,100 100,100 107,100"/><polygon class="t4-gyro-north" points="100,36 107,100 100,100 93,100"/></g>
+    <circle cx="100" cy="100" r="6" class="t4-hub"/>
   </svg>`;
 }
 

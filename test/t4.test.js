@@ -7,7 +7,7 @@ import {
   createT4Example,
   createT4Selection, selectT4Position, selectT4Heading, canSubmitT4,
   judgeT4, createT4Tally, recordT4Answer, summarizeT4, buildT4Record,
-  gyroCardRotationDeg, gyroDirectionAtTop, rbiNeedleDeg, rbiReading, planeRotationDeg,
+  gyroNorthNeedleDeg, headingFromGyroNeedle, rbiNeedleDeg, rbiReading, planeRotationDeg,
   createT4Practice, answerT4Practice, advanceT4Practice, explainT4Solution,
 } from '../js/logic/t4.js';
 import { findTest, formatDetail } from '../js/core/catalog.js';
@@ -25,30 +25,47 @@ test('例題は機首NE・RBI 9(右90°)・自機NWのマス・向きNE', () => 
   assert.equal(judgeT4(example.problem, example.selection).correct, true);
 });
 
-test('GYRO: 文字盤は −(機首の方位)だけ回り、上の▲の位置に来る方位が機首になる(8方位すべて)', () => {
-  for (let i = 0; i < 8; i++) {
-    assert.equal(gyroCardRotationDeg(i), 0 - i * 45);
-    assert.equal(gyroDirectionAtTop(gyroCardRotationDeg(i)), DIRECTIONS[i].key);
-  }
-  // 機首 NE なら、N と E の間(NE)の目盛りが▲に来る
-  assert.equal(gyroDirectionAtTop(-45), 'NE');
-  assert.throws(() => gyroCardRotationDeg(8));
+// 2026-10-01 ユーザーの本番の記憶で確定: GYRO は文字盤が固定で上が機首。赤い針が北を指す
+test('GYRO: 赤い針は北を指す。機首 N なら上、E なら左、S なら下、W なら右(機首から見て反時計回りに機首の方位だけ)', () => {
+  assert.equal(gyroNorthNeedleDeg(0), 0, 'N: 上');
+  assert.equal(gyroNorthNeedleDeg(2), 270, 'E: 左');
+  assert.equal(gyroNorthNeedleDeg(4), 180, 'S: 下');
+  assert.equal(gyroNorthNeedleDeg(6), 90, 'W: 右');
+  assert.equal(gyroNorthNeedleDeg(1), 315, 'NE: 左上');
+  for (let i = 0; i < 8; i++) assert.equal(gyroNorthNeedleDeg(i), (360 - i * 45) % 360);
+  assert.throws(() => gyroNorthNeedleDeg(8));
 });
 
-test('GYRO の絵: 回る文字盤に N・E・S・W の4文字と45°ごとの目盛り8本、固定の▲と中央の飛行機マーク', () => {
+test('GYRO: 赤い針の向きから機首の向きを逆算でき、正解の向きと一致する(正解の計算は変わらない)', () => {
+  for (let h = 0; h < 8; h++) {
+    assert.equal(headingFromGyroNeedle(gyroNorthNeedleDeg(h)), DIRECTIONS[h].key);
+    for (let r = 0; r < 8; r++) assert.equal(headingFromGyroNeedle(gyroNorthNeedleDeg(h)), solutionFor(h, r).heading);
+  }
+  assert.equal(headingFromGyroNeedle(270), 'E', '針が左なら機首は E');
+  assert.equal(headingFromGyroNeedle(90), 'W', '針が右なら機首は W');
+});
+
+test('GYRO の絵: 文字盤(45°ごとの目盛り8本)は固定で回さない。上に機首の印、中央に上向きの飛行機。赤い針が北を指す', () => {
+  const fixed = svg => svg.replace(/<g class="t4-gyro-needle"[\s\S]*?<\/g>/, '');
   for (let i = 0; i < 8; i++) {
     const svg = gyroSvg(i);
-    const card = svg.match(/<g class="t4-gyro-card" transform="rotate\(([-\d.]+) 100 100\)">([\s\S]*?)<\/g>/);
-    assert.ok(card, svg);
-    assert.equal(Number(card[1]), 0 - i * 45);
-    const letters = [...card[2].matchAll(/>([^<>]+)<\/text>/g)].map(m => m[1]);
-    assert.deepEqual(letters, ['N', 'E', 'S', 'W']);
-    assert.equal((card[2].match(/class="t4-gyro-tick"/g) ?? []).length, 8);
-    assert.doesNotMatch(svg, /\d+°|>\d+</, '細かい数字は入れない');
-    // ▲と飛行機マークは回る文字盤の外(固定)
-    const outside = svg.replace(card[0], '');
-    assert.match(outside, /class="t4-lubber"/);
-    assert.match(outside, /class="t4-gyro-plane"/);
+    assert.doesNotMatch(svg, /t4-gyro-card/, '回る文字盤はない');
+    const needle = svg.match(/<g class="t4-gyro-needle" transform="rotate\(([-\d.]+) 100 100\)">([\s\S]*?)<\/g>/);
+    assert.ok(needle, svg);
+    assert.equal(Number(needle[1]), gyroNorthNeedleDeg(i));
+    // 回す前の赤い半分は上(北)向き、白い半分は下
+    const red = needle[2].match(/class="t4-gyro-north" points="([^"]+)"/);
+    const pale = needle[2].match(/class="t4-gyro-south" points="([^"]+)"/);
+    assert.ok(red && pale, needle[2]);
+    const ys = pts => pts.split(' ').map(p => Number(p.split(',')[1]));
+    assert.ok(Math.min(...ys(red[1])) < 60 && Math.max(...ys(red[1])) <= 100, '赤は上半分');
+    assert.ok(Math.min(...ys(pale[1])) >= 100, '白は下半分');
+    // 目盛り・機首の印・飛行機は回る針の外で、機首の向きによらず同じ
+    assert.equal(fixed(svg), fixed(gyroSvg(0)));
+    assert.equal((svg.match(/class="t4-gyro-tick"/g) ?? []).length, 8);
+    assert.match(fixed(svg), /class="t4-lubber"/);
+    assert.match(fixed(svg), /class="t4-gyro-plane"/);
+    assert.doesNotMatch(svg, />[NESW]<\/text>/, '固定の文字盤に N・E・S・W は書かない(上が北に見えないように)');
     assert.match(svg, /aria-label="GYRO"/);
   }
 });
@@ -118,7 +135,7 @@ test('練習は回答→解説→次問を3回繰り返して終了し、やり�
 
 test('解説は GYRO と RBI の読み方で書く(例題の文)', () => {
   assert.deepEqual(explainT4Solution({ headingIndex: 1, relativeIndex: 2 }), [
-    '1. GYRO の▲の位置が機首 → 機首は NE',
+    '1. GYRO の赤い針が北 → 北は機首から見て左45° → 機首は NE',
     '2. RBI の針は 9(機首の右)→ NDB は NE の右90° = SE',
     '3. 自機は NDB の反対の NW のマス。向きは機首のまま NE',
   ]);
@@ -130,7 +147,7 @@ test('解説: RBI の8方向の言い方と、NDB と自機のマスは正解の
   for (let h = 0; h < 8; h++) for (let r = 0; r < 8; r++) {
     const lines = explainT4Solution({ headingIndex: h, relativeIndex: r });
     const { towerDirection, position, heading } = solutionFor(h, r);
-    assert.equal(lines[0], `1. GYRO の▲の位置が機首 → 機首は ${heading}`);
+    assert.equal(lines[0], `1. GYRO の赤い針が北 → 北は機首から見て${turn[gyroNorthNeedleDeg(h) / 45]} → 機首は ${heading}`);
     assert.equal(lines[1], `2. RBI の針は ${rbiReading(r)}(${where[r]})→ NDB は ${heading} の${turn[r]} = ${DIRECTIONS[towerDirection].key}`);
     assert.equal(lines[2], `3. 自機は NDB の反対の ${position} のマス。向きは機首のまま ${heading}`);
     for (const line of lines) assert.doesNotMatch(line, /塔|ADF|コンパス/);
@@ -186,7 +203,7 @@ test('機首の向きが4のとき: 練習問題も N・E・S・W だけ。例�
   assert.deepEqual(example.problem, { headingIndex: 2, relativeIndex: 2 });
   assert.deepEqual(example.selection, { position: 'N', heading: 'E' });
   assert.deepEqual(explainT4Solution(example.problem), [
-    '1. GYRO の▲の位置が機首 → 機首は E',
+    '1. GYRO の赤い針が北 → 北は機首から見て左90° → 機首は E',
     '2. RBI の針は 9(機首の右)→ NDB は E の右90° = S',
     '3. 自機は NDB の反対の N のマス。向きは機首のまま E',
   ]);

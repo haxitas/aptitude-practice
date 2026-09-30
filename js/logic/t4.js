@@ -1,5 +1,6 @@
 // テスト5 計器の読み取り(内部 id t4): 問題生成、方位計算、選択状態、採点。DOMには触れない。
-// 2026-09-30 本番に合わせて変更: 左の計器は GYRO(文字盤が回る方向指示器)、右は RBI。電波局は NDB と呼ぶ。
+// 2026-09-30 本番に合わせて変更: 左の計器は GYRO、右は RBI。電波局は NDB と呼ぶ。
+// 2026-10-01 ユーザーの本番の記憶で確定: GYRO は文字盤が固定で上が機首、赤い針が北を指す(回る文字盤と上の▲で読む形はやめた)。
 // 問題の作り方・正解の計算・採点は変えていない。
 import { correctFeedback } from '../core/feedback.js';
 
@@ -58,15 +59,16 @@ function checkIndex(index, name) {
   }
 }
 
-// GYRO: 文字盤を −(機首の方位)だけ回す。上の固定の▲の位置に来た方位が機首
-export function gyroCardRotationDeg(headingIndex) {
+// GYRO: 文字盤は固定で上が機首。赤い針は北を指すので、機首から見て反時計回りに機首の方位だけ回る
+// (機首 N なら上、E なら左、S なら下、W なら右)
+export function gyroNorthNeedleDeg(headingIndex) {
   checkIndex(headingIndex, '機首の方位');
-  return 0 - headingIndex * 45; // 機首 N で -0 にしない
+  return (360 - headingIndex * 45) % 360;
 }
 
-// 文字盤を rotationDeg 回したとき、上の▲の位置に来る方位
-export function gyroDirectionAtTop(rotationDeg) {
-  const deg = ((-rotationDeg % 360) + 360) % 360;
+// 赤い針の角度(上から時計回り)から機首の向きを逆算する。針が左(270°)なら機首は E
+export function headingFromGyroNeedle(needleDeg) {
+  const deg = ((-needleDeg % 360) + 360) % 360;
   return DIRECTIONS[Math.round(deg / 45) % 8].key;
 }
 
@@ -97,12 +99,12 @@ export function createT4Example(headingDirections = 8) {
 const RBI_WHERE = Object.freeze(['機首の方向', '機首の右前', '機首の右', '機首の右後ろ', '機首の真後ろ', '機首の左後ろ', '機首の左', '機首の左前']);
 const RBI_TURN = Object.freeze(['正面', '右45°', '右90°', '右135°', '真後ろ', '左135°', '左90°', '左45°']);
 
-// 解説(例題・練習・判定): GYRO と RBI の読み方で書く
+// 解説(例題・練習・判定): GYRO(赤い針が北 → 機首の向きを逆算)と RBI の読み方で書く
 export function explainT4Solution(problem) {
   const { towerDirection, position, heading } = solutionFor(problem.headingIndex, problem.relativeIndex);
   const r = problem.relativeIndex;
   return [
-    `1. GYRO の▲の位置が機首 → 機首は ${heading}`,
+    `1. GYRO の赤い針が北 → 北は機首から見て${RBI_TURN[gyroNorthNeedleDeg(problem.headingIndex) / 45]} → 機首は ${heading}`,
     `2. RBI の針は ${rbiReading(r)}(${RBI_WHERE[r]})→ NDB は ${heading} の${RBI_TURN[r]} = ${DIRECTIONS[towerDirection].key}`,
     `3. 自機は NDB の反対の ${position} のマス。向きは機首のまま ${heading}`,
   ];
