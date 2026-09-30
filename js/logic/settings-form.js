@@ -102,6 +102,7 @@ export const SETTING_FIELDS = Object.freeze({
     number('bladeOpen3Rate', '羽根の開口3つの確率', 0, 1, { step: 0.01, hint: '3つの比で選ぶ' }),
     number('centerOpenRadius', '羽根・扇形の中心の安全円の半径', 0, 0.9, { step: 0.01 }),
     number('barWidth', '回転する長方形の幅', 0.05, 1.5, { step: 0.01 }),
+    number('barLength', '回転する長方形の長さ', 0.1, 2, { step: 0.01, hint: 'トンネルの直径は2' }),
     number('bladeInitialAngularSpeedDegSec', '羽根の初期回転速度', 0, 720, { step: 1, unit: '°/s' }),
     number('bladeAngularAccelerationDegSec2', '羽根の回転加速度', 0, 100, { step: 0.01, unit: '°/s²' }),
     number('collisionPushMs', '衝突時の巻き戻し時間', 0, 5000, { integer: true, unit: 'ms' }),
@@ -115,6 +116,7 @@ export const SETTING_FIELDS = Object.freeze({
     number('holeRotationRate', '3穴が回転する確率', 0, 1, { step: 0.01 }),
     number('holeRingRadius', '小穴中心の配置半径', 0.05, 0.95, { step: 0.01 }),
     number('holeRadius', '小穴の半径', 0.01, 0.45, { step: 0.01 }),
+    number('holeThreeRadius', '3つ空きの小穴の半径', 0.01, 0.45, { step: 0.001 }),
   ]),
 });
 
@@ -193,6 +195,10 @@ export function validateTestSettings(testId, raw, defaults) {
     const chord = 2 * value.holeRingRadius * Math.sin(Math.PI / value.holeSlotCount);
     if (value.holeRadius * 2 >= chord) errors.holeRadius = '隣の小穴と重ならない半径にしてください';
     if (value.holeRingRadius + value.holeRadius > 1) errors.holeRadius = '小穴全体がトンネル内に収まるようにしてください';
+    // 3つ空きの穴は120°ずつ(2026-10-01 7回目で専用の半径を追加)
+    const threeChord = 2 * value.holeRingRadius * Math.sin(Math.PI / defaults.holeThreeSlotCount);
+    if (value.holeThreeRadius * 2 >= threeChord) errors.holeThreeRadius = '隣の小穴と重ならない半径にしてください';
+    if (value.holeRingRadius + value.holeThreeRadius > 1) errors.holeThreeRadius = '小穴全体がトンネル内に収まるようにしてください';
     if (value.holeRingRadius > value.aircraftMaxRadius) errors.holeRingRadius = '小穴の中心を機体が届く範囲にしてください';
   }
   return { ok: Object.keys(errors).length === 0, value, errors };

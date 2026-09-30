@@ -4,7 +4,7 @@
 
 import {
   computeTunnelLayout, stickInputAt, stickVectorAt, keyboardInput,
-  projectScale, projectTunnelSection, currentPlaneEdge, radialLineEnds, drawableObstacles, holeCenters, tunnelWallRings,
+  projectScale, projectTunnelSection, tunnelBackdrop, centerRimArcs, drawableObstacles, holeCenters, holeRadiusFor,
   createT6State, stepT6State, buildT6Record,
 } from '../logic/t6.js';
 import { createRng, randomSeed } from '../core/rng.js';
@@ -15,17 +15,18 @@ import { findTest, formatDetail } from '../core/catalog.js';
 import { T6_COLOR_OPTIONS } from '../core/settings.js';
 
 const DEG = Math.PI / 180;
-const RADIAL_LINES = 12; // 消失点から手前の縁へ引く放射状の線の本数
-// 奥の穴(トンネルの先)の暗い色。描く範囲の外(操縦の円のまわり)も同じ色
+const RADIAL_LINES = 12; // 消失点から画面の外周の円まで引く放射状の線の本数(2026-10-01 7回目で、ずらした縁までから変更)
+// トンネルの中の暗い色。描く範囲の外(操縦の円のまわり)も同じ色
+// (2026-10-01 7回目: 6回目の明るい青の壁の塗りをやめ、5回目までの暗い色に戻した)
 const TUNNEL_COLOR = '#07101f';
-// トンネルの壁は、穴と見分けがつくよう少し明るくし、奥へ向かって暗くする(2026-10-01 ユーザーの実機の感想で追加。
-// 以前は壁も穴と同じ色で、端に寄ったとき縁と障害物の間の三日月形がトンネルの外に見えた)
-const WALL_NEAR_RGB = [44, 68, 100];
-const WALL_FAR_RGB = [14, 27, 48];
 
-function wallColor(shade) {
-  const [r, g, b] = WALL_NEAR_RGB.map((v, i) => Math.round(v + (WALL_FAR_RGB[i] - v) * shade));
-  return `rgb(${r}, ${g}, ${b})`;
+// 中心の円の枠線: 塞がった部分と接する弧だけ(開いた方向には描かない。7回目)
+function strokeCenterRim(ctx, obstacle, section, p) {
+  for (const arc of centerRimArcs(obstacle, p)) {
+    ctx.beginPath();
+    ctx.arc(section.centerX, section.centerY, section.radius * p.centerOpenRadius, -arc.fromDeg * DEG, -arc.toDeg * DEG, true);
+    ctx.stroke();
+  }
 }
 
 // 断面の座標(トンネル半径1、y が上)を画面へ
@@ -82,7 +83,7 @@ function drawHalf(ctx, obstacle, section) {
 }
 
 // 羽根: 開口の間をふさぐ。中心の安全円(centerOpenRadius)は抜く(2026-09-30 本番に合わせて変更)。
-// 中心の円の縁には枠線を描かない(2026-10-01 ユーザーの実機の感想で変更)
+// 中心の円の縁には、塞がった部分と接する弧にだけ枠線を描く(2026-10-01 6回目で消し、7回目で開いた方向を除いて戻した)
 function drawBlades(ctx, obstacle, section, p) {
   const count = obstacle.openingCount;
   const half = p.bladeOpeningDeg / 2;
@@ -97,6 +98,7 @@ function drawBlades(ctx, obstacle, section, p) {
     strokeRadialEdge(ctx, section, center - half, inner);
     strokeRadialEdge(ctx, section, center + half, inner);
   }
+  strokeCenterRim(ctx, obstacle, section, p);
 }
 
 // 扇形: 90°だけ開き、中心の安全円は抜く(2026-09-30 本番に合わせて変更)
@@ -106,6 +108,7 @@ function drawSector(ctx, obstacle, section, p) {
   fillAnnularSector(ctx, section, obstacle.openCenterDeg + half, obstacle.openCenterDeg + 360 - half, inner);
   strokeRadialEdge(ctx, section, obstacle.openCenterDeg - half, inner);
   strokeRadialEdge(ctx, section, obstacle.openCenterDeg + half, inner);
+  strokeCenterRim(ctx, obstacle, section, p);
 }
 
 function drawHoles(ctx, obstacle, section, p) {
@@ -114,25 +117,26 @@ function drawHoles(ctx, obstacle, section, p) {
   ctx.arc(cx, cy, radius, 0, Math.PI * 2);
   for (const center of holeCenters(obstacle, p)) {
     const { x, y } = toScreen(section, center.x, center.y);
-    const holeRadius = p.holeRadius * radius;
+    const holeRadius = holeRadiusFor(obstacle, p) * radius;
     ctx.moveTo(x + holeRadius, y);
     ctx.arc(x, y, holeRadius, 0, Math.PI * 2);
   }
   ctx.fill('evenodd');
   for (const center of holeCenters(obstacle, p)) {
     const { x, y } = toScreen(section, center.x, center.y);
-    strokeCircle(ctx, x, y, p.holeRadius * radius);
+    strokeCircle(ctx, x, y, holeRadiusFor(obstacle, p) * radius);
   }
 }
 
-// 回転する長方形: 中心を通り直径いっぱいに伸びる幅 barWidth の帯。帯の中だけが通れるので、
-// 帯を抜いてほかを塞ぐ形に描く(2026-09-30 本番に合わせて追加。ユーザーの実機の感想で反転)
+// 回転する長方形: 中心を通る長さ barLength・幅 barWidth の長方形の中だけが通れるので、
+// 長方形の穴が開いた板の形に描き、長方形の4辺に枠線を引く(2026-09-30 追加。反転を経て、7回目で両端も塞いだ)
 function drawBar(ctx, obstacle, section, p) {
   const rad = obstacle.rotationDeg * DEG;
   const u = { x: Math.cos(rad), y: Math.sin(rad) };
   const n = { x: -u.y, y: u.x };
+  const l = p.barLength / 2;
   const w = p.barWidth / 2;
-  const corners = [[1, 1], [-1, 1], [-1, -1], [1, -1]].map(([a, b]) => toScreen(section, u.x * a + n.x * w * b, u.y * a + n.y * w * b));
+  const corners = [[1, 1], [-1, 1], [-1, -1], [1, -1]].map(([a, b]) => toScreen(section, u.x * l * a + n.x * w * b, u.y * l * a + n.y * w * b));
   ctx.save();
   ctx.beginPath();
   ctx.arc(section.centerX, section.centerY, section.radius, 0, Math.PI * 2);
@@ -142,12 +146,10 @@ function drawBar(ctx, obstacle, section, p) {
   corners.forEach((c, i) => (i === 0 ? ctx.moveTo(c.x, c.y) : ctx.lineTo(c.x, c.y)));
   ctx.closePath();
   ctx.fill('evenodd');
-  for (const [from, to] of [[corners[0], corners[1]], [corners[2], corners[3]]]) {
-    ctx.beginPath();
-    ctx.moveTo(from.x, from.y);
-    ctx.lineTo(to.x, to.y);
-    ctx.stroke();
-  }
+  ctx.beginPath();
+  corners.forEach((c, i) => (i === 0 ? ctx.moveTo(c.x, c.y) : ctx.lineTo(c.x, c.y)));
+  ctx.closePath();
+  ctx.stroke();
   ctx.restore();
 }
 
@@ -187,23 +189,12 @@ function drawScene(ctx, layout, state, p) {
   ctx.arc(cx, cy, viewRadius, 0, Math.PI * 2);
   ctx.clip();
 
-  // トンネルの壁: 手前の円から順に塗り重ね、奥へ向かって暗くする。最後の円(farZ)の中は奥の穴
-  // (2026-10-01 ユーザーの実機の感想で追加。最初の円が描く範囲をすべて覆うので、壁でも障害物でも穴でもない所は残らない)
-  const rings = tunnelWallRings(state.position, view, p);
-  rings.forEach((ring, i) => {
-    ctx.fillStyle = i === rings.length - 1 ? TUNNEL_COLOR : wallColor(i / (rings.length - 2));
-    ctx.beginPath();
-    ctx.arc(ring.centerX, ring.centerY, ring.radius, 0, Math.PI * 2);
-    ctx.fill();
-  });
-
-  // 機体のいる面のトンネルの縁は、自機の位置の反対側へずらす(2026-09-30 レビュー後の直し)
-  const edge = currentPlaneEdge(state.position, view, p);
-
-  // 放射状の線: 奥の消失点(画面の中心)から、ずらした縁へ引く
+  // 画面の枠(7回目): 外周の円の中はトンネルの中と同じ暗い色のまま。放射状の線は外周まで伸ばす。
+  // 自機の位置に合わせて動く縁の弧は描かない
+  const backdrop = tunnelBackdrop(view, RADIAL_LINES);
   ctx.strokeStyle = 'rgba(110, 170, 230, 0.32)';
   ctx.lineWidth = 1;
-  for (const line of radialLineEnds(state.position, view, p, RADIAL_LINES)) {
+  for (const line of backdrop.filter(item => item.kind === 'radial')) {
     ctx.beginPath();
     ctx.moveTo(line.from.x, line.from.y);
     ctx.lineTo(line.to.x, line.to.y);
@@ -225,13 +216,9 @@ function drawScene(ctx, layout, state, p) {
     else drawHoles(ctx, obstacle, section, p);
     strokeCircle(ctx, section.centerX, section.centerY, section.radius);
   }
-  // 機体のいる面の縁(ずらした円)
-  ctx.strokeStyle = '#75a8d8';
-  ctx.lineWidth = 3;
-  strokeCircle(ctx, edge.centerX, edge.centerY, edge.radius);
   ctx.restore();
 
-  // 画面の外枠(描く範囲)は動かさない
+  // 画面の外枠(描く範囲)は動かさない。見える枠の線はこの円だけ(7回目)
   ctx.strokeStyle = 'rgba(117, 168, 216, 0.45)';
   ctx.lineWidth = 2;
   strokeCircle(ctx, cx, cy, viewRadius);

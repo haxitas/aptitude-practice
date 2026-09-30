@@ -145,35 +145,21 @@ export function projectTunnelSection(position, z, view, p) {
   };
 }
 
-// トンネルの壁(2026-10-01 ユーザーの実機の感想で追加): 手前から奥へ、各奥行きの断面の円を wallRingCount 個。
-// 手前の円から順に塗り重ねると、円と円の間の帯がその奥行きの壁になる(奥の円は必ず手前の円の中に入る)。
-// 最初の円は、自機が動ける範囲の端にいても描く範囲(view)をすべて覆う奥行き(焦点距離 × (1 − aircraftMaxRadius))、
-// 最後の円は farZ(その中は奥の穴)。shade は 0(手前)〜 1(奥)。
-export function tunnelWallRings(position, view, p) {
-  const nearZ = p.perspectiveFocal * (1 - p.aircraftMaxRadius);
-  const n = p.wallRingCount;
-  return Array.from({ length: n }, (_, i) => {
-    const z = i === n - 1 ? p.farZ : nearZ * (p.farZ / nearZ) ** (i / (n - 1));
-    return { ...projectTunnelSection(position, z, view, p), z, shade: i / (n - 1) };
-  });
-}
-
-// 機体のいる面(collisionZ)のトンネルの縁。自機の位置の反対側へずれ、壁の近くにいれば縁が画面の中心の近くまで来る
-// (2026-09-30 レビュー後の直し)
-export function currentPlaneEdge(position, view, p) {
-  return projectTunnelSection(position, p.collisionZ, view, p);
-}
-
-// 放射状の線: 奥の消失点(画面の中心)から、ずらした縁の上の count 個の点へ
-export function radialLineEnds(position, view, p, count) {
-  const edge = currentPlaneEdge(position, view, p);
-  return Array.from({ length: count }, (_, i) => {
-    const a = i * 2 * Math.PI / count;
+// 画面の枠(2026-10-01 ユーザーの実機の感想で変更(7回目)): 描くのは、画面の外周の円(描く範囲)の塗り(トンネルの中と同じ暗い色)と枠線、
+// 消失点(画面の中心)から外周の円の上まで伸ばす放射状の線だけ。自機の位置に合わせて動く縁の弧は描かないので、
+// どこに寄っても画面の円の中はトンネルの中に見える。自機の位置は受け取らない。
+// 6回目の壁の塗り(奥へ暗くなる明るい青の円の塗り重ね)はやめた。
+export function tunnelBackdrop(view, radialCount) {
+  const circle = { centerX: view.centerX, centerY: view.centerY, radius: view.radius };
+  const radials = Array.from({ length: radialCount }, (_, i) => {
+    const a = i * 2 * Math.PI / radialCount;
     return {
+      kind: 'radial',
       from: { x: view.centerX, y: view.centerY },
-      to: { x: edge.centerX + Math.cos(a) * edge.radius, y: edge.centerY - Math.sin(a) * edge.radius },
+      to: { x: view.centerX + Math.cos(a) * view.radius, y: view.centerY - Math.sin(a) * view.radius },
     };
   });
+  return [{ kind: 'fill', circle, color: 'tunnel' }, ...radials, { kind: 'frame', circle: { ...circle } }];
 }
 
 export function isHalfOpeningSafe(position, blockedSide) {
@@ -184,6 +170,24 @@ export function isHalfOpeningSafe(position, blockedSide) {
   else if (blockedSide === 'right') dot = position.x;
   else throw new RangeError(`不明な半円の向きです: ${blockedSide}`);
   return dot < 0; // 直径上は障害物の縁なので衝突
+}
+
+// 中心の円の枠線を描く弧({M}): 塞がった部分と接する弧だけ(開いた方向には描かない)。
+// { fromDeg, toDeg } は fromDeg から反時計回りに toDeg まで
+export function centerRimArcs(obstacle, p) {
+  if (obstacle.type === 'blades') {
+    const n = obstacle.openingCount ?? 3;
+    const half = p.bladeOpeningDeg / 2;
+    return Array.from({ length: n }, (_, i) => ({
+      fromDeg: normalizeAngleDeg(obstacle.rotationDeg + i * 360 / n + half),
+      toDeg: normalizeAngleDeg(obstacle.rotationDeg + (i + 1) * 360 / n - half),
+    }));
+  }
+  if (obstacle.type === 'sector') {
+    const half = p.sectorOpeningDeg / 2;
+    return [{ fromDeg: normalizeAngleDeg(obstacle.openCenterDeg + half), toDeg: normalizeAngleDeg(obstacle.openCenterDeg - half) }];
+  }
+  return [];
 }
 
 // 羽根と扇形は、中心から centerOpenRadius の円の中を安全にする(2026-09-30 本番に合わせて変更。円の縁は開口の判定に従う)
@@ -219,8 +223,14 @@ export function holeCenters(obstacle, p) {
   });
 }
 
+// 穴の半径: 3つ空きは holeThreeRadius(0.323)、1つ・2つ空きは holeRadius(0.38)({M})
+export function holeRadiusFor(obstacle, p) {
+  return obstacle.openSlots.length === 3 ? p.holeThreeRadius : p.holeRadius;
+}
+
 export function isHoleOpeningSafe(position, obstacle, p) {
-  const limitSquared = p.holeRadius * p.holeRadius;
+  const radius = holeRadiusFor(obstacle, p);
+  const limitSquared = radius * radius;
   return holeCenters(obstacle, p).some(center => {
     const dx = position.x - center.x;
     const dy = position.y - center.y;
@@ -229,11 +239,13 @@ export function isHoleOpeningSafe(position, obstacle, p) {
 }
 
 // 回転する長方形(2026-09-30 本番に合わせて追加。ユーザーの実機の感想で反転): トンネルの中心を通り直径いっぱいに伸びる
-// 幅 barWidth の帯の中だけが通れる場所で、帯の外はすべて衝突。帯の縁ちょうども衝突。帯の向きは rotationDeg
+// 幅 barWidth の帯の中だけが通れる場所で、帯の外はすべて衝突。帯の縁ちょうども衝突。帯の向きは rotationDeg。
+// 帯の両端も塞ぐ: 通れるのは長さ barLength・幅 barWidth の長方形の中だけ({M})
 export function isBarSafe(position, rotationDeg, p) {
   const rad = rotationDeg * Math.PI / 180;
   const distance = Math.abs(-position.x * Math.sin(rad) + position.y * Math.cos(rad));
-  return distance < p.barWidth / 2 - Number.EPSILON;
+  const along = Math.abs(position.x * Math.cos(rad) + position.y * Math.sin(rad));
+  return distance < p.barWidth / 2 - Number.EPSILON && along < p.barLength / 2 - Number.EPSILON;
 }
 
 export function isObstacleSafe(obstacle, position, p) {
@@ -277,7 +289,7 @@ export function applyCollisionSpeed(speed, p) {
 }
 
 // 羽根の開口の数: 1つ・2つ・3つを bladeOpen1Rate・bladeOpen2Rate・bladeOpen3Rate の比で選ぶ
-// (既定 40%・40%・20%。3つ=放射能マークを減らす。2026-09-30 ユーザーの実機の感想で変更)
+// (2026-09-30 ユーザーの実機の感想で 40%・40%・20%。7回目で 50%・50%・0%: 放射能マークは出さない)
 export function pickBladeOpeningCount(rng, p) {
   const rates = [p.bladeOpen1Rate, p.bladeOpen2Rate, p.bladeOpen3Rate];
   let r = rng() * rates.reduce((sum, v) => sum + v, 0);

@@ -6,12 +6,12 @@ import {
   normalizeAngleDeg, angularDistanceDeg, toPolar, clampToTunnel,
   normalizeInput, keyboardInput, moveAircraft,
   computeTunnelLayout, stickInputAt, stickVectorAt, stickToPosition, projectTunnelSection,
-  currentPlaneEdge, radialLineEnds,
+  tunnelBackdrop, centerRimArcs, holeRadiusFor,
   projectScale, baseSpeedAt, advanceSpeed, applyCollisionSpeed,
   createObstacle, createInitialObstacles, advanceObstacle, recycleObstacles, drawableObstacles,
   crossedAircraftPlane, isHalfOpeningSafe, isBladeOpeningSafe, isObstacleSafe,
   isSectorOpeningSafe, holeCenters, isHoleOpeningSafe, isBarSafe, isAircraftSafe,
-  createT6State, stepT6State, summarizeT6, buildT6Record, tunnelWallRings,
+  createT6State, stepT6State, summarizeT6, buildT6Record,
 } from '../js/logic/t6.js';
 
 const P = DEFAULTS.t6;
@@ -34,11 +34,12 @@ test('T6 の既定値は承認済みの数値', () => {
     obstacleSpacing: 8,
     firstObstacleDistance: 12,
     bladeOpeningDeg: 60,
-    bladeOpen1Rate: 0.4,
-    bladeOpen2Rate: 0.4,
-    bladeOpen3Rate: 0.2,
-    centerOpenRadius: 0.2,
-    barWidth: 0.7,
+    bladeOpen1Rate: 0.5,
+    bladeOpen2Rate: 0.5,
+    bladeOpen3Rate: 0,
+    centerOpenRadius: 0.22,
+    barWidth: 0.63,
+    barLength: 1.5,
     bladeInitialAngularSpeedDegSec: 30,
     bladeAngularAccelerationDegSec2: 0.15,
     collisionPushMs: 350,
@@ -53,7 +54,6 @@ test('T6 の既定値は承認済みの数値', () => {
     stickSide: 'right',
     stallAbortMs: 1000,
     perspectiveFocal: 2.6,
-    wallRingCount: 28,
     collisionZ: 1,
     farZ: 32,
     sectorOpeningDeg: 90,
@@ -63,6 +63,7 @@ test('T6 の既定値は承認済みの数値', () => {
     holeRotationRate: 0.5,
     holeRingRadius: 0.6,
     holeRadius: 0.38,
+    holeThreeRadius: 0.323,
   });
 });
 
@@ -238,65 +239,30 @@ test('一人称: 機体の面(collisionZ)では、断面上の自機の位置が
   approx(section.centerY - position.y * section.radius, view.centerY);
 });
 
-// ---- 今いる面のトンネルの縁(2026-09-30 レビュー後の直し) ----
+// ---- 画面の枠(2026-10-01 ユーザーの実機の感想で変更。7回目) ----
+// 見える枠は画面の外周の円だけ。自機の位置に合わせて動く縁の弧は描かず、円の中はすべてトンネルの中と同じ暗い色。
+// 放射状の線は画面の外周まで伸ばす。
 
-test('今いる面の縁: 自機の位置の反対側へずれ、壁の近くにいれば縁が画面の中心の近くまで来る', () => {
+test('画面の枠: 描く要素は外周の円の塗りと枠線と放射状の線だけで、ずらした縁の弧は無い', () => {
   const view = { centerX: 400, centerY: 300, radius: 200 };
-  const f = P.perspectiveFocal;
-  assert.deepEqual(currentPlaneEdge({ x: 0, y: 0 }, view, P), { centerX: 400, centerY: 300, radius: 200 * f });
-  const atWall = currentPlaneEdge({ x: P.aircraftMaxRadius, y: 0 }, view, P);
-  approx(atWall.centerX, 400 - P.aircraftMaxRadius * 200 * f);
-  approx(atWall.centerY, 300);
-  approx(atWall.radius, 200 * f);
-  // 画面の中心(自機)から縁までの距離 = 焦点距離 × 半径 × (1 − 自機の半径)
-  const gap = atWall.radius - Math.hypot(atWall.centerX - view.centerX, atWall.centerY - view.centerY);
-  approx(gap, 200 * f * (1 - P.aircraftMaxRadius));
-  assert.ok(gap < 200 * 0.5, '縁は画面の半径の半分より中心の近くまで来る');
-  const up = currentPlaneEdge({ x: 0, y: 0.5 }, view, P);
-  approx(up.centerY, 300 + 0.5 * 200 * f, 1e-9); // 上にいると縁は下へずれる
-  assert.deepEqual(currentPlaneEdge({ x: 0.3, y: -0.2 }, view, P), projectTunnelSection({ x: 0.3, y: -0.2 }, P.collisionZ, view, P));
+  const items = tunnelBackdrop(view, 12);
+  assert.deepEqual([...new Set(items.map(item => item.kind))].sort(), ['fill', 'frame', 'radial']);
+  assert.ok(!items.some(item => item.kind === 'edge' || item.kind === 'wall'), 'ずらした縁の弧・壁の塗りは描かない');
+  for (const item of items.filter(i => i.kind !== 'radial')) {
+    assert.deepEqual(item.circle, { centerX: 400, centerY: 300, radius: 200 }, '塗りと枠線は画面の外周の円');
+  }
+  assert.equal(items.find(i => i.kind === 'fill').color, 'tunnel', 'トンネルの中と同じ暗い色');
+  // 自機の位置を受け取らない(どこに寄っても同じ)
+  assert.equal(tunnelBackdrop.length, 2);
 });
 
-test('放射状の線は、奥の消失点(画面の中心)から、ずらした縁の上の点へ引く', () => {
+test('画面の枠: 放射状の線は消失点(画面の中心)から、画面の外周の円の上まで伸ばす', () => {
   const view = { centerX: 400, centerY: 300, radius: 200 };
-  const position = { x: -0.5, y: 0.4 };
-  const edge = currentPlaneEdge(position, view, P);
-  const lines = radialLineEnds(position, view, P, 12);
+  const lines = tunnelBackdrop(view, 12).filter(i => i.kind === 'radial');
   assert.equal(lines.length, 12);
   for (const line of lines) {
     assert.deepEqual(line.from, { x: 400, y: 300 });
-    approx(Math.hypot(line.to.x - edge.centerX, line.to.y - edge.centerY), edge.radius);
-  }
-});
-
-// ---- トンネルの壁(2026-10-01 ユーザーの実機の感想で追加) ----
-
-test('トンネルの壁: 手前から奥へ入れ子の円(各奥行きの断面)で、最初の円は描く範囲を覆い、最後は farZ。奥ほど暗い', () => {
-  const view = { centerX: 400, centerY: 300, radius: 200 };
-  const covers = (outer, inner) => Math.hypot(outer.centerX - inner.centerX, outer.centerY - inner.centerY) + inner.radius <= outer.radius + 1e-9;
-  const positions = [{ x: 0, y: 0 }, { x: P.aircraftMaxRadius, y: 0 }, { x: 0, y: -P.aircraftMaxRadius },
-    { x: P.aircraftMaxRadius * Math.SQRT1_2, y: P.aircraftMaxRadius * Math.SQRT1_2 }, { x: -0.4, y: 0.3 }];
-  for (const position of positions) {
-    const rings = tunnelWallRings(position, view, P);
-    assert.equal(rings.length, P.wallRingCount);
-    // 最初の円は、描く範囲(view の円)をすべて覆う → 壁でも障害物でも穴でもない所が残らない
-    assert.ok(covers(rings[0], view), JSON.stringify(position));
-    for (let i = 1; i < rings.length; i++) {
-      assert.ok(rings[i].z > rings[i - 1].z);
-      assert.ok(covers(rings[i - 1], rings[i]), `${i}: 奥の円は手前の円の中`);
-      assert.ok(rings[i].shade > rings[i - 1].shade, '奥ほど暗い');
-    }
-    assert.equal(rings[0].shade, 0);
-    assert.equal(rings.at(-1).shade, 1);
-    assert.equal(rings.at(-1).z, P.farZ, '最後の円(奥の穴)は farZ');
-    for (const ring of rings) {
-      const section = projectTunnelSection(position, ring.z, view, P);
-      approx(ring.centerX, section.centerX);
-      approx(ring.centerY, section.centerY);
-      approx(ring.radius, section.radius);
-    }
-    // 機体のいる面の縁より手前の壁も描く(端に寄ったとき、縁の外に見える所)
-    assert.ok(rings[0].z < P.collisionZ);
+    approx(Math.hypot(line.to.x - 400, line.to.y - 300), 200);
   }
 });
 
@@ -375,14 +341,15 @@ test('羽根の開口1・2・3個は等間隔で、1個なら他の角度は衝�
   for (const angle of [60, 120, 180, 240, 300]) assert.equal(isBladeOpeningSafe(at(angle), 0, P, 1), false);
 });
 
-test('羽根の開口数は 1つ40%・2つ40%・3つ20%(2026-09-30 ユーザーの実機の感想で変更。設定値)', () => {
+test('羽根の開口数は 1つ50%・2つ50%で、開口3つ(放射能マーク)は出さない(2026-10-01 ユーザーの実機の感想で変更。設定値)', () => {
   const counts = new Map([[1, 0], [2, 0], [3, 0]]);
   for (let seed = 1; seed <= 20000; seed++) {
     const obstacle = createObstacle(createRng(seed), 6, seed, P);
     if (obstacle.type === 'blades') counts.set(obstacle.openingCount, counts.get(obstacle.openingCount) + 1);
   }
   const total = [...counts.values()].reduce((a, b) => a + b, 0);
-  for (const [n, expected] of [[1, 0.4], [2, 0.4], [3, 0.2]]) {
+  assert.equal(counts.get(3), 0, '開口3つは出さない');
+  for (const [n, expected] of [[1, 0.5], [2, 0.5]]) {
     assert.ok(Math.abs(counts.get(n) / total - expected) < 0.03, `${n}つ: ${counts.get(n)}/${total}`);
   }
   // 設定で変えられる(3つだけにする)
@@ -521,6 +488,21 @@ test('小穴: 3つ空きの当たり判定も120°ずつの位置。穴と穴の
   }
 });
 
+test('小穴: 3つ空きの穴の半径は 0.323(1つ・2つ空きは 0.38 のまま)。当たり判定も同じ半径', () => {
+  assert.equal(P.holeThreeRadius, 0.323);
+  const three = { type: 'holes', openSlots: [0, 1, 2], rotationDeg: 90, rotationDirection: 0 };
+  const two = { type: 'holes', openSlots: [0, 2], rotationDeg: 0, rotationDirection: 0 };
+  assert.equal(holeRadiusFor(three, P), 0.323);
+  assert.equal(holeRadiusFor(two, P), 0.38);
+  const [c] = holeCenters(three, P); // 90°(上)の穴
+  assert.equal(isHoleOpeningSafe({ x: c.x, y: c.y + 0.32 }, three, P), true, '0.323 の内側');
+  assert.equal(isHoleOpeningSafe({ x: c.x, y: c.y + 0.33 }, three, P), false, '0.38 なら通れた所は衝突');
+  assert.equal(isAircraftSafe(three, c, P), true, '穴の中心');
+  assert.equal(isAircraftSafe(three, { x: c.x, y: c.y + 0.323 - P.hitRadius + 0.01 }, P), false, '当たり判定の円が縁にかかる');
+  const [d] = holeCenters(two, P);
+  assert.equal(isHoleOpeningSafe({ x: d.x + 0.37, y: d.y }, two, P), true, '2つ空きは 0.38 のまま');
+});
+
 test('小穴: 3つ空きは隣の穴と重ならない(120°ずつの弦 > 穴の直径)', () => {
   const chord = 2 * P.holeRingRadius * Math.sin(Math.PI / P.holeThreeSlotCount);
   assert.ok(2 * P.holeRadius < chord);
@@ -608,8 +590,8 @@ test('回転する羽根は経過時間と回転方向で角度が変わる', ()
 test('回転する長方形(反転): 中心を通る幅 barWidth の帯の中だけ通れ、帯の外はすべて衝突、帯の縁ちょうども衝突(2026-09-30 ユーザーの実機の感想で反転)', () => {
   const half = P.barWidth / 2;
   assert.equal(isBarSafe({ x: 0, y: 0 }, 0, P), true, '中心は帯の中');
-  assert.equal(isBarSafe({ x: 0.8, y: 0 }, 0, P), true, '帯は直径いっぱいに伸びる');
-  assert.equal(isBarSafe({ x: -0.8, y: 0 }, 0, P), true);
+  assert.equal(isBarSafe({ x: 0.7, y: 0 }, 0, P), true, '長さ1.5の長方形の中(端の近く)');
+  assert.equal(isBarSafe({ x: -0.7, y: 0 }, 0, P), true);
   assert.equal(isBarSafe({ x: 0.5, y: half }, 0, P), false, '帯の縁ちょうど');
   assert.equal(isBarSafe({ x: 0.5, y: -half }, 0, P), false, '反対側の縁ちょうど');
   assert.equal(isBarSafe({ x: 0.5, y: half - 0.001 }, 0, P), true);
@@ -617,17 +599,70 @@ test('回転する長方形(反転): 中心を通る幅 barWidth の帯の中だ
   assert.equal(isBarSafe({ x: 0, y: 0.6 }, 0, P), false, '帯の外');
   // 90°回すと縦の帯になる
   assert.equal(isBarSafe({ x: 0, y: 0.6 }, 90, P), true);
+  assert.equal(isBarSafe({ x: 0, y: 0.8 }, 90, P), false, '長さの外');
   assert.equal(isBarSafe({ x: 0.6, y: 0 }, 90, P), false);
   assert.equal(isObstacleSafe({ type: 'bar', rotationDeg: 90 }, { x: 0, y: 0.6 }, P), true);
 });
 
-test('回転する長方形の帯の幅は0.7(2026-10-01 ユーザーの実機の感想で 0.35 → 0.7)。当たり判定の円を含めて帯に収まれば通れる', () => {
-  assert.equal(P.barWidth, 0.7);
-  assert.equal(isBarSafe({ x: 0.3, y: 0.34 }, 0, P), true);
-  assert.equal(isBarSafe({ x: 0.3, y: 0.36 }, 0, P), false);
+test('回転する長方形の帯の幅は0.63(2026-10-01 0.35 → 0.7、7回目で 0.7 → 0.63)。当たり判定の円を含めて帯に収まれば通れる', () => {
+  assert.equal(P.barWidth, 0.63);
+  assert.equal(isBarSafe({ x: 0.3, y: 0.31 }, 0, P), true);
+  assert.equal(isBarSafe({ x: 0.3, y: 0.32 }, 0, P), false);
   const bar = { type: 'bar', rotationDeg: 0 };
-  assert.equal(isAircraftSafe(bar, { x: 0.3, y: 0.35 - P.hitRadius - 0.01 }, P), true);
-  assert.equal(isAircraftSafe(bar, { x: 0.3, y: 0.35 - P.hitRadius + 0.01 }, P), false);
+  assert.equal(isAircraftSafe(bar, { x: 0.3, y: 0.315 - P.hitRadius - 0.01 }, P), true);
+  assert.equal(isAircraftSafe(bar, { x: 0.3, y: 0.315 - P.hitRadius + 0.01 }, P), false);
+});
+
+test('回転する長方形: 通れるのは長さ barLength(1.5)・幅 barWidth の長方形の中だけ。帯を延ばした先(長さの外)は衝突', () => {
+  assert.equal(P.barLength, 1.5);
+  const half = P.barLength / 2;
+  assert.equal(isBarSafe({ x: 0, y: 0 }, 0, P), true, '中心');
+  assert.equal(isBarSafe({ x: half - 0.001, y: 0 }, 0, P), true, '端の近く(長方形の中)');
+  assert.equal(isBarSafe({ x: half, y: 0 }, 0, P), false, '端ちょうど');
+  assert.equal(isBarSafe({ x: half + 0.05, y: 0 }, 0, P), false, '帯を延ばした先');
+  assert.equal(isBarSafe({ x: -(half + 0.05), y: 0 }, 0, P), false, '反対側の先');
+  // 45°回した帯の先も塞がる
+  const at = r => ({ x: Math.cos(Math.PI / 4) * r, y: Math.sin(Math.PI / 4) * r });
+  assert.equal(isBarSafe(at(0.7), 45, P), true);
+  assert.equal(isBarSafe(at(0.8), 45, P), false);
+  const bar = { type: 'bar', rotationDeg: 0 };
+  assert.equal(isAircraftSafe(bar, { x: half - P.hitRadius - 0.01, y: 0 }, P), true);
+  assert.equal(isAircraftSafe(bar, { x: half - P.hitRadius + 0.01, y: 0 }, P), false, '当たり判定の円が端にかかる');
+});
+
+// ---- 中心の円の枠線(2026-10-01 ユーザーの実機の感想で変更。7回目) ----
+
+test('中心の円の半径は 0.22(0.2 から10%大きく)', () => {
+  assert.equal(P.centerOpenRadius, 0.22);
+  const at = r => ({ x: 0, y: r }); // 90°はどの羽根(開口0°)・扇形(開口315°)でも塞がった向き
+  assert.equal(isBladeOpeningSafe(at(0.21), 0, P, 1), true);
+  assert.equal(isBladeOpeningSafe(at(0.23), 0, P, 1), false);
+  assert.equal(isSectorOpeningSafe(at(0.21), 315, P), true);
+});
+
+test('中心の円の枠線: 塞がった部分と接する弧にだけ描き、開いた方向には描かない', () => {
+  const inside = (deg, arc) => normalizeAngleDeg(deg - arc.fromDeg) < normalizeAngleDeg(arc.toDeg - arc.fromDeg);
+  const cases = [
+    { type: 'blades', rotationDeg: 0, openingCount: 1 },
+    { type: 'blades', rotationDeg: 37, openingCount: 2 },
+    { type: 'sector', openCenterDeg: 315 },
+    { type: 'sector', openCenterDeg: 100 },
+  ];
+  for (const obstacle of cases) {
+    const arcs = centerRimArcs(obstacle, P);
+    assert.ok(arcs.length >= 1);
+    const r = P.centerOpenRadius + 0.01; // 中心の円のすぐ外
+    for (let deg = 0; deg < 360; deg += 1) {
+      const point = { x: Math.cos(deg * Math.PI / 180) * r, y: Math.sin(deg * Math.PI / 180) * r };
+      const drawn = arcs.some(arc => inside(deg, arc));
+      const blocked = !isObstacleSafe(obstacle, point, P);
+      if (drawn) assert.ok(blocked, `${JSON.stringify(obstacle)} ${deg}° は開いているのに枠線がある`);
+      // 開口の端から2°より内側の塞がった向きには、必ず枠線がある
+      if (blocked && [-2, 2].every(d => !isObstacleSafe(obstacle, { x: Math.cos((deg + d) * Math.PI / 180) * r, y: Math.sin((deg + d) * Math.PI / 180) * r }, P))) {
+        assert.ok(drawn, `${JSON.stringify(obstacle)} ${deg}° は塞がっているのに枠線が無い`);
+      }
+    }
+  }
 });
 
 test('回転する長方形: 羽根と同じ速さで回り、回転後は以前安全だった位置がふさがる', () => {

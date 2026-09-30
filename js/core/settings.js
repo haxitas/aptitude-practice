@@ -184,11 +184,12 @@ export const DEFAULTS = Object.freeze({
     obstacleSpacing: 8,
     firstObstacleDistance: 12,
     bladeOpeningDeg: 60,
-    bladeOpen1Rate: 0.4, // 羽根の開口の数の確率(1つ・2つ・3つ。2026-09-30 ユーザーの実機の感想で変更)
-    bladeOpen2Rate: 0.4,
-    bladeOpen3Rate: 0.2,
-    centerOpenRadius: 0.2, // 羽根と扇形は、中心からこの半径の円の中を通れる(2026-09-30 本番に合わせて追加)
-    barWidth: 0.7, // 回転する長方形の帯の幅(2026-09-30 本番に合わせて追加。2026-10-01 ユーザーの実機の感想で 0.35 → 0.7)
+    bladeOpen1Rate: 0.5, // 羽根の開口の数の確率(1つ・2つ・3つ。2026-09-30 40/40/20%、2026-10-01 7回目で 50/50/0%: 放射能マークは出さない)
+    bladeOpen2Rate: 0.5,
+    bladeOpen3Rate: 0,
+    centerOpenRadius: 0.22, // 羽根と扇形は、中心からこの半径の円の中を通れる(2026-09-30 追加。2026-10-01 7回目で 0.2 → 0.22)
+    barWidth: 0.63, // 回転する長方形の帯の幅(2026-09-30 追加。2026-10-01 0.35 → 0.7、7回目で 0.7 → 0.63)
+    barLength: 1.5, // 回転する長方形の長さ。両端の先は塞ぐ(2026-10-01 7回目で追加)
     bladeInitialAngularSpeedDegSec: 30,
     bladeAngularAccelerationDegSec2: 0.15,
     collisionPushMs: 350, // 衝突したときの巻き戻しにかける時間
@@ -203,7 +204,6 @@ export const DEFAULTS = Object.freeze({
     stickSide: 'right',
     stallAbortMs: 1000,
     perspectiveFocal: 2.6, // 焦点距離。大きいほど視野が狭く、トンネルの中に入っている感じになる(2026-09-30 画面で見て 1 → 2、2026-10-01 2 → 2.6)
-    wallRingCount: 28, // トンネルの壁を奥へ向かって暗く塗る段の数(最後の段は奥の穴。2026-10-01 ユーザーの実機の感想で追加)
     collisionZ: 1,
     farZ: 32, // 奥まで見えるよう 12 → 32(2026-09-30 本番に合わせて変更)
     sectorOpeningDeg: 90,
@@ -213,6 +213,7 @@ export const DEFAULTS = Object.freeze({
     holeRotationRate: 0.5,
     holeRingRadius: 0.6,
     holeRadius: 0.38, // 隣の穴と重ならず、トンネルの内側に収まる大きさ(2026-09-30 本番に合わせて 0.3 → 0.38)
+    holeThreeRadius: 0.323, // 3つ空きの穴の半径(2026-10-01 7回目で追加。0.38 から15%小さく)
   }),
 });
 

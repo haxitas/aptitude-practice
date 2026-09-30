@@ -86,6 +86,7 @@ test('T6 は速度と小穴の個数・重なり・範囲を検証する', () =>
   assert.match(overlap.errors.holeRadius, /重な/);
   const outside = validateTestSettings('t6', raw('t6', { holeRingRadius: 0.8, holeRadius: 0.25 }), DEFAULTS.t6);
   assert.match(outside.errors.holeRadius, /トンネル/);
+  assert.match(validateTestSettings('t6', raw('t6', { holeThreeRadius: 0.44 }), DEFAULTS.t6).errors.holeThreeRadius, /トンネル/);
   assert.equal(validateTestSettings('t6', raw('t6', {}), DEFAULTS.t6).ok, true, '既定値(小穴の半径0.38・巻き戻し2)は保存できる');
 });
 
