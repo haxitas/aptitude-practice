@@ -10,9 +10,10 @@ import {
 import { createRng, randomSeed } from '../core/rng.js';
 import { startTimer, formatDuration } from '../core/timer.js';
 import { appendRecord, readSettingsRaw, saveSettings } from '../core/storage.js';
+import { withoutDefaults } from '../logic/settings-form.js';
 import { renderResult } from '../core/result.js';
 import { findTest, formatDetail } from '../core/catalog.js';
-import { T6_COLOR_OPTIONS } from '../core/settings.js';
+import { T6_COLOR_OPTIONS, DEFAULTS } from '../core/settings.js';
 
 const DEG = Math.PI / 180;
 const RADIAL_LINES = 12; // 消失点から画面の外周の円まで引く放射状の線の本数(2026-10-01 7回目で、ずらした縁までから変更)
@@ -268,7 +269,8 @@ export function mount(root, ctx) {
     const side = params.stickSide === 'left' ? 'right' : 'left';
     const raw = readSettingsRaw(ctx.store);
     const saved = raw.value ?? {};
-    const result = raw.ok ? saveSettings(ctx.store, { ...saved, t6: { ...(saved.t6 ?? {}), stickSide: side } }) : raw;
+    // 既定値と違う項目だけを保存する(2026-10-01 7回目で変更)
+    const result = raw.ok ? saveSettings(ctx.store, { ...saved, t6: withoutDefaults({ ...(saved.t6 ?? {}), stickSide: side }, DEFAULTS.t6) }) : raw;
     const message = root.querySelector('[data-ref="message"]');
     message.hidden = result.ok;
     message.textContent = result.ok ? '' : result.message;

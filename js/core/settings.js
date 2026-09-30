@@ -1,6 +1,6 @@
 // 各テストの数値の既定値(SPEC §6)と、保存値(apt_settings)との合成。
 // 設定画面は Phase4。ここでは読み込みと合成だけを行い、apt_settings は書き換えない。
-import { readSettingsRaw } from './storage.js';
+import { readSettingsRaw, saveSettings } from './storage.js';
 
 export const T6_COLOR_OPTIONS = Object.freeze({
   obstacle: Object.freeze([
@@ -271,6 +271,69 @@ export function resolveSettings(saved) {
     settings[testId] = out;
   }
   return { settings, warnings };
+}
+
+// ---- 保存した設定の移行(2026-10-01 7回目で追加) ----
+// 設定画面で保存すると、以前はそのテストの全項目が当時の値で保存され、あとで既定値を変えても保存値が優先された。
+// 版を切り替えたとき一度だけ、既定値を変えた項目の保存値を消して既定値に戻す。済んだ版は apt_settings の
+// defaultsVersion に保存し、2回目以降は何もしない。配色・操縦円の側・制限時間(durationSec)は消さない。成績には触れない。
+// 今後、既定値を変えるときは、次の version の項目をここに足す(PHASE_NOTES の「公開の手順」)。
+export const SETTINGS_MIGRATIONS = Object.freeze([
+  Object.freeze({
+    version: 1,
+    date: '2026-10-01',
+    // 公開中の版(a849f54)から既定値が変わった項目と、その後の未公開の版で足してから既定値を変えた項目
+    keys: Object.freeze({
+      t1: Object.freeze(['speedMin', 'speedMax', 'speedHoursMin', 'speedHoursMax', 'lapSpeedMin', 'lapSpeedMax', 'lapMinutesMin', 'lapMinutesMax',
+        'yearValueMin', 'yearValueMax', 'priceMin', 'priceMax', 'priceCountMin', 'priceCountMax', 'averageMin', 'averageMax',
+        'geometryLengthMin', 'geometryLengthMax', 'circleDiameterMin', 'circleDiameterMax', 'circleAreaRadiusMin', 'circleAreaRadiusMax',
+        'workWorkersMin', 'workWorkersMax', 'workHoursMin', 'workHoursMax',
+        'cylinderDiameterMin', 'cylinderDiameterMax', 'cylinderHeightMin', 'cylinderHeightMax']),
+      t2: Object.freeze(['maxConsecutiveMatches']),
+      t3: Object.freeze(['calcTermCount', 'shapeLimitMs']),
+      t5: Object.freeze(['maxDots', 'shuffleIntervalMs', 'dotMoveMs', 'dotRadiusRatio', 'dotMinDistanceRatio']),
+      t6: Object.freeze(['acceleration', 'recoveryAcceleration', 'maxSpeed', 'obstacleSpacing', 'firstObstacleDistance',
+        'collisionPullbackDistance', 'perspectiveFocal', 'farZ', 'holeRadius',
+        'bladeOpen1Rate', 'bladeOpen2Rate', 'bladeOpen3Rate', 'centerOpenRadius', 'barWidth', 'hitRadius']),
+    }),
+  }),
+]);
+
+// 保存値(apt_settings の中身)に移行を当てる。元の値は書き換えない。
+// { value, removed: ['t6.maxSpeed', ...], changed }(changed: 書き戻す必要があるか)
+export function migrateSettings(saved) {
+  const done = Number.isInteger(saved?.defaultsVersion) ? saved.defaultsVersion : 0;
+  const pending = SETTINGS_MIGRATIONS.filter(m => m.version > done);
+  if (!pending.length) return { value: saved, removed: [], changed: false };
+  const value = { ...saved };
+  const removed = [];
+  for (const migration of pending) {
+    for (const [testId, keys] of Object.entries(migration.keys)) {
+      const src = value[testId];
+      if (!src || typeof src !== 'object' || Array.isArray(src)) continue;
+      const next = { ...src };
+      for (const key of keys) {
+        if (key in next) {
+          delete next[key];
+          removed.push(`${testId}.${key}`);
+        }
+      }
+      value[testId] = next;
+    }
+  }
+  value.defaultsVersion = SETTINGS_MIGRATIONS.at(-1).version;
+  return { value, removed, changed: true };
+}
+
+// 起動時に一度呼ぶ。保存値が無い・読めないときは何も書かない。{ migrated, removed }
+export function migrateStoredSettings(store) {
+  if (!store) return { migrated: false, removed: [] };
+  const raw = readSettingsRaw(store);
+  if (!raw.ok || raw.value === null) return { migrated: false, removed: [] };
+  const { value, removed, changed } = migrateSettings(raw.value);
+  if (!changed) return { migrated: false, removed: [] };
+  const write = saveSettings(store, value);
+  return { migrated: write.ok, removed };
 }
 
 // { settings, warnings, error }(error は apt_settings 自体が読めないときの説明)

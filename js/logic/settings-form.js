@@ -212,6 +212,13 @@ export function inputStep(field) {
   return String(field.step ?? 'any');
 }
 
+// 既定値と違う項目だけを残す(2026-10-01 7回目で追加)。設定画面の保存で、既定値と同じ項目は保存しない
+// (配色のボタンを押しただけで、ほかの項目が当時の値で固定されないように)。配列は中身で比べる
+export function withoutDefaults(values, defaults) {
+  return Object.fromEntries(Object.entries(values ?? {}).filter(([key, value]) => (
+    !(key in defaults) || JSON.stringify(value) !== JSON.stringify(defaults[key]))));
+}
+
 export function resetTestOverrides(saved, testId) {
   const next = { ...(saved ?? {}) };
   delete next[testId];

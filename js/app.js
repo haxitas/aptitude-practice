@@ -3,7 +3,7 @@
 
 import { TESTS, findTest } from './core/catalog.js';
 import { defaultStore, readResults } from './core/storage.js';
-import { loadSettings } from './core/settings.js';
+import { loadSettings, migrateStoredSettings } from './core/settings.js';
 import { summarize } from './core/stats.js';
 import * as t1 from './tests/t1.js';
 import * as t2 from './tests/t2.js';
@@ -19,6 +19,8 @@ const SCREENS = { t1, t2, t3, t4, t5, t6 };
 
 const root = document.getElementById('app');
 const store = defaultStore();
+// 版を切り替えたとき一度だけ、既定値を変えた項目の保存値を既定値に戻す(2026-10-01 7回目で追加)
+migrateStoredSettings(store);
 let cleanup = null;
 let flash = null; // 次に出すメニューで1回だけ表示する知らせ
 

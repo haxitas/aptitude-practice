@@ -3,7 +3,7 @@ import {
   readResults, readSettingsRaw, saveSettings, appendImportedRecords, clearResults,
 } from './core/storage.js';
 import { DEFAULTS, T6_COLOR_PRESETS } from './core/settings.js';
-import { SETTING_FIELDS, validateTestSettings, resetTestOverrides, inputStep } from './logic/settings-form.js';
+import { SETTING_FIELDS, validateTestSettings, resetTestOverrides, inputStep, withoutDefaults } from './logic/settings-form.js';
 import { makeExportData, parseImportJson, mergeImportedRecords } from './logic/records-transfer.js';
 
 function setNotice(element, text, kind = 'info') {
@@ -161,7 +161,8 @@ export function mount(root, ctx) {
         setNotice(notice, `${test.name}を保存できません。赤字の項目を直してください`, 'error');
         return;
       }
-      const next = { ...saved, [test.id]: { ...(saved[test.id] ?? {}), ...result.value } };
+      // 既定値と違う項目だけを保存する(2026-10-01 7回目で変更)
+      const next = { ...saved, [test.id]: withoutDefaults({ ...(saved[test.id] ?? {}), ...result.value }, DEFAULTS[test.id]) };
       const write = saveSettings(ctx.store, next);
       if (!write.ok) {
         setNotice(notice, write.message, 'error');

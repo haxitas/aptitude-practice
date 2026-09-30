@@ -6,17 +6,40 @@
 
 GitHub Pages はファイルを10分間キャッシュさせるので、公開直後に古いファイルと新しいファイルが混ざることがある。これを防ぐため、index.html の import map で js/ の下のすべてのモジュールを「同じパス + ?v=版番号」に割り当てている(css/style.css にも ?v= を付ける)。
 
-1. index.html の中の版番号(`?v=` の後ろ。例: `20261001-3`)を、新しい値にすべて置き換える。日付と通し番号にする(例: `20261001-4`)。
-   - 例: `sed -i 's/?v=20261001-3/?v=20261001-4/g' index.html`(置き換えたあと `grep -c "?v=20261001-4" index.html` が js/ のファイル数 + 1(css)+ 1(コメント)になること)
+1. index.html の中の版番号(`?v=` の後ろ。例: `20261001-4`)を、新しい値にすべて置き換える。日付と通し番号にする(例: `20261001-5`)。
+   - 例: `sed -i 's/?v=20261001-4/?v=20261001-5/g' index.html`(置き換えたあと `grep -c "?v=20261001-5" index.html` が js/ のファイル数 + 1(css)+ 1(コメント)になること)
 2. js/ の下にファイルを足した・消したときは、index.html の import map も直す。
 3. `node --test` を通す(test/boot.test.js が、js/ の下のすべての .js が import map に載っていること、版番号がすべて同じであることを確かめる)。
 4. commit して push する。
+
+既定値を変えるとき(2026-10-01 7回目で追加):
+- 設定画面で保存した値は既定値より優先されるので、既定値を変えただけでは、以前に保存した端末に届かない。
+- js/core/settings.js の SETTINGS_MIGRATIONS に、次の version(今の最大 + 1)の項目として、既定値を変えたテストと項目名を足す。配色・操縦円の側・制限時間(durationSec)は足さない(利用者が選ぶ値のため)。
+- 起動したとき、その version をまだ済ませていない端末でだけ、その項目の保存値が一度だけ消える(移行のあとで利用者が保存し直した値は消さない)。
+- test/settings-migration.test.js に、その項目が既定値に戻る例を足す。
 
 起動に失敗したとき(モジュールの読み込みエラーなど)は、index.html の見張りの処理が「アプリが更新されました。再読み込みしてください」と再読み込みのボタンを出す。
 
 ## 2026-10-01 保存した設定の扱い・単位変換・トンネルの修正(7回目)
 
 - 6回目はレビューで承認(ブラウザで確認済み)。視点のずれを抑えない、m²→ha・cm²→m² を出さない、円周率の注記を残す、は提案どおりでよいとの回答。
+
+### 保存した設定の扱い(全テスト)
+- 調べた結果(6回目の報告): 設定画面の保存は、そのテストの全項目を当時の値で保存していた(配色のボタンも同じ)。保存値は既定値より優先されるので、既定値を変えても、以前に保存した端末では古い値のままだった。
+- (a) 一度だけの移行: SETTINGS_MIGRATIONS の version 1 に、公開中の版(a849f54)から既定値が変わった項目と、その後の未公開の版で足してから既定値を変えた項目を並べた。起動したとき(js/app.js)に migrateStoredSettings を一度呼び、まだ済ませていなければ、その項目の保存値を消して defaultsVersion = 1 を保存する。
+- 移行で消す項目(version 1、2026-10-01):
+  - t1(計算): speedMin, speedMax, speedHoursMin, speedHoursMax, lapSpeedMin, lapSpeedMax, lapMinutesMin, lapMinutesMax, yearValueMin, yearValueMax, priceMin, priceMax, priceCountMin, priceCountMax, averageMin, averageMax, geometryLengthMin, geometryLengthMax, circleDiameterMin, circleDiameterMax, circleAreaRadiusMin, circleAreaRadiusMax, workWorkersMin, workWorkersMax, workHoursMin, workHoursMax, cylinderDiameterMin, cylinderDiameterMax, cylinderHeightMin, cylinderHeightMax
+  - t2(同一図形): maxConsecutiveMatches
+  - t3(マルチタスク): calcTermCount, shapeLimitMs
+  - t5(点の数): maxDots, shuffleIntervalMs, dotMoveMs, dotRadiusRatio, dotMinDistanceRatio
+  - t6(トンネル): acceleration, recoveryAcceleration, maxSpeed, obstacleSpacing, firstObstacleDistance, collisionPullbackDistance, perspectiveFocal, farZ, holeRadius, bladeOpen1Rate, bladeOpen2Rate, bladeOpen3Rate, centerOpenRadius, barWidth, hitRadius
+  - t4(計器)と共通(判定の表示時間)は、既定値を変えた項目がない。
+  - 残すもの: 各テストの durationSec(t1 は 180 → 300 に変えたが、指示どおり残す)、t6 の配色・操縦円の側。
+  - 洗い出し方: 公開中の版と今の DEFAULTS を比べ、さらに未公開の各 commit の settings.js の DEFAULTS を読み、値が2つ以上ある項目を拾った。
+- (b) 今後の保存: 設定画面の保存と、トンネルの「操縦円: 右 → 左へ」のボタンは、既定値と違う項目だけを保存する(withoutDefaults。配列は中身で比べる)。
+- 単体テスト(test/settings-migration.test.js): 古い保存値(t6 maxSpeed 10・barWidth 0.35・配色 plum/yellow・操縦円 left・制限時間 120、t3 shapeLimitMs 5000)を移行すると、maxSpeed・barWidth・shapeLimitMs は既定値に、配色・操縦円の側・制限時間は残る。移行は1回だけで、あとで保存した値は消さず、2回目は書き込まない。成績には触れない。保存では既定値と同じ項目を保存しない。指示の例の配色 'red' はこのアプリの配色に無いので、'plum'(赤紫)で確かめた。
+- わざと壊す確認: 移行の一覧から maxSpeed を外す(3件失敗)。戻した。
+- 版番号を 20261001-4 に上げた。
 
 ### 計算(テスト1、内部 t1): 桁をずらすだけの単位変換を減らす
 - 1回の単位変換5問のうち、10の累乗だけの換算(isPowerOfTenUnit: 倍率が10の累乗)は unitPowerOfTenMax(2)問までにした。残り3問は 60・24・3.6 を使う換算(時速↔分速、秒速↔時速、時間↔分、分↔秒、日↔時間の10種類)から違うものを選ぶ。5問の順番はランダム(unitRoundOrder)。
