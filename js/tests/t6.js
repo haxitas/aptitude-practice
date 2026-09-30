@@ -4,7 +4,7 @@
 
 import {
   computeTunnelLayout, stickInputAt, stickVectorAt, keyboardInput,
-  projectScale, projectTunnelSection, currentPlaneEdge, radialLineEnds, drawableObstacles, holeCenters,
+  projectScale, projectTunnelSection, currentPlaneEdge, radialLineEnds, drawableObstacles, holeCenters, tunnelWallRings,
   createT6State, stepT6State, buildT6Record,
 } from '../logic/t6.js';
 import { createRng, randomSeed } from '../core/rng.js';
@@ -16,9 +16,17 @@ import { T6_COLOR_OPTIONS } from '../core/settings.js';
 
 const DEG = Math.PI / 180;
 const RADIAL_LINES = 12; // 消失点から手前の縁へ引く放射状の線の本数
-// トンネルの中と、トンネルの外にあたる部分(端に寄ったときに見える所)は同じ暗い色で塗る
-// (2026-09-30 ユーザーの実機の感想で、外側を別の色にしないように変更)
+// 奥の穴(トンネルの先)の暗い色。描く範囲の外(操縦の円のまわり)も同じ色
 const TUNNEL_COLOR = '#07101f';
+// トンネルの壁は、穴と見分けがつくよう少し明るくし、奥へ向かって暗くする(2026-10-01 ユーザーの実機の感想で追加。
+// 以前は壁も穴と同じ色で、端に寄ったとき縁と障害物の間の三日月形がトンネルの外に見えた)
+const WALL_NEAR_RGB = [44, 68, 100];
+const WALL_FAR_RGB = [14, 27, 48];
+
+function wallColor(shade) {
+  const [r, g, b] = WALL_NEAR_RGB.map((v, i) => Math.round(v + (WALL_FAR_RGB[i] - v) * shade));
+  return `rgb(${r}, ${g}, ${b})`;
+}
 
 // 断面の座標(トンネル半径1、y が上)を画面へ
 function toScreen(section, x, y) {
@@ -73,7 +81,8 @@ function drawHalf(ctx, obstacle, section) {
   ctx.stroke();
 }
 
-// 羽根: 開口の間をふさぐ。中心の安全円(centerOpenRadius)は抜く(2026-09-30 本番に合わせて変更)
+// 羽根: 開口の間をふさぐ。中心の安全円(centerOpenRadius)は抜く(2026-09-30 本番に合わせて変更)。
+// 中心の円の縁には枠線を描かない(2026-10-01 ユーザーの実機の感想で変更)
 function drawBlades(ctx, obstacle, section, p) {
   const count = obstacle.openingCount;
   const half = p.bladeOpeningDeg / 2;
@@ -88,7 +97,6 @@ function drawBlades(ctx, obstacle, section, p) {
     strokeRadialEdge(ctx, section, center - half, inner);
     strokeRadialEdge(ctx, section, center + half, inner);
   }
-  strokeCircle(ctx, section.centerX, section.centerY, section.radius * inner);
 }
 
 // 扇形: 90°だけ開き、中心の安全円は抜く(2026-09-30 本番に合わせて変更)
@@ -98,7 +106,6 @@ function drawSector(ctx, obstacle, section, p) {
   fillAnnularSector(ctx, section, obstacle.openCenterDeg + half, obstacle.openCenterDeg + 360 - half, inner);
   strokeRadialEdge(ctx, section, obstacle.openCenterDeg - half, inner);
   strokeRadialEdge(ctx, section, obstacle.openCenterDeg + half, inner);
-  strokeCircle(ctx, section.centerX, section.centerY, section.radius * inner);
 }
 
 function drawHoles(ctx, obstacle, section, p) {
@@ -180,8 +187,17 @@ function drawScene(ctx, layout, state, p) {
   ctx.arc(cx, cy, viewRadius, 0, Math.PI * 2);
   ctx.clip();
 
-  // 機体のいる面のトンネルの縁は、自機の位置の反対側へずらす(2026-09-30 レビュー後の直し)。
-  // 縁の外側も中と同じ暗い色のまま(別の色の領域を見せない)
+  // トンネルの壁: 手前の円から順に塗り重ね、奥へ向かって暗くする。最後の円(farZ)の中は奥の穴
+  // (2026-10-01 ユーザーの実機の感想で追加。最初の円が描く範囲をすべて覆うので、壁でも障害物でも穴でもない所は残らない)
+  const rings = tunnelWallRings(state.position, view, p);
+  rings.forEach((ring, i) => {
+    ctx.fillStyle = i === rings.length - 1 ? TUNNEL_COLOR : wallColor(i / (rings.length - 2));
+    ctx.beginPath();
+    ctx.arc(ring.centerX, ring.centerY, ring.radius, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  // 機体のいる面のトンネルの縁は、自機の位置の反対側へずらす(2026-09-30 レビュー後の直し)
   const edge = currentPlaneEdge(state.position, view, p);
 
   // 放射状の線: 奥の消失点(画面の中心)から、ずらした縁へ引く

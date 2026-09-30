@@ -11,7 +11,7 @@ import {
   createObstacle, createInitialObstacles, advanceObstacle, recycleObstacles, drawableObstacles,
   crossedAircraftPlane, isHalfOpeningSafe, isBladeOpeningSafe, isObstacleSafe,
   isSectorOpeningSafe, holeCenters, isHoleOpeningSafe, isBarSafe, isAircraftSafe,
-  createT6State, stepT6State, summarizeT6, buildT6Record,
+  createT6State, stepT6State, summarizeT6, buildT6Record, tunnelWallRings,
 } from '../js/logic/t6.js';
 
 const P = DEFAULTS.t6;
@@ -38,13 +38,13 @@ test('T6 の既定値は承認済みの数値', () => {
     bladeOpen2Rate: 0.4,
     bladeOpen3Rate: 0.2,
     centerOpenRadius: 0.2,
-    barWidth: 0.35,
+    barWidth: 0.7,
     bladeInitialAngularSpeedDegSec: 30,
     bladeAngularAccelerationDegSec2: 0.15,
     collisionPushMs: 350,
     collisionPullbackDistance: 2,
     aircraftMaxRadius: 0.86,
-    hitRadius: 0.06,
+    hitRadius: 0.08,
     canvasMarginPx: 8,
     stickRadiusRatio: 0.14,
     stickMinRadiusPx: 60,
@@ -52,11 +52,13 @@ test('T6 の既定値は承認済みの数値', () => {
     tunnelMinRadiusRatio: 0.3,
     stickSide: 'right',
     stallAbortMs: 1000,
-    perspectiveFocal: 2,
+    perspectiveFocal: 2.6,
+    wallRingCount: 28,
     collisionZ: 1,
     farZ: 32,
     sectorOpeningDeg: 90,
     holeSlotCount: 4,
+    holeThreeSlotCount: 3,
     holeOpenCounts: [1, 2, 3],
     holeRotationRate: 0.5,
     holeRingRadius: 0.6,
@@ -249,7 +251,7 @@ test('今いる面の縁: 自機の位置の反対側へずれ、壁の近くに
   // 画面の中心(自機)から縁までの距離 = 焦点距離 × 半径 × (1 − 自機の半径)
   const gap = atWall.radius - Math.hypot(atWall.centerX - view.centerX, atWall.centerY - view.centerY);
   approx(gap, 200 * f * (1 - P.aircraftMaxRadius));
-  assert.ok(gap < 200 * 0.3);
+  assert.ok(gap < 200 * 0.5, '縁は画面の半径の半分より中心の近くまで来る');
   const up = currentPlaneEdge({ x: 0, y: 0.5 }, view, P);
   approx(up.centerY, 300 + 0.5 * 200 * f, 1e-9); // 上にいると縁は下へずれる
   assert.deepEqual(currentPlaneEdge({ x: 0.3, y: -0.2 }, view, P), projectTunnelSection({ x: 0.3, y: -0.2 }, P.collisionZ, view, P));
@@ -264,6 +266,37 @@ test('放射状の線は、奥の消失点(画面の中心)から、ずらした
   for (const line of lines) {
     assert.deepEqual(line.from, { x: 400, y: 300 });
     approx(Math.hypot(line.to.x - edge.centerX, line.to.y - edge.centerY), edge.radius);
+  }
+});
+
+// ---- トンネルの壁(2026-10-01 ユーザーの実機の感想で追加) ----
+
+test('トンネルの壁: 手前から奥へ入れ子の円(各奥行きの断面)で、最初の円は描く範囲を覆い、最後は farZ。奥ほど暗い', () => {
+  const view = { centerX: 400, centerY: 300, radius: 200 };
+  const covers = (outer, inner) => Math.hypot(outer.centerX - inner.centerX, outer.centerY - inner.centerY) + inner.radius <= outer.radius + 1e-9;
+  const positions = [{ x: 0, y: 0 }, { x: P.aircraftMaxRadius, y: 0 }, { x: 0, y: -P.aircraftMaxRadius },
+    { x: P.aircraftMaxRadius * Math.SQRT1_2, y: P.aircraftMaxRadius * Math.SQRT1_2 }, { x: -0.4, y: 0.3 }];
+  for (const position of positions) {
+    const rings = tunnelWallRings(position, view, P);
+    assert.equal(rings.length, P.wallRingCount);
+    // 最初の円は、描く範囲(view の円)をすべて覆う → 壁でも障害物でも穴でもない所が残らない
+    assert.ok(covers(rings[0], view), JSON.stringify(position));
+    for (let i = 1; i < rings.length; i++) {
+      assert.ok(rings[i].z > rings[i - 1].z);
+      assert.ok(covers(rings[i - 1], rings[i]), `${i}: 奥の円は手前の円の中`);
+      assert.ok(rings[i].shade > rings[i - 1].shade, '奥ほど暗い');
+    }
+    assert.equal(rings[0].shade, 0);
+    assert.equal(rings.at(-1).shade, 1);
+    assert.equal(rings.at(-1).z, P.farZ, '最後の円(奥の穴)は farZ');
+    for (const ring of rings) {
+      const section = projectTunnelSection(position, ring.z, view, P);
+      approx(ring.centerX, section.centerX);
+      approx(ring.centerY, section.centerY);
+      approx(ring.radius, section.radius);
+    }
+    // 機体のいる面の縁より手前の壁も描く(端に寄ったとき、縁の外に見える所)
+    assert.ok(rings[0].z < P.collisionZ);
   }
 });
 
@@ -393,9 +426,9 @@ test('扇形は両方向に回転し、0°/360°をまたぎ、以前安全な�
 });
 
 test('小穴は穴の中だけ安全で、縁・外・穴にしていない位置は衝突', () => {
-  const obstacle = { type: 'holes', openSlots: [0, 2, 3], rotationDeg: 0 };
+  const obstacle = { type: 'holes', openSlots: [0, 2], rotationDeg: 0 };
   const centers = holeCenters(obstacle, P);
-  assert.equal(centers.length, 3);
+  assert.equal(centers.length, 2);
   const open = centers[0];
   assert.equal(isHoleOpeningSafe(open, obstacle, P), true);
   assert.equal(isHoleOpeningSafe({ x: open.x + P.holeRadius, y: open.y }, obstacle, P), false);
@@ -408,16 +441,19 @@ test('小穴は穴の中だけ安全で、縁・外・穴にしていない位�
   assert.equal(isHoleOpeningSafe(closed, obstacle, P), false);
 });
 
-test('小穴の初期中心は上下左右だけ、穴は重ならず円内に収まる', () => {
+test('小穴の初期中心: 1つ・2つ空きは上下左右の4か所から、3つ空きは120°ずつ(1つは上下左右のどれか)。穴は重ならず円内に収まる', () => {
   for (let seed = 1; seed <= 1000; seed++) {
     const obstacle = createObstacle(createRng(seed), 6, seed, P);
     if (obstacle.type !== 'holes') continue;
     assert.equal(new Set(obstacle.openSlots).size, obstacle.openSlots.length, `seed=${seed}`);
-    assert.ok(obstacle.openSlots.every(slot => Number.isInteger(slot) && slot >= 0 && slot < 4));
+    const three = obstacle.openSlots.length === 3;
+    const slotCount = three ? P.holeThreeSlotCount : P.holeSlotCount;
+    assert.ok(obstacle.openSlots.every(slot => Number.isInteger(slot) && slot >= 0 && slot < slotCount));
+    assert.ok([0, 90, 180, 270].includes(obstacle.rotationDeg), `seed=${seed}: ${obstacle.rotationDeg}`);
     const centers = holeCenters(obstacle, P);
-    for (const center of centers) {
+    for (const [i, center] of centers.entries()) {
       approx(Math.hypot(center.x, center.y), P.holeRingRadius);
-      assert.ok(Math.abs(center.x) < 1e-9 || Math.abs(center.y) < 1e-9, `seed=${seed}`);
+      if (!three || i === 0) assert.ok(Math.abs(center.x) < 1e-9 || Math.abs(center.y) < 1e-9, `seed=${seed}`);
       assert.ok(Math.hypot(center.x, center.y) + P.holeRadius <= 1);
     }
     for (let i = 0; i < centers.length; i++) for (let j = i + 1; j < centers.length; j++) {
@@ -441,6 +477,53 @@ test('小穴の開口数1〜3は均等に出て、回転するのは3穴だけ(1
   for (const n of [1, 2, 3]) assert.ok(Math.abs(counts.get(n) - total / 3) < total * 0.1, `${n}: ${counts.get(n)}/${total}`);
   const three = threeModes.static + threeModes.rotating;
   assert.ok(Math.abs(threeModes.rotating / three - P.holeRotationRate) < 0.1, JSON.stringify(threeModes));
+});
+
+// ---- 3つ空きの小穴は120°ずつ(2026-10-01 ユーザーの実機の感想で変更) ----
+
+test('小穴: 3つ空きのときは、穴を120°ずつの3等分の位置に置く(1つ・2つのときは今の4か所)', () => {
+  const angle = c => normalizeAngleDeg(Math.atan2(c.y, c.x) * 180 / Math.PI);
+  for (const rotationDeg of [0, 90, 180, 270]) {
+    const three = { type: 'holes', openSlots: [0, 1, 2], rotationDeg, rotationDirection: 0 };
+    const angles = holeCenters(three, P).map(angle);
+    assert.equal(angles.length, 3);
+    for (let i = 0; i < 3; i++) approx(angularDistanceDeg(angles[i], rotationDeg + i * 120), 0, 1e-9);
+    for (let i = 0; i < 3; i++) approx(angularDistanceDeg(angles[i], angles[(i + 1) % 3]), 120, 1e-9);
+  }
+  // 1つ・2つのときは今までどおり90°ずつの4か所
+  const two = { type: 'holes', openSlots: [1, 3], rotationDeg: 0, rotationDirection: 0 };
+  assert.deepEqual(holeCenters(two, P).map(c => Math.round(angle(c))), [90, 270]);
+  const one = { type: 'holes', openSlots: [2], rotationDeg: 0, rotationDirection: 0 };
+  assert.deepEqual(holeCenters(one, P).map(c => Math.round(angle(c))), [180]);
+  // 生成した3つ空きも120°ずつ
+  let found = 0;
+  for (let seed = 1; seed <= 3000; seed++) {
+    const o = createObstacle(createRng(seed), 6, seed, P);
+    if (o.type !== 'holes' || o.openSlots.length !== 3) continue;
+    found++;
+    assert.deepEqual([...o.openSlots].sort(), [0, 1, 2], `seed=${seed}`);
+    const a = holeCenters(o, P).map(angle);
+    for (let i = 0; i < 3; i++) approx(angularDistanceDeg(a[i], a[(i + 1) % 3]), 120, 1e-9);
+  }
+  assert.ok(found > 50, `${found}`);
+});
+
+test('小穴: 3つ空きの当たり判定も120°ずつの位置。穴と穴の間(60°ずれた所)は衝突', () => {
+  const at = deg => ({ x: Math.cos(deg * Math.PI / 180) * P.holeRingRadius, y: Math.sin(deg * Math.PI / 180) * P.holeRingRadius });
+  const three = { type: 'holes', openSlots: [0, 1, 2], rotationDeg: 90, rotationDirection: 0 };
+  for (const deg of [90, 210, 330]) {
+    assert.equal(isHoleOpeningSafe(at(deg), three, P), true, `${deg}°`);
+    assert.equal(isAircraftSafe(three, at(deg), P), true, `${deg}° 当たり判定の円も収まる`);
+  }
+  for (const deg of [30, 150, 270]) {
+    assert.equal(isHoleOpeningSafe(at(deg), three, P), false, `${deg}° は穴ではない`);
+    assert.equal(isAircraftSafe(three, at(deg), P), false);
+  }
+});
+
+test('小穴: 3つ空きは隣の穴と重ならない(120°ずつの弦 > 穴の直径)', () => {
+  const chord = 2 * P.holeRingRadius * Math.sin(Math.PI / P.holeThreeSlotCount);
+  assert.ok(2 * P.holeRadius < chord);
 });
 
 test('小穴の半径0.38は、隣の穴と重ならず、トンネルの内側に収まる', () => {
@@ -536,6 +619,15 @@ test('回転する長方形(反転): 中心を通る幅 barWidth の帯の中だ
   assert.equal(isBarSafe({ x: 0, y: 0.6 }, 90, P), true);
   assert.equal(isBarSafe({ x: 0.6, y: 0 }, 90, P), false);
   assert.equal(isObstacleSafe({ type: 'bar', rotationDeg: 90 }, { x: 0, y: 0.6 }, P), true);
+});
+
+test('回転する長方形の帯の幅は0.7(2026-10-01 ユーザーの実機の感想で 0.35 → 0.7)。当たり判定の円を含めて帯に収まれば通れる', () => {
+  assert.equal(P.barWidth, 0.7);
+  assert.equal(isBarSafe({ x: 0.3, y: 0.34 }, 0, P), true);
+  assert.equal(isBarSafe({ x: 0.3, y: 0.36 }, 0, P), false);
+  const bar = { type: 'bar', rotationDeg: 0 };
+  assert.equal(isAircraftSafe(bar, { x: 0.3, y: 0.35 - P.hitRadius - 0.01 }, P), true);
+  assert.equal(isAircraftSafe(bar, { x: 0.3, y: 0.35 - P.hitRadius + 0.01 }, P), false);
 });
 
 test('回転する長方形: 羽根と同じ速さで回り、回転後は以前安全だった位置がふさがる', () => {
@@ -708,6 +800,14 @@ test('当たり判定: 自機は半径 hitRadius の円で、縁だけ塞がっ�
   assert.equal(isObstacleSafe(blades, at, P), true);
   assert.equal(isAircraftSafe(blades, at, P), false);
   assert.equal(isAircraftSafe(blades, { x: r, y: 0 }, P), true);
+});
+
+test('当たり判定の半径は0.08(2026-10-01 ユーザーの実機の感想で 0.06 → 0.08)', () => {
+  assert.equal(P.hitRadius, 0.08);
+  const half = { type: 'half', blockedSide: 'down' };
+  assert.equal(isAircraftSafe(half, { x: 0, y: 0.07 }, P), false, '0.06 なら通れた位置でも、0.08 の円は塞がった所にかかる');
+  assert.equal(isAircraftSafe(half, { x: 0, y: 0.07 }, { ...P, hitRadius: 0.06 }), true);
+  assert.equal(isAircraftSafe(half, { x: 0, y: 0.09 }, P), true);
 });
 
 test('当たり判定の円は状態を進めるときにも使う(縁がかかったら衝突に数える)', () => {

@@ -114,6 +114,10 @@ test('T6の小穴は4方位固定で、開口数候補と回転確率を検証�
   assert.equal(validateTestSettings('t6', raw('t6', { holeSlotCount: 8 }), DEFAULTS.t6).ok, false);
   const legacy = resolveSettings({ t6: { holeSlotCount: 8, holeOpenCount: 3 } });
   assert.equal(legacy.settings.t6.holeSlotCount, 4);
+  // 3つ空きだけ使う120°ずつの配置も固定(保存値で変えられない。2026-10-01 追加)
+  const three = resolveSettings({ t6: { holeThreeSlotCount: 4 } });
+  assert.equal(three.settings.t6.holeThreeSlotCount, 3);
+  assert.ok(three.warnings.includes('t6.holeThreeSlotCount'));
   assert.deepEqual(legacy.settings.t6.holeOpenCounts, [1, 2, 3]);
   assert.deepEqual(resolveSettings({}).warnings, []);
 });

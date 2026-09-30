@@ -145,6 +145,19 @@ export function projectTunnelSection(position, z, view, p) {
   };
 }
 
+// トンネルの壁(2026-10-01 ユーザーの実機の感想で追加): 手前から奥へ、各奥行きの断面の円を wallRingCount 個。
+// 手前の円から順に塗り重ねると、円と円の間の帯がその奥行きの壁になる(奥の円は必ず手前の円の中に入る)。
+// 最初の円は、自機が動ける範囲の端にいても描く範囲(view)をすべて覆う奥行き(焦点距離 × (1 − aircraftMaxRadius))、
+// 最後の円は farZ(その中は奥の穴)。shade は 0(手前)〜 1(奥)。
+export function tunnelWallRings(position, view, p) {
+  const nearZ = p.perspectiveFocal * (1 - p.aircraftMaxRadius);
+  const n = p.wallRingCount;
+  return Array.from({ length: n }, (_, i) => {
+    const z = i === n - 1 ? p.farZ : nearZ * (p.farZ / nearZ) ** (i / (n - 1));
+    return { ...projectTunnelSection(position, z, view, p), z, shade: i / (n - 1) };
+  });
+}
+
 // 機体のいる面(collisionZ)のトンネルの縁。自機の位置の反対側へずれ、壁の近くにいれば縁が画面の中心の近くまで来る
 // (2026-09-30 レビュー後の直し)
 export function currentPlaneEdge(position, view, p) {
@@ -195,9 +208,12 @@ export function isSectorOpeningSafe(position, openCenterDeg, p) {
   return angularDistanceDeg(angleDeg, openCenterDeg) < p.sectorOpeningDeg / 2 - ANGLE_EPSILON_DEG;
 }
 
+// 穴の位置: 1つ・2つ空きは90°ずつの4か所(holeSlotCount)、3つ空きは120°ずつの3か所(holeThreeSlotCount)。
+// (2026-10-01 ユーザーの実機の感想で、3つ空きを120°ずつに変更)
 export function holeCenters(obstacle, p) {
+  const slotCount = obstacle.openSlots.length === 3 ? p.holeThreeSlotCount : p.holeSlotCount;
   return obstacle.openSlots.map(slot => {
-    const angle = slot * 360 / p.holeSlotCount + (obstacle.rotationDeg ?? 0);
+    const angle = slot * 360 / slotCount + (obstacle.rotationDeg ?? 0);
     const rad = angle * Math.PI / 180;
     return { x: Math.cos(rad) * p.holeRingRadius, y: Math.sin(rad) * p.holeRingRadius };
   });
@@ -301,15 +317,20 @@ export function createObstacle(rng, z, id, p) {
   if (typeIndex === 4) {
     return { id, type: 'bar', z, rotationDeg: rng() * 180, rotationDirection: rng() < 0.5 ? -1 : 1 };
   }
+  const openCount = p.holeOpenCounts[Math.floor(rng() * p.holeOpenCounts.length)];
+  if (openCount === 3) {
+    // 3つ空きは120°ずつの3か所すべて。1つが上下左右のどれかに来るよう、向きを90°ずつから選ぶ
+    const rotationDeg = 90 * Math.floor(rng() * 4);
+    // 回転するのは3穴だけ(確率 holeRotationRate)。1穴・2穴は回転しない(2026-09-30 本番に合わせて変更)
+    const rotationDirection = rng() >= p.holeRotationRate ? 0 : (rng() < 0.5 ? -1 : 1);
+    return { id, type: 'holes', z, openSlots: Array.from({ length: p.holeThreeSlotCount }, (_, i) => i), rotationDeg, rotationDirection };
+  }
   const slots = Array.from({ length: p.holeSlotCount }, (_, i) => i);
   for (let i = slots.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1));
     [slots[i], slots[j]] = [slots[j], slots[i]];
   }
-  const openCount = p.holeOpenCounts[Math.floor(rng() * p.holeOpenCounts.length)];
-  // 回転するのは3穴だけ(確率 holeRotationRate)。1穴・2穴は回転しない(2026-09-30 本番に合わせて変更)
-  const rotationDirection = openCount !== 3 || rng() >= p.holeRotationRate ? 0 : (rng() < 0.5 ? -1 : 1);
-  return { id, type: 'holes', z, openSlots: slots.slice(0, openCount), rotationDeg: 0, rotationDirection };
+  return { id, type: 'holes', z, openSlots: slots.slice(0, openCount), rotationDeg: 0, rotationDirection: 0 };
 }
 
 export function createInitialObstacles(rng, p) {

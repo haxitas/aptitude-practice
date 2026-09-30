@@ -180,13 +180,13 @@ export const DEFAULTS = Object.freeze({
     bladeOpen2Rate: 0.4,
     bladeOpen3Rate: 0.2,
     centerOpenRadius: 0.2, // 羽根と扇形は、中心からこの半径の円の中を通れる(2026-09-30 本番に合わせて追加)
-    barWidth: 0.35, // 回転する長方形の帯の幅(2026-09-30 本番に合わせて追加)
+    barWidth: 0.7, // 回転する長方形の帯の幅(2026-09-30 本番に合わせて追加。2026-10-01 ユーザーの実機の感想で 0.35 → 0.7)
     bladeInitialAngularSpeedDegSec: 30,
     bladeAngularAccelerationDegSec2: 0.15,
     collisionPushMs: 350, // 衝突したときの巻き戻しにかける時間
     collisionPullbackDistance: 2, // 衝突したときに進行を巻き戻す距離(2026-09-27 ユーザーの判断で横の押し戻しから変更。2026-09-30 速さが上がるので 0.5 → 2)
     aircraftMaxRadius: 0.86,
-    hitRadius: 0.06, // 当たり判定の円の半径(2026-09-30 ユーザーの実機の感想で追加)
+    hitRadius: 0.08, // 当たり判定の円の半径(2026-09-30 ユーザーの実機の感想で追加。2026-10-01 同じく 0.06 → 0.08)
     canvasMarginPx: 8,
     stickRadiusRatio: 0.14,
     stickMinRadiusPx: 60,
@@ -194,11 +194,13 @@ export const DEFAULTS = Object.freeze({
     tunnelMinRadiusRatio: 0.3,
     stickSide: 'right',
     stallAbortMs: 1000,
-    perspectiveFocal: 2, // 焦点距離。大きいほど視野が狭く、トンネルの中に入っている感じになる(2026-09-30 画面で見て 1 → 2)
+    perspectiveFocal: 2.6, // 焦点距離。大きいほど視野が狭く、トンネルの中に入っている感じになる(2026-09-30 画面で見て 1 → 2、2026-10-01 2 → 2.6)
+    wallRingCount: 28, // トンネルの壁を奥へ向かって暗く塗る段の数(最後の段は奥の穴。2026-10-01 ユーザーの実機の感想で追加)
     collisionZ: 1,
     farZ: 32, // 奥まで見えるよう 12 → 32(2026-09-30 本番に合わせて変更)
     sectorOpeningDeg: 90,
     holeSlotCount: 4,
+    holeThreeSlotCount: 3, // 3つ空きのときだけ、穴を120°ずつに置く(2026-10-01 ユーザーの実機の感想で追加。固定)
     holeOpenCounts: Object.freeze([1, 2, 3]),
     holeRotationRate: 0.5,
     holeRingRadius: 0.6,
@@ -239,7 +241,7 @@ export function resolveSettings(saved) {
     const out = {};
     for (const [key, def] of Object.entries(defs)) {
       if (key in src) {
-        if (testId === 't6' && key === 'holeSlotCount' && src[key] !== 4) {
+        if (testId === 't6' && ((key === 'holeSlotCount' && src[key] !== 4) || (key === 'holeThreeSlotCount' && src[key] !== 3))) {
           out[key] = def;
           warnings.push(`${testId}.${key}`);
         } else if (testId === 't6' && (key === 'obstacleColor' || key === 'obstacleEdgeColor')
