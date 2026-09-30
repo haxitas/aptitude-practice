@@ -42,5 +42,16 @@ test('開始画面の余白タップの処理中に最初のspeakを呼ぶ(縦�
   assert.equal(calls[0].insideTap, true);
   assert.ok(calls[0].word.length > 0);
   assert.equal(listeners.has('click'), false, '本番では開始リスナーを解除');
+  // 2026-09-30 ユーザーの実機の感想で変更: 残り時間の棒は ◀ ▶ の下、スキップは「重複あり」「重複なし」の下の段
+  const html = root.innerHTML;
+  const at = text => html.indexOf(text);
+  assert.ok(at('class="t3-dir-buttons"') >= 0 && at('class="t3-shape-timer"') > at('class="t3-dir-buttons"'), '残り時間の棒は ◀ ▶ の下');
+  assert.match(html, /class="t3-shape-timer"[^>]*role="progressbar"/);
+  assert.match(html, /<div class="t3-shape-timer-fill" data-ref="shapeTimerFill"><\/div>/);
+  const dup = at('data-dup="no"');
+  const skip = at('data-ref="skip"');
+  assert.ok(dup >= 0 && skip > dup, 'スキップは重複ボタンの後');
+  const between = html.slice(dup, skip);
+  assert.match(between, /<\/div>\s*<div class="t3-skip-row">/, 'スキップは重複ボタンとは別の段(下)');
   cleanup();
 });

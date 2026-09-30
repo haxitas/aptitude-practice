@@ -5,7 +5,7 @@ import {
   pickVoice, generateShapeProblem, judgeShape, generateCalcProblem, judgeCalc, formatCalc,
   generateAudioSet, createAudioState, startAudioSet, stepAudio, audioEnded, answerAudio,
   createT3Tally, recordAnswer, recordUnanswered, buildT3Record,
-  shapeTimedOut, recordShapeUnanswered, skipAudio, recordSkip,
+  shapeTimedOut, shapeRemainingRatio, recordShapeUnanswered, skipAudio, recordSkip,
   t3ShapeFeedback, t3ShapeTimeoutFeedback, t3CalcFeedback, t3AudioFeedback,
 } from '../logic/t3.js';
 import { createFeedbackSlot, feedbackSlotHtml } from '../core/feedback.js';
@@ -127,6 +127,9 @@ export function mount(root, ctx) {
               <button class="t3-btn" type="button" data-dir="left" aria-label="左向き">◀</button>
               <button class="t3-btn" type="button" data-dir="right" aria-label="右向き">▶</button>
             </div>
+            <div class="t3-shape-timer" role="progressbar" aria-label="図形の残り時間" aria-valuemin="0" aria-valuemax="100" data-ref="shapeTimer">
+              <div class="t3-shape-timer-fill" data-ref="shapeTimerFill"></div>
+            </div>
             ${feedbackSlotHtml('shapeFeedback')}
           </div>
           <div class="t3-panel t3-calc-task">
@@ -142,6 +145,8 @@ export function mount(root, ctx) {
             <div class="t3-audio-buttons">
               <button class="t3-btn" type="button" data-dup="yes" disabled>重複あり</button>
               <button class="t3-btn" type="button" data-dup="no" disabled>重複なし</button>
+            </div>
+            <div class="t3-skip-row">
               <button class="t3-btn t3-skip" type="button" data-ref="skip" disabled>スキップ</button>
             </div>
             ${feedbackSlotHtml('audioFeedback')}
@@ -154,6 +159,14 @@ export function mount(root, ctx) {
     const exprEl = $('expr');
     const calcBtns = [...root.querySelectorAll('[data-calc]')];
     const skipBtn = $('skip');
+    const shapeTimer = $('shapeTimer');
+    const shapeTimerFill = $('shapeTimerFill');
+    // 残り時間の棒(縦長。時間とともに下へ縮む)
+    function drawShapeTimer(ts) {
+      const ratio = shapeRemainingRatio(shapeShownAt, ts, params);
+      if (shapeTimerFill.style) shapeTimerFill.style.transform = `scaleY(${ratio})`;
+      shapeTimer.setAttribute?.('aria-valuenow', String(Math.round(ratio * 100)));
+    }
     const dirBtns = [...root.querySelectorAll('[data-dir]')];
     const dupBtns = [...root.querySelectorAll('[data-dup]')];
     const audioStatus = $('audioStatus');
@@ -299,6 +312,7 @@ export function mount(root, ctx) {
         shapeFeedback.show(t3ShapeTimeoutFeedback(shapeQ), ts);
         nextShape(ts);
       }
+      drawShapeTimer(ts);
       runAudio(ts);
       for (const f of [shapeFeedback, calcFeedback, audioFeedback]) f?.tick(ts);
       for (const [btn, t] of pale) {

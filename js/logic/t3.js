@@ -79,6 +79,11 @@ export function shapeTimedOut(shownAt, now, p) {
   return now - shownAt >= p.shapeLimitMs;
 }
 
+// 残り時間の割合(1 → 0)。◀ ▶ の下の棒の長さに使う(2026-09-30 ユーザーの実機の感想で追加)
+export function shapeRemainingRatio(shownAt, now, p) {
+  return Math.min(1, Math.max(0, 1 - (now - shownAt) / p.shapeLimitMs));
+}
+
 // ---- 計算問題 ----
 
 // 2026-09-30 本番に合わせて変更: 左辺は calcTermCount(5)個の数の足し算・引き算、右辺に答えを表示し、

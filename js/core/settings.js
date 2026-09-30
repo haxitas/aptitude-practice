@@ -112,7 +112,7 @@ export const DEFAULTS = Object.freeze({
     calcSubtractRate: 0.5, // 引き算を選べるときに選ぶ確率
     calcShowCorrectRate: 0.5, // 右辺に正しい値を出す確率(2026-09-30 本番に合わせて4択から変更)
     calcWrongOffsetMax: 3, // 右辺が誤りのときは正しい値に ±1〜この値を足す
-    shapeLimitMs: 5000, // 図形の1問ごとの制限時間。過ぎたら未回答(2026-09-30 本番に合わせて追加)
+    shapeLimitMs: 7000, // 図形の1問ごとの制限時間。過ぎたら未回答(2026-09-30 本番に合わせて追加。ユーザーの実機の感想で 5000 → 7000)
     speechWordCount: 5,
     speechGapMs: 500, // 前の語を読み終えてから次の語まで
     speechRate: 0.9,

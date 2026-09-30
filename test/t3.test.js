@@ -9,7 +9,7 @@ import {
   generateAudioSet,
   createAudioState, startAudioSet, stepAudio, audioEnded, answerAudio,
   createT3Tally, recordAnswer, recordUnanswered, summarizeT3, buildT3Record,
-  shapeTimedOut, recordShapeUnanswered, skipAudio, recordSkip,
+  shapeTimedOut, shapeRemainingRatio, recordShapeUnanswered, skipAudio, recordSkip,
 } from '../js/logic/t3.js';
 import { t3ShapeFeedback, t3ShapeTimeoutFeedback, t3CalcFeedback, t3AudioFeedback } from '../js/logic/t3.js';
 
@@ -28,7 +28,7 @@ test('T3 の既定値: SPEC §6 の数値と承認済みの追加分', () => {
   assert.equal('calcDistractorOffsets' in P, false); // 4択をやめたため
   assert.equal(P.calcShowCorrectRate, 0.5);
   assert.equal(P.calcWrongOffsetMax, 3);
-  assert.equal(P.shapeLimitMs, 5000);
+  assert.equal(P.shapeLimitMs, 7000); // 2026-09-30 ユーザーの実機の感想で 5000 → 7000
   assert.equal(P.speechWordCount, 5);
   assert.equal(P.speechGapMs, 500);
   assert.equal('speechIntervalMs' in P, false);
@@ -194,7 +194,15 @@ test('計算: 「正しい」「誤り」の判定は、右辺が正しいかど
 
 // ---- 図形の制限時間(2026-09-30 本番に合わせて追加) ----
 
-test('図形: 1問ごとに shapeLimitMs(5秒)の制限時間。過ぎたら未回答に数える', () => {
+test('図形: 残り時間の割合は、表示した直後が1、半分で0.5、制限時間で0(それ以降も0)', () => {
+  assert.equal(shapeRemainingRatio(1000, 1000, P), 1);
+  assert.equal(shapeRemainingRatio(1000, 1000 + P.shapeLimitMs / 2, P), 0.5);
+  assert.equal(shapeRemainingRatio(1000, 1000 + P.shapeLimitMs, P), 0);
+  assert.equal(shapeRemainingRatio(1000, 1000 + P.shapeLimitMs * 3, P), 0);
+  assert.equal(shapeRemainingRatio(1000, 900, P), 1);
+});
+
+test('図形: 1問ごとに shapeLimitMs(7秒)の制限時間。過ぎたら未回答に数える', () => {
   assert.equal(shapeTimedOut(1000, 1000 + P.shapeLimitMs - 1, P), false);
   assert.equal(shapeTimedOut(1000, 1000 + P.shapeLimitMs, P), true);
   const t = recordShapeUnanswered(createT3Tally());
