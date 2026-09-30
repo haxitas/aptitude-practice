@@ -16,14 +16,13 @@ export const SETTING_FIELDS = Object.freeze({
       { value: 'true', label: '表示する', parsed: true },
       { value: 'false', label: '表示しない', parsed: false },
     ] },
-    // 2026-09-30 本番の記憶で変更: 1回15問(単位変換5 → 割合5 → 計算5)。数値は小数を含む有効数字3〜4桁
+    // 2026-09-30 本番の記憶で変更: 1回15問(単位変換5 → 割合5 → 計算5)。
+    // 2026-10-01 問題文の数値は整数だけ(単位変換の量の範囲は2〜4桁で固定したので項目を消した)
     number('questionsPerCategory', '分野ごとの問題数', 1, 20, { integer: true, unit: '問', hint: '単位変換・割合・計算の順に出す' }),
-    number('unitValueMin', '単位変換の量の最小値', 1, 100, { integer: true }),
-    number('unitValueMax', '単位変換の量の最大値', 1, 100, { integer: true }),
-    number('speedMin', '速さの最小値', 1, 100, { integer: true, unit: 'km/h' }),
-    number('speedMax', '速さの最大値', 1, 100, { integer: true, unit: 'km/h' }),
-    number('lapSpeedMin', '周回問題の速さ最小', 1, 100, { integer: true, unit: 'km/h' }),
-    number('lapSpeedMax', '周回問題の速さ最大', 1, 100, { integer: true, unit: 'km/h' }),
+    number('speedMin', '速さの最小値', 10, 99, { integer: true, unit: 'km/h' }),
+    number('speedMax', '速さの最大値', 10, 99, { integer: true, unit: 'km/h' }),
+    number('lapSpeedMin', '周回問題の速さ最小', 10, 400, { integer: true, unit: 'm/分' }),
+    number('lapSpeedMax', '周回問題の速さ最大', 10, 400, { integer: true, unit: 'm/分' }),
     number('percentBaseMin', '割合のもとの数の最小値', 11, 99999, { integer: true }),
     number('percentBaseMax', '割合のもとの数の最大値', 11, 99999, { integer: true }),
     number('percentMin', '割合の率の最小値', 1, 99, { integer: true, unit: '%' }),
@@ -32,8 +31,8 @@ export const SETTING_FIELDS = Object.freeze({
     number('priceMax', '単価の最大値', 11, 9999, { integer: true, unit: '円' }),
     number('priceCountMin', '商品の最小個数', 11, 999, { integer: true }),
     number('priceCountMax', '商品の最大個数', 11, 999, { integer: true }),
-    number('averageMin', '平均問題の最小値', 1, 1000, { integer: true }),
-    number('averageMax', '平均問題の最大値', 1, 1000, { integer: true }),
+    number('averageMin', '平均問題の最小値', 10, 999, { integer: true }),
+    number('averageMax', '平均問題の最大値', 10, 999, { integer: true }),
     number('clockStartHourMin', '経過時間の開始時(最小)', 0, 20, { integer: true }),
     number('clockStartHourMax', '経過時間の開始時(最大)', 0, 20, { integer: true }),
     number('elapsedMinutesMin', '経過時間の最小値', 1, 600, { integer: true, unit: '分' }),
@@ -169,7 +168,7 @@ export function validateTestSettings(testId, raw, defaults) {
   if (Object.keys(errors).length) return { ok: false, value, errors };
 
   if (testId === 't1') {
-    for (const pair of [['unitValueMin', 'unitValueMax'], ['speedMin', 'speedMax'], ['lapSpeedMin', 'lapSpeedMax'], ['percentBaseMin', 'percentBaseMax'], ['percentMin', 'percentMax']]) minMax(errors, value, ...pair);
+    for (const pair of [['speedMin', 'speedMax'], ['lapSpeedMin', 'lapSpeedMax'], ['percentBaseMin', 'percentBaseMax'], ['percentMin', 'percentMax']]) minMax(errors, value, ...pair);
     for (const pair of [['priceMin', 'priceMax'], ['priceCountMin', 'priceCountMax'], ['averageMin', 'averageMax'], ['clockStartHourMin', 'clockStartHourMax'], ['elapsedMinutesMin', 'elapsedMinutesMax']]) minMax(errors, value, ...pair);
     if (value.averageMax - value.averageMin < 2) errors.averageMax = '平均を作るため、最小値より2以上大きくしてください';
     if (value.lapSpeedMax - value.lapSpeedMin < 1) errors.lapSpeedMax = 'ふたりの速さに差を付けるため、最小値より1以上大きくしてください';
