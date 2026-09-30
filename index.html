@@ -5,11 +5,83 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="light dark">
   <title>適性検査 練習</title>
-  <link rel="stylesheet" href="./css/style.css">
+  <!--
+    版番号: ?v=20260930-4
+    公開のたびに、この文書の中の ?v= をすべて同じ新しい値に変える(PHASE_NOTES の「公開の手順」)。
+    GitHub Pages はファイルを10分間キャッシュさせるので、版番号を付けて古いファイルと新しいファイルが混ざらないようにする。
+    js/ の下にファイルを足したら、下の import map にも書く(単体テスト test/boot.test.js が確かめる)。
+  -->
+  <link rel="stylesheet" href="./css/style.css?v=20260930-4">
+  <script type="importmap">
+  {
+    "imports": {
+      "./js/app.js": "./js/app.js?v=20260930-4",
+      "./js/calculator.js": "./js/calculator.js?v=20260930-4",
+      "./js/core/catalog.js": "./js/core/catalog.js?v=20260930-4",
+      "./js/core/feedback.js": "./js/core/feedback.js?v=20260930-4",
+      "./js/core/landscape.js": "./js/core/landscape.js?v=20260930-4",
+      "./js/core/result.js": "./js/core/result.js?v=20260930-4",
+      "./js/core/rng.js": "./js/core/rng.js?v=20260930-4",
+      "./js/core/settings.js": "./js/core/settings.js?v=20260930-4",
+      "./js/core/stats.js": "./js/core/stats.js?v=20260930-4",
+      "./js/core/storage.js": "./js/core/storage.js?v=20260930-4",
+      "./js/core/timer.js": "./js/core/timer.js?v=20260930-4",
+      "./js/history.js": "./js/history.js?v=20260930-4",
+      "./js/logic/calculator.js": "./js/logic/calculator.js?v=20260930-4",
+      "./js/logic/history.js": "./js/logic/history.js?v=20260930-4",
+      "./js/logic/records-transfer.js": "./js/logic/records-transfer.js?v=20260930-4",
+      "./js/logic/settings-form.js": "./js/logic/settings-form.js?v=20260930-4",
+      "./js/logic/t1.js": "./js/logic/t1.js?v=20260930-4",
+      "./js/logic/t2.js": "./js/logic/t2.js?v=20260930-4",
+      "./js/logic/t3.js": "./js/logic/t3.js?v=20260930-4",
+      "./js/logic/t4.js": "./js/logic/t4.js?v=20260930-4",
+      "./js/logic/t5.js": "./js/logic/t5.js?v=20260930-4",
+      "./js/logic/t6.js": "./js/logic/t6.js?v=20260930-4",
+      "./js/settings.js": "./js/settings.js?v=20260930-4",
+      "./js/tests/t1.js": "./js/tests/t1.js?v=20260930-4",
+      "./js/tests/t2.js": "./js/tests/t2.js?v=20260930-4",
+      "./js/tests/t3.js": "./js/tests/t3.js?v=20260930-4",
+      "./js/tests/t4.js": "./js/tests/t4.js?v=20260930-4",
+      "./js/tests/t5.js": "./js/tests/t5.js?v=20260930-4",
+      "./js/tests/t6.js": "./js/tests/t6.js?v=20260930-4"
+    }
+  }
+  </script>
+  <script>
+    // 見張り: アプリの起動(モジュールの読み込み)に失敗したら、真っ暗にせず再読み込みを勧める。
+    // モジュールより先に動くよう、普通の script にしている。起動した後のエラーには反応しない。
+    (function () {
+      var shown = false;
+      function showReload() {
+        if (shown || window.aptBooted) return;
+        shown = true;
+        var box = document.createElement('section');
+        box.className = 'screen boot-error';
+        box.setAttribute('role', 'alert');
+        var message = document.createElement('p');
+        message.textContent = 'アプリが更新されました。再読み込みしてください';
+        var button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'btn btn-primary btn-large';
+        button.textContent = '再読み込み';
+        button.addEventListener('click', function () { location.reload(); });
+        box.append(message, button);
+        document.body.replaceChildren(box);
+      }
+      window.aptBootFailed = showReload;
+      // 起動前の読み込みエラー(モジュールの構文・export の不一致、ファイルの取得失敗など)
+      window.addEventListener('error', function () { showReload(); }, true);
+      window.addEventListener('unhandledrejection', function () { showReload(); });
+    })();
+  </script>
 </head>
 <body>
   <main id="app"></main>
   <noscript>JavaScript を有効にしてください。</noscript>
-  <script type="module" src="./js/app.js"></script>
+  <script type="module">
+    import('./js/app.js')
+      .then(function () { window.aptBooted = true; })
+      .catch(function (e) { window.aptBootFailed(e); });
+  </script>
 </body>
 </html>
