@@ -10,7 +10,7 @@ import {
   projectScale, baseSpeedAt, advanceSpeed, applyCollisionSpeed,
   createObstacle, createInitialObstacles, advanceObstacle, recycleObstacles, drawableObstacles,
   crossedAircraftPlane, isHalfOpeningSafe, isBladeOpeningSafe, isObstacleSafe,
-  isSectorOpeningSafe, holeCenters, isHoleOpeningSafe, isBarSafe,
+  isSectorOpeningSafe, holeCenters, isHoleOpeningSafe, isBarSafe, isAircraftSafe,
   createT6State, stepT6State, summarizeT6, buildT6Record,
 } from '../js/logic/t6.js';
 
@@ -29,11 +29,14 @@ test('T6 の既定値は承認済みの数値', () => {
     initialSpeed: 0.8,
     acceleration: 3,
     recoveryAcceleration: 3,
-    maxSpeed: 10,
+    maxSpeed: 15,
+    recoveryCapSpeed: 2,
     obstacleSpacing: 8,
     firstObstacleDistance: 12,
     bladeOpeningDeg: 60,
-    bladeOpeningCounts: [1, 2, 3],
+    bladeOpen1Rate: 0.4,
+    bladeOpen2Rate: 0.4,
+    bladeOpen3Rate: 0.2,
     centerOpenRadius: 0.2,
     barWidth: 0.35,
     bladeInitialAngularSpeedDegSec: 30,
@@ -41,6 +44,7 @@ test('T6 の既定値は承認済みの数値', () => {
     collisionPushMs: 350,
     collisionPullbackDistance: 2,
     aircraftMaxRadius: 0.86,
+    hitRadius: 0.06,
     canvasMarginPx: 8,
     stickRadiusRatio: 0.14,
     stickMinRadiusPx: 60,
@@ -48,7 +52,7 @@ test('T6 の既定値は承認済みの数値', () => {
     tunnelMinRadiusRatio: 0.3,
     stickSide: 'right',
     stallAbortMs: 1000,
-    perspectiveFocal: 1,
+    perspectiveFocal: 2,
     collisionZ: 1,
     farZ: 32,
     sectorOpeningDeg: 90,
@@ -204,14 +208,15 @@ test('一人称: 奥行き z の断面は (物の位置 − 自機の位置) × 
   const center = projectTunnelSection({ x: 0, y: 0 }, 2, view, P);
   assert.deepEqual(center, { centerX: 400, centerY: 300, radius: 200 * projectScale(P.perspectiveFocal, 2) });
   // 自機が右上(x=0.5, y=0.25)にいると、トンネルの中心は画面の左下にずれる(画面の y は下向き)
+  const f = P.perspectiveFocal;
   const near = projectTunnelSection({ x: 0.5, y: 0.25 }, 1, view, P);
-  approx(near.centerX, 400 - 0.5 * 200 * 1);
-  approx(near.centerY, 300 + 0.25 * 200 * 1);
-  approx(near.radius, 200);
+  approx(near.centerX, 400 - 0.5 * 200 * f / 1);
+  approx(near.centerY, 300 + 0.25 * 200 * f / 1);
+  approx(near.radius, 200 * f);
   const far = projectTunnelSection({ x: 0.5, y: 0.25 }, 4, view, P);
-  approx(far.centerX, 400 - 0.5 * 200 / 4);
-  approx(far.centerY, 300 + 0.25 * 200 / 4);
-  approx(far.radius, 50);
+  approx(far.centerX, 400 - 0.5 * 200 * f / 4);
+  approx(far.centerY, 300 + 0.25 * 200 * f / 4);
+  approx(far.radius, 200 * f / 4);
 });
 
 test('一人称: 手前の物ほど大きくずれ、奥の物はほとんどずれない(消失点は画面の中心)', () => {
@@ -219,7 +224,7 @@ test('一人称: 手前の物ほど大きくずれ、奥の物はほとんどず
   const position = { x: 0.8, y: 0 };
   const shifts = [0.5, 1, 4, 32, 10000].map(z => Math.abs(projectTunnelSection(position, z, view, P).centerX));
   for (let i = 1; i < shifts.length; i++) assert.ok(shifts[i] < shifts[i - 1], `${shifts}`);
-  assert.ok(shifts.at(-1) < 0.01);
+  assert.ok(shifts.at(-1) < view.radius * 0.001, '十分奥はほとんどずれない(画面の半径の0.1%未満)');
 });
 
 test('一人称: 機体の面(collisionZ)では、断面上の自機の位置が画面の中心に来る', () => {
@@ -235,17 +240,18 @@ test('一人称: 機体の面(collisionZ)では、断面上の自機の位置が
 
 test('今いる面の縁: 自機の位置の反対側へずれ、壁の近くにいれば縁が画面の中心の近くまで来る', () => {
   const view = { centerX: 400, centerY: 300, radius: 200 };
-  assert.deepEqual(currentPlaneEdge({ x: 0, y: 0 }, view, P), { centerX: 400, centerY: 300, radius: 200 });
+  const f = P.perspectiveFocal;
+  assert.deepEqual(currentPlaneEdge({ x: 0, y: 0 }, view, P), { centerX: 400, centerY: 300, radius: 200 * f });
   const atWall = currentPlaneEdge({ x: P.aircraftMaxRadius, y: 0 }, view, P);
-  approx(atWall.centerX, 400 - P.aircraftMaxRadius * 200);
+  approx(atWall.centerX, 400 - P.aircraftMaxRadius * 200 * f);
   approx(atWall.centerY, 300);
-  approx(atWall.radius, 200);
-  // 画面の中心(照準)から縁までの距離 = 半径 × (1 − 自機の半径)
+  approx(atWall.radius, 200 * f);
+  // 画面の中心(自機)から縁までの距離 = 焦点距離 × 半径 × (1 − 自機の半径)
   const gap = atWall.radius - Math.hypot(atWall.centerX - view.centerX, atWall.centerY - view.centerY);
-  approx(gap, 200 * (1 - P.aircraftMaxRadius));
-  assert.ok(gap < 200 * 0.2);
+  approx(gap, 200 * f * (1 - P.aircraftMaxRadius));
+  assert.ok(gap < 200 * 0.3);
   const up = currentPlaneEdge({ x: 0, y: 0.5 }, view, P);
-  approx(up.centerY, 300 + 0.5 * 200, 1e-9); // 上にいると縁は下へずれる
+  approx(up.centerY, 300 + 0.5 * 200 * f, 1e-9); // 上にいると縁は下へずれる
   assert.deepEqual(currentPlaneEdge({ x: 0.3, y: -0.2 }, view, P), projectTunnelSection({ x: 0.3, y: -0.2 }, P.collisionZ, view, P));
 });
 
@@ -336,15 +342,22 @@ test('羽根の開口1・2・3個は等間隔で、1個なら他の角度は衝�
   for (const angle of [60, 120, 180, 240, 300]) assert.equal(isBladeOpeningSafe(at(angle), 0, P, 1), false);
 });
 
-test('多数シードで羽根の開口数1・2・3がすべて出る', () => {
+test('羽根の開口数は 1つ40%・2つ40%・3つ20%(2026-09-30 ユーザーの実機の感想で変更。設定値)', () => {
   const counts = new Map([[1, 0], [2, 0], [3, 0]]);
-  for (let seed = 1; seed <= 500; seed++) {
+  for (let seed = 1; seed <= 20000; seed++) {
     const obstacle = createObstacle(createRng(seed), 6, seed, P);
-    if (obstacle.type === 'blades') counts.set(obstacle.openingCount, (counts.get(obstacle.openingCount) ?? 0) + 1);
+    if (obstacle.type === 'blades') counts.set(obstacle.openingCount, counts.get(obstacle.openingCount) + 1);
   }
-  assert.deepEqual([...counts.keys()].sort((a, b) => a - b), [1, 2, 3]);
   const total = [...counts.values()].reduce((a, b) => a + b, 0);
-  for (const count of counts.values()) assert.ok(count > total * 0.2 && count < total * 0.45, JSON.stringify([...counts]));
+  for (const [n, expected] of [[1, 0.4], [2, 0.4], [3, 0.2]]) {
+    assert.ok(Math.abs(counts.get(n) / total - expected) < 0.03, `${n}つ: ${counts.get(n)}/${total}`);
+  }
+  // 設定で変えられる(3つだけにする)
+  const only3 = { ...P, bladeOpen1Rate: 0, bladeOpen2Rate: 0, bladeOpen3Rate: 1 };
+  for (let seed = 1; seed <= 500; seed++) {
+    const obstacle = createObstacle(createRng(seed), 6, seed, only3);
+    if (obstacle.type === 'blades') assert.equal(obstacle.openingCount, 3);
+  }
 });
 
 test('扇形は90°の内側だけ安全で、辺は衝突', () => {
@@ -509,19 +522,20 @@ test('回転する羽根は経過時間と回転方向で角度が変わる', ()
 
 // ---- 回転する長方形(2026-09-30 本番に合わせて追加) ----
 
-test('回転する長方形: 中心を通る幅 barWidth の帯の上は衝突、帯の縁ちょうども衝突、それ以外は安全', () => {
+test('回転する長方形(反転): 中心を通る幅 barWidth の帯の中だけ通れ、帯の外はすべて衝突、帯の縁ちょうども衝突(2026-09-30 ユーザーの実機の感想で反転)', () => {
   const half = P.barWidth / 2;
-  assert.equal(isBarSafe({ x: 0, y: 0 }, 0, P), false);
-  assert.equal(isBarSafe({ x: 0.8, y: 0 }, 0, P), false, '直径いっぱいに伸びる');
-  assert.equal(isBarSafe({ x: -0.8, y: 0 }, 0, P), false);
+  assert.equal(isBarSafe({ x: 0, y: 0 }, 0, P), true, '中心は帯の中');
+  assert.equal(isBarSafe({ x: 0.8, y: 0 }, 0, P), true, '帯は直径いっぱいに伸びる');
+  assert.equal(isBarSafe({ x: -0.8, y: 0 }, 0, P), true);
   assert.equal(isBarSafe({ x: 0.5, y: half }, 0, P), false, '帯の縁ちょうど');
   assert.equal(isBarSafe({ x: 0.5, y: -half }, 0, P), false, '反対側の縁ちょうど');
-  assert.equal(isBarSafe({ x: 0.5, y: half + 0.001 }, 0, P), true);
-  assert.equal(isBarSafe({ x: 0, y: 0.6 }, 0, P), true);
+  assert.equal(isBarSafe({ x: 0.5, y: half - 0.001 }, 0, P), true);
+  assert.equal(isBarSafe({ x: 0.5, y: half + 0.001 }, 0, P), false);
+  assert.equal(isBarSafe({ x: 0, y: 0.6 }, 0, P), false, '帯の外');
   // 90°回すと縦の帯になる
-  assert.equal(isBarSafe({ x: 0, y: 0.6 }, 90, P), false);
-  assert.equal(isBarSafe({ x: 0.6, y: 0 }, 90, P), true);
-  assert.equal(isObstacleSafe({ type: 'bar', rotationDeg: 90 }, { x: 0, y: 0.6 }, P), false);
+  assert.equal(isBarSafe({ x: 0, y: 0.6 }, 90, P), true);
+  assert.equal(isBarSafe({ x: 0.6, y: 0 }, 90, P), false);
+  assert.equal(isObstacleSafe({ type: 'bar', rotationDeg: 90 }, { x: 0, y: 0.6 }, P), true);
 });
 
 test('回転する長方形: 羽根と同じ速さで回り、回転後は以前安全だった位置がふさがる', () => {
@@ -529,8 +543,8 @@ test('回転する長方形: 羽根と同じ速さで回り、回転後は以前
   const turned = advanceObstacle(bar, 0, 0, 2, P);
   const blade = advanceObstacle({ id: 2, type: 'blades', z: 5, rotationDeg: 0, rotationDirection: 1, openingCount: 3 }, 0, 0, 2, P);
   approx(turned.rotationDeg, blade.rotationDeg);
-  const rad = turned.rotationDeg * Math.PI / 180;
-  const point = { x: Math.cos(rad) * 0.6, y: Math.sin(rad) * 0.6 };
+  // 回る前の帯の上(x 軸上)は安全、回った後はふさがる
+  const point = { x: 0.6, y: 0 };
   assert.equal(isObstacleSafe(bar, point, P), true, '回る前は安全');
   assert.equal(isObstacleSafe(turned, point, P), false, '回った後はふさがる');
   const reverse = advanceObstacle({ ...bar, rotationDirection: -1 }, 0, 0, 2, P);
@@ -678,4 +692,84 @@ test('衝突: 速度は今までどおり50%になり、巻き戻しの間も回
   const done = runSteps(hit, 7);
   assert.ok(done.speed > hit.speed);
   assert.ok(done.speed <= baseSpeedAt(done.elapsedSec, P));
+});
+
+// ---- 当たり判定の円(2026-09-30 ユーザーの実機の感想で追加) ----
+
+test('当たり判定: 自機は半径 hitRadius の円で、縁だけ塞がった所にかかっても衝突', () => {
+  const half = { type: 'half', blockedSide: 'down' }; // y < 0 が塞がる(y = 0 の直径も塞がる)
+  assert.equal(isObstacleSafe(half, { x: 0, y: 0.05 }, P), true, '中心だけなら安全');
+  assert.equal(isAircraftSafe(half, { x: 0, y: 0.05 }, P), false, '円の下の縁が塞がった所にかかる');
+  assert.equal(isAircraftSafe(half, { x: 0, y: P.hitRadius + 0.01 }, P), true, '円全体が安全な側');
+  const blades = { type: 'blades', rotationDeg: 0, openingCount: 1 }; // 開口は 0° の向き(±30°)
+  const r = 0.6;
+  const edge = 30 - (P.hitRadius / r) * 180 / Math.PI * 0.5; // 中心は開口の中、円の縁は開口の外
+  const at = { x: Math.cos(edge * Math.PI / 180) * r, y: Math.sin(edge * Math.PI / 180) * r };
+  assert.equal(isObstacleSafe(blades, at, P), true);
+  assert.equal(isAircraftSafe(blades, at, P), false);
+  assert.equal(isAircraftSafe(blades, { x: r, y: 0 }, P), true);
+});
+
+test('当たり判定の円は状態を進めるときにも使う(縁がかかったら衝突に数える)', () => {
+  const state = {
+    ...createT6State(createRng(1), P),
+    position: { x: 0, y: 0.05 },
+    obstacles: [{ id: 9, type: 'half', blockedSide: 'down', z: 1.01 }], speed: 1, maxSpeedReached: 1,
+  };
+  const next = stepT6State(state, {}, 0.02, P, createRng(2));
+  assert.equal(next.collisions, 1);
+  assert.equal(next.cleared, 0);
+});
+
+// ---- 衝突のあとの回復の上限(2026-09-30 ユーザーの実機の感想で追加) ----
+
+function fastCollision() {
+  return {
+    ...createT6State(createRng(1), P),
+    elapsedSec: 100, // 基準速度は最高速度 15
+    speed: 15,
+    maxSpeedReached: 15,
+    position: { x: 0.1, y: -0.6 },
+    obstacles: [
+      { id: HIT_ID, type: 'half', blockedSide: 'down', z: 1.01 },
+      { id: FAR_ID, type: 'half', blockedSide: 'up', z: 25 },
+    ],
+  };
+}
+
+test('回復の上限: ぶつかった障害物を通過するまでは速度を recoveryCapSpeed(2)より上げず、通過したら今までどおり加速する', () => {
+  const hit = stepT6State(fastCollision(), {}, 0.001, P, createRng(2));
+  assert.equal(hit.collisions, 1);
+  assert.equal(hit.speed, P.recoveryCapSpeed, '50%(7.5)でも上限の2に抑える');
+  assert.equal(hit.recoveryCapId, HIT_ID);
+  let s = runSteps(hit, 7); // 巻き戻しが終わる
+  let steps = 0;
+  while (s.cleared === 0 && steps < 400) {
+    s = stepT6State(s, { stick: { x: 0, y: 0.5 } }, DT, P, createRng(500 + steps)); // 上へよける
+    assert.ok(s.speed <= P.recoveryCapSpeed + 1e-9 || s.cleared === 1, `通過する前に ${s.speed}`);
+    steps++;
+  }
+  assert.equal(s.cleared, 1, 'ぶつかった障害物を通過した');
+  assert.equal(s.recoveryCapId, null, '通過したら上限を外す');
+  const later = runSteps(s, 10, { stick: { x: 0, y: 0.5 } });
+  assert.ok(later.speed > P.recoveryCapSpeed + 0.5, `通過したあとは加速する: ${later.speed}`);
+});
+
+test('回復の上限: よけずに再びぶつかったら、また通過するまで2に抑える', () => {
+  const hit = stepT6State(fastCollision(), {}, 0.001, P, createRng(2));
+  let s = runSteps(hit, 7);
+  let steps = 0;
+  while (s.collisions < 2 && steps < 400) {
+    s = stepT6State(s, {}, DT, P, createRng(700 + steps));
+    assert.ok(s.speed <= P.recoveryCapSpeed + 1e-9, `${s.speed}`);
+    steps++;
+  }
+  assert.equal(s.collisions, 2);
+  assert.equal(s.recoveryCapId, HIT_ID);
+  assert.ok(s.speed <= P.recoveryCapSpeed);
+});
+
+test('最高速度: 既定は15で、設定では20まで上げられる', () => {
+  assert.equal(P.maxSpeed, 15);
+  assert.equal(baseSpeedAt(1000, P), 15);
 });

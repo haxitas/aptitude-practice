@@ -212,12 +212,12 @@ export function isHoleOpeningSafe(position, obstacle, p) {
   });
 }
 
-// 回転する長方形(2026-09-30 本番に合わせて追加): トンネルの中心を通り直径いっぱいに伸びる幅 barWidth の帯。
-// 帯の上(縁ちょうどを含む)は衝突、それ以外は安全。帯の向きは rotationDeg
+// 回転する長方形(2026-09-30 本番に合わせて追加。ユーザーの実機の感想で反転): トンネルの中心を通り直径いっぱいに伸びる
+// 幅 barWidth の帯の中だけが通れる場所で、帯の外はすべて衝突。帯の縁ちょうども衝突。帯の向きは rotationDeg
 export function isBarSafe(position, rotationDeg, p) {
   const rad = rotationDeg * Math.PI / 180;
   const distance = Math.abs(-position.x * Math.sin(rad) + position.y * Math.cos(rad));
-  return distance > p.barWidth / 2 + Number.EPSILON;
+  return distance < p.barWidth / 2 - Number.EPSILON;
 }
 
 export function isObstacleSafe(obstacle, position, p) {
@@ -227,6 +227,19 @@ export function isObstacleSafe(obstacle, position, p) {
   if (obstacle.type === 'holes') return isHoleOpeningSafe(position, obstacle, p);
   if (obstacle.type === 'bar') return isBarSafe(position, obstacle.rotationDeg, p);
   throw new RangeError(`不明な障害物です: ${obstacle.type}`);
+}
+
+// 当たり判定の円(2026-09-30 ユーザーの実機の感想で追加): 自機を半径 hitRadius の円とし、
+// 中心と円周上の8点がすべて安全なときだけ通過。どこか1点でも塞がった所にかかれば衝突
+const HIT_CIRCLE_POINTS = 8;
+export function isAircraftSafe(obstacle, position, p) {
+  if (!isObstacleSafe(obstacle, position, p)) return false;
+  for (let i = 0; i < HIT_CIRCLE_POINTS; i++) {
+    const a = i * 2 * Math.PI / HIT_CIRCLE_POINTS;
+    const point = { x: position.x + Math.cos(a) * p.hitRadius, y: position.y + Math.sin(a) * p.hitRadius };
+    if (!isObstacleSafe(obstacle, point, p)) return false;
+  }
+  return true;
 }
 
 export function crossedAircraftPlane(previousZ, nextZ, collisionZ) {
@@ -247,6 +260,18 @@ export function applyCollisionSpeed(speed, p) {
   return speed * p.collisionSpeedFactor;
 }
 
+// 羽根の開口の数: 1つ・2つ・3つを bladeOpen1Rate・bladeOpen2Rate・bladeOpen3Rate の比で選ぶ
+// (既定 40%・40%・20%。3つ=放射能マークを減らす。2026-09-30 ユーザーの実機の感想で変更)
+export function pickBladeOpeningCount(rng, p) {
+  const rates = [p.bladeOpen1Rate, p.bladeOpen2Rate, p.bladeOpen3Rate];
+  let r = rng() * rates.reduce((sum, v) => sum + v, 0);
+  for (let i = 0; i < rates.length; i++) {
+    if (r < rates[i]) return i + 1;
+    r -= rates[i];
+  }
+  return rates.findLastIndex(v => v > 0) + 1;
+}
+
 // 5種類(半円・3枚羽根・扇形・小穴・回転する長方形)を同じ確率で出す
 export const OBSTACLE_TYPES = Object.freeze(['half', 'blades', 'sector', 'holes', 'bar']);
 
@@ -263,7 +288,7 @@ export function createObstacle(rng, z, id, p) {
       id, type: 'blades', z,
       rotationDeg: rng() * 360,
       rotationDirection: rng() < 0.5 ? -1 : 1,
-      openingCount: p.bladeOpeningCounts[Math.floor(rng() * p.bladeOpeningCounts.length)],
+      openingCount: pickBladeOpeningCount(rng, p),
     };
   }
   if (typeIndex === 2) {
@@ -338,6 +363,7 @@ export function createT6State(rng, p) {
     cleared: 0,
     collisions: 0,
     pushback: null,
+    recoveryCapId: null, // ぶつかった障害物の id。これを通過するまで速度を recoveryCapSpeed に抑える
   };
 }
 
@@ -371,7 +397,10 @@ export function stepT6State(state, control, dtSec, p, rng) {
   const nextElapsed = state.elapsedSec + dtSec;
   const pull = advancePullback(state.pushback, dtSec, p);
   const position = steer(state, control ?? {}, dtSec, p);
-  const speedBeforeCollision = advanceSpeed(state.speed, nextElapsed, dtSec, p);
+  // 衝突のあとは、ぶつかった障害物を通過するまで速度を recoveryCapSpeed より上げない(2026-09-30 ユーザーの実機の感想で追加)
+  let recoveryCapId = state.recoveryCapId ?? null;
+  const capped = speed => (recoveryCapId === null ? speed : Math.min(speed, p.recoveryCapSpeed));
+  const speedBeforeCollision = capped(advanceSpeed(state.speed, nextElapsed, dtSec, p));
   // 巻き戻しの間は前へ進まない。巻き戻しがこの1歩の途中で終われば、残りの時間だけ進む
   const forwardSec = dtSec - pull.pullSec;
   const distanceDelta = (state.speed + speedBeforeCollision) * 0.5 * forwardSec - pull.pullDistance;
@@ -390,16 +419,21 @@ export function stepT6State(state, control, dtSec, p, rng) {
     const previous = state.obstacles[i];
     const obstacle = obstacles[i];
     if (!crossedAircraftPlane(previous.z, obstacle.z, p.collisionZ)) continue;
-    if (isObstacleSafe(obstacle, position, p)) {
+    if (isAircraftSafe(obstacle, position, p)) {
       cleared++;
+      if (obstacle.id === recoveryCapId) recoveryCapId = null; // ぶつかった障害物を通過したら、今までどおり加速する
     } else {
       // 衝突はそのたびに数える。ぶつかった障害物は巻き戻しの間その場に残し、再び近づいてくる
       collisions++;
-      speed = applyCollisionSpeed(speed, p);
+      recoveryCapId = obstacle.id;
+      speed = capped(applyCollisionSpeed(speed, p));
       obstacles[i] = { ...obstacle, held: true };
       pushback = { elapsedMs: 0 };
     }
   }
+  // 巻き戻しで奥へ戻らずに作り直される(巻き戻し距離0など)ときは、上限も外す
+  if (recoveryCapId !== null && pushback === null
+      && obstacles.some(o => o.id === recoveryCapId && o.held && o.z <= p.collisionZ)) recoveryCapId = null;
   obstacles = recycleObstacles(obstacles, rng, p, pushback !== null);
 
   return {
@@ -413,6 +447,7 @@ export function stepT6State(state, control, dtSec, p, rng) {
     cleared,
     collisions,
     pushback,
+    recoveryCapId,
   };
 }
 

@@ -98,11 +98,14 @@ export const SETTING_FIELDS = Object.freeze({
     number('initialSpeed', '初速', 0.1, 10, { step: 0.1, unit: 'u/s' }),
     number('acceleration', '通常加速度', 0, 10, { step: 0.01 }),
     number('recoveryAcceleration', '回復加速度', 0.01, 10, { step: 0.01 }),
-    number('maxSpeed', '最高速度', 0.1, 10, { step: 0.1, unit: 'u/s' }),
+    number('maxSpeed', '最高速度', 0.1, 20, { step: 0.1, unit: 'u/s' }),
+    number('recoveryCapSpeed', '衝突後の速度の上限', 0.1, 20, { step: 0.1, unit: 'u/s', hint: 'ぶつかった障害物を通過するまで' }),
     number('obstacleSpacing', '障害物の間隔', 0.2, 20, { step: 0.1, unit: 'u' }),
     number('firstObstacleDistance', '最初の障害物まで', 0.2, 30, { step: 0.1, unit: 'u' }),
     number('bladeOpeningDeg', '羽根の開口角', 1, 119, { step: 1, unit: '°' }),
-    list('bladeOpeningCounts', '羽根の開口数候補', 1, 3, { integer: true, hint: '1〜3をカンマ区切り' }),
+    number('bladeOpen1Rate', '羽根の開口1つの確率', 0, 1, { step: 0.01 }),
+    number('bladeOpen2Rate', '羽根の開口2つの確率', 0, 1, { step: 0.01 }),
+    number('bladeOpen3Rate', '羽根の開口3つの確率', 0, 1, { step: 0.01, hint: '3つの比で選ぶ' }),
     number('centerOpenRadius', '羽根・扇形の中心の安全円の半径', 0, 0.9, { step: 0.01 }),
     number('barWidth', '回転する長方形の幅', 0.05, 1.5, { step: 0.01 }),
     number('bladeInitialAngularSpeedDegSec', '羽根の初期回転速度', 0, 720, { step: 1, unit: '°/s' }),
@@ -110,6 +113,8 @@ export const SETTING_FIELDS = Object.freeze({
     number('collisionPushMs', '衝突時の巻き戻し時間', 0, 5000, { integer: true, unit: 'ms' }),
     number('collisionPullbackDistance', '衝突時の巻き戻し距離', 0, 10, { step: 0.01, unit: 'u' }),
     number('aircraftMaxRadius', '機体の移動可能半径', 0.1, 0.99, { step: 0.01 }),
+    number('hitRadius', '当たり判定の半径', 0, 0.3, { step: 0.01 }),
+    number('perspectiveFocal', '焦点距離(視野)', 0.5, 5, { step: 0.1, hint: '大きいほど視野が狭い' }),
     number('sectorOpeningDeg', '扇形の開口角', 1, 359, { step: 1, unit: '°' }),
     { key: 'holeSlotCount', label: '小穴の候補位置', type: 'select', options: [{ value: '4', label: '上下左右の4か所', parsed: 4 }] },
     list('holeOpenCounts', '小穴の開口数候補', 1, 3, { integer: true, hint: '1〜3をカンマ区切り' }),
@@ -191,6 +196,7 @@ export function validateTestSettings(testId, raw, defaults) {
     }
   } else if (testId === 't6') {
     if (value.initialSpeed > value.maxSpeed) errors.maxSpeed = '最高速度は初速以上にしてください';
+    if (value.bladeOpen1Rate + value.bladeOpen2Rate + value.bladeOpen3Rate <= 0) errors.bladeOpen3Rate = '羽根の開口の数の確率は、どれか1つを0より大きくしてください';
     const chord = 2 * value.holeRingRadius * Math.sin(Math.PI / value.holeSlotCount);
     if (value.holeRadius * 2 >= chord) errors.holeRadius = '隣の小穴と重ならない半径にしてください';
     if (value.holeRingRadius + value.holeRadius > 1) errors.holeRadius = '小穴全体がトンネル内に収まるようにしてください';

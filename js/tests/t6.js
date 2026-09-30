@@ -16,8 +16,9 @@ import { T6_COLOR_OPTIONS } from '../core/settings.js';
 
 const DEG = Math.PI / 180;
 const RADIAL_LINES = 12; // 消失点から手前の縁へ引く放射状の線の本数
-const TUNNEL_WALL_COLOR = '#12233a'; // 機体のいる面より手前のトンネルの壁
-const RETICLE = Object.freeze({ sizeRatio: 0.045, minSizePx: 8, color: '#eaf1fb', pushColor: '#ffcc4d' });
+// トンネルの中と、トンネルの外にあたる部分(端に寄ったときに見える所)は同じ暗い色で塗る
+// (2026-09-30 ユーザーの実機の感想で、外側を別の色にしないように変更)
+const TUNNEL_COLOR = '#07101f';
 
 // 断面の座標(トンネル半径1、y が上)を画面へ
 function toScreen(section, x, y) {
@@ -117,7 +118,8 @@ function drawHoles(ctx, obstacle, section, p) {
   }
 }
 
-// 回転する長方形: 中心を通り直径いっぱいに伸びる幅 barWidth の帯(2026-09-30 本番に合わせて追加)
+// 回転する長方形: 中心を通り直径いっぱいに伸びる幅 barWidth の帯。帯の中だけが通れるので、
+// 帯を抜いてほかを塞ぐ形に描く(2026-09-30 本番に合わせて追加。ユーザーの実機の感想で反転)
 function drawBar(ctx, obstacle, section, p) {
   const rad = obstacle.rotationDeg * DEG;
   const u = { x: Math.cos(rad), y: Math.sin(rad) };
@@ -129,36 +131,16 @@ function drawBar(ctx, obstacle, section, p) {
   ctx.arc(section.centerX, section.centerY, section.radius, 0, Math.PI * 2);
   ctx.clip();
   ctx.beginPath();
+  ctx.rect(section.centerX - section.radius, section.centerY - section.radius, section.radius * 2, section.radius * 2);
   corners.forEach((c, i) => (i === 0 ? ctx.moveTo(c.x, c.y) : ctx.lineTo(c.x, c.y)));
   ctx.closePath();
-  ctx.fill();
+  ctx.fill('evenodd');
   for (const [from, to] of [[corners[0], corners[1]], [corners[2], corners[3]]]) {
     ctx.beginPath();
     ctx.moveTo(from.x, from.y);
     ctx.lineTo(to.x, to.y);
     ctx.stroke();
   }
-  ctx.restore();
-}
-
-// 照準: 画面の中心(自機=当たり判定の点)
-function drawReticle(ctx, view, pushing) {
-  const size = Math.max(RETICLE.minSizePx, view.radius * RETICLE.sizeRatio);
-  const { centerX: x, centerY: y } = view;
-  ctx.save();
-  ctx.strokeStyle = pushing ? RETICLE.pushColor : RETICLE.color;
-  ctx.lineWidth = 2;
-  strokeCircle(ctx, x, y, size * 0.55);
-  ctx.beginPath();
-  ctx.moveTo(x - size * 1.3, y); ctx.lineTo(x - size * 0.35, y);
-  ctx.moveTo(x + size * 0.35, y); ctx.lineTo(x + size * 1.3, y);
-  ctx.moveTo(x, y - size * 1.3); ctx.lineTo(x, y - size * 0.35);
-  ctx.moveTo(x, y + size * 0.35); ctx.lineTo(x, y + size * 1.3);
-  ctx.stroke();
-  ctx.fillStyle = ctx.strokeStyle;
-  ctx.beginPath();
-  ctx.arc(x, y, 2, 0, Math.PI * 2);
-  ctx.fill();
   ctx.restore();
 }
 
@@ -190,7 +172,7 @@ function drawScene(ctx, layout, state, p) {
   const view = layout.tunnel;
   const { centerX: cx, centerY: cy, radius: viewRadius } = view;
   ctx.clearRect(0, 0, width, height);
-  ctx.fillStyle = '#07101f';
+  ctx.fillStyle = TUNNEL_COLOR;
   ctx.fillRect(0, 0, width, height);
 
   ctx.save();
@@ -199,14 +181,8 @@ function drawScene(ctx, layout, state, p) {
   ctx.clip();
 
   // 機体のいる面のトンネルの縁は、自機の位置の反対側へずらす(2026-09-30 レビュー後の直し)。
-  // 縁の外側(手前のトンネルの壁)は少し明るく塗る
+  // 縁の外側も中と同じ暗い色のまま(別の色の領域を見せない)
   const edge = currentPlaneEdge(state.position, view, p);
-  ctx.fillStyle = TUNNEL_WALL_COLOR;
-  ctx.fillRect(cx - viewRadius, cy - viewRadius, viewRadius * 2, viewRadius * 2);
-  ctx.fillStyle = '#07101f';
-  ctx.beginPath();
-  ctx.arc(edge.centerX, edge.centerY, edge.radius, 0, Math.PI * 2);
-  ctx.fill();
 
   // 放射状の線: 奥の消失点(画面の中心)から、ずらした縁へ引く
   ctx.strokeStyle = 'rgba(110, 170, 230, 0.32)';
@@ -243,7 +219,6 @@ function drawScene(ctx, layout, state, p) {
   ctx.strokeStyle = 'rgba(117, 168, 216, 0.45)';
   ctx.lineWidth = 2;
   strokeCircle(ctx, cx, cy, viewRadius);
-  drawReticle(ctx, view, state.pushback !== null);
   drawStick(ctx, layout, state.position, p);
 
   if (state.pushback) {
@@ -310,8 +285,8 @@ export function mount(root, ctx) {
     setPhase(null);
     root.innerHTML = shell(`<section class="t6-start">
       <h1 data-ref="title"></h1>
-      <p>トンネルの中を進みます。画面の中心の照準が自分の位置です。操縦用の円の中の位置が、そのまま自分の位置になります(円の中心 = トンネルの中心、指・マウスを離すとその位置のまま)。矢印キーでも動かせます。横画面では左右ボタンで円の側を選べます。縦画面ではトンネルが上、操縦円が下です。</p>
-      <p>半円、回転する羽根(開口1〜3個)、回転する扇形、縁の小穴(開口1〜3個)、回転する長方形を通り抜けます。羽根と扇形は中心も通れます。</p>
+      <p>トンネルの中を進みます。画面の中心が自分の位置です。操縦用の円の中の位置が、そのまま自分の位置になります(円の中心 = トンネルの中心、指・マウスを離すとその位置のまま)。矢印キーでも動かせます。横画面では左右ボタンで円の側を選べます。縦画面ではトンネルが上、操縦円が下です。</p>
+      <p>半円、回転する羽根(開口1〜3個)、回転する扇形、縁の小穴(開口1〜3個)、回転する長方形(帯の中だけ通れる)を通り抜けます。羽根と扇形は中心も通れます。</p>
       <p class="muted">衝突すると速度が半分になり、少し手前へ巻き戻されます。よけなければ、同じ障害物にまた衝突します。制限時間は <span data-ref="duration"></span>です。</p>
       <p class="notice notice-error" data-ref="layoutError" hidden></p>
       <button class="btn btn-primary btn-large" type="button" data-ref="start">開始</button>

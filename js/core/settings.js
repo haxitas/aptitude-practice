@@ -162,11 +162,14 @@ export const DEFAULTS = Object.freeze({
     // 速さと間隔(2026-09-30 本番に合わせて変更)
     acceleration: 3,
     recoveryAcceleration: 3,
-    maxSpeed: 10,
+    maxSpeed: 15, // 2026-09-30 ユーザーの実機の感想で 10 → 15(設定では20まで)
+    recoveryCapSpeed: 2, // 衝突のあと、ぶつかった障害物を通過するまでの速度の上限(2026-09-30 ユーザーの実機の感想で追加)
     obstacleSpacing: 8,
     firstObstacleDistance: 12,
     bladeOpeningDeg: 60,
-    bladeOpeningCounts: Object.freeze([1, 2, 3]),
+    bladeOpen1Rate: 0.4, // 羽根の開口の数の確率(1つ・2つ・3つ。2026-09-30 ユーザーの実機の感想で変更)
+    bladeOpen2Rate: 0.4,
+    bladeOpen3Rate: 0.2,
     centerOpenRadius: 0.2, // 羽根と扇形は、中心からこの半径の円の中を通れる(2026-09-30 本番に合わせて追加)
     barWidth: 0.35, // 回転する長方形の帯の幅(2026-09-30 本番に合わせて追加)
     bladeInitialAngularSpeedDegSec: 30,
@@ -174,6 +177,7 @@ export const DEFAULTS = Object.freeze({
     collisionPushMs: 350, // 衝突したときの巻き戻しにかける時間
     collisionPullbackDistance: 2, // 衝突したときに進行を巻き戻す距離(2026-09-27 ユーザーの判断で横の押し戻しから変更。2026-09-30 速さが上がるので 0.5 → 2)
     aircraftMaxRadius: 0.86,
+    hitRadius: 0.06, // 当たり判定の円の半径(2026-09-30 ユーザーの実機の感想で追加)
     canvasMarginPx: 8,
     stickRadiusRatio: 0.14,
     stickMinRadiusPx: 60,
@@ -181,7 +185,7 @@ export const DEFAULTS = Object.freeze({
     tunnelMinRadiusRatio: 0.3,
     stickSide: 'right',
     stallAbortMs: 1000,
-    perspectiveFocal: 1,
+    perspectiveFocal: 2, // 焦点距離。大きいほど視野が狭く、トンネルの中に入っている感じになる(2026-09-30 画面で見て 1 → 2)
     collisionZ: 1,
     farZ: 32, // 奥まで見えるよう 12 → 32(2026-09-30 本番に合わせて変更)
     sectorOpeningDeg: 90,

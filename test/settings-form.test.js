@@ -118,15 +118,21 @@ test('T6の小穴は4方位固定で、開口数候補と回転確率を検証�
   assert.deepEqual(resolveSettings({}).warnings, []);
 });
 
-test('T6の羽根の開口数候補は1〜3の重複しない整数だけ保存する', () => {
-  const field = SETTING_FIELDS.t6.find(item => item.key === 'bladeOpeningCounts');
-  assert.ok(field);
-  const valid = validateTestSettings('t6', raw('t6', { bladeOpeningCounts: '1,3' }), DEFAULTS.t6);
-  assert.equal(valid.ok, true, JSON.stringify(valid));
-  assert.deepEqual(valid.value.bladeOpeningCounts, [1, 3]);
-  for (const invalid of ['1,1', '0,2', '2,4', '1.5,2']) {
-    assert.equal(validateTestSettings('t6', raw('t6', { bladeOpeningCounts: invalid }), DEFAULTS.t6).ok, false);
-  }
+test('T6の羽根の開口数は1つ・2つ・3つの確率で持ち、合計が0なら保存しない(2026-09-30 ユーザーの実機の感想で変更)', () => {
+  const keys = SETTING_FIELDS.t6.map(item => item.key);
+  for (const key of ['bladeOpen1Rate', 'bladeOpen2Rate', 'bladeOpen3Rate']) assert.ok(keys.includes(key), key);
+  assert.equal(keys.includes('bladeOpeningCounts'), false);
+  assert.equal(validateTestSettings('t6', raw('t6', { bladeOpen1Rate: 0.5, bladeOpen2Rate: 0.5, bladeOpen3Rate: 0 }), DEFAULTS.t6).ok, true);
+  const zero = validateTestSettings('t6', raw('t6', { bladeOpen1Rate: 0, bladeOpen2Rate: 0, bladeOpen3Rate: 0 }), DEFAULTS.t6);
+  assert.equal(zero.ok, false);
+  assert.ok(zero.errors.bladeOpen3Rate);
+});
+
+test('T6の最高速度は20まで、当たり判定の半径と回復の上限を設定できる', () => {
+  assert.equal(validateTestSettings('t6', raw('t6', { maxSpeed: 20 }), DEFAULTS.t6).ok, true);
+  assert.equal(validateTestSettings('t6', raw('t6', { maxSpeed: 20.5 }), DEFAULTS.t6).ok, false);
+  const keys = SETTING_FIELDS.t6.map(item => item.key);
+  for (const key of ['hitRadius', 'recoveryCapSpeed', 'perspectiveFocal']) assert.ok(keys.includes(key), key);
 });
 
 test('テストごとの既定値戻しは対象の上書きだけを除き、元を変えない', () => {
