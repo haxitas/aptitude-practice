@@ -72,6 +72,10 @@ export const SETTING_FIELDS = Object.freeze({
   ]),
   t4: Object.freeze([
     duration(),
+    { key: 'headingDirections', label: '機首の向きの数', type: 'select', hint: 'RBI の針はどちらも8方向', options: [
+      { value: '4', label: '4方向(N・E・S・W)', parsed: 4 },
+      { value: '8', label: '8方向', parsed: 8 },
+    ] },
   ]),
   t5: Object.freeze([
     duration(),

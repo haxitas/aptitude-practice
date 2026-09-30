@@ -37,10 +37,18 @@ export function solutionFor(headingIndex, relativeIndex) {
   };
 }
 
-export function generateT4Problem(rng, previous = null) {
-  const candidates = previous
-    ? PROBLEMS.filter(p => p.headingIndex !== previous.headingIndex || p.relativeIndex !== previous.relativeIndex)
-    : PROBLEMS;
+// 機首の向きに使う方位。4 なら N・E・S・W だけ(本番の記憶。2026-09-30 追加)、8 なら8方向
+export function headingIndexes(headingDirections = 8) {
+  if (headingDirections === 4) return [0, 2, 4, 6];
+  if (headingDirections === 8) return [0, 1, 2, 3, 4, 5, 6, 7];
+  throw new RangeError(`機首の向きの数は4か8です: ${headingDirections}`);
+}
+
+// RBI の相対方位は、機首の向きの数にかかわらず8方向
+export function generateT4Problem(rng, previous = null, headingDirections = 8) {
+  const allowed = headingIndexes(headingDirections);
+  const candidates = PROBLEMS.filter(p => allowed.includes(p.headingIndex)
+    && (!previous || p.headingIndex !== previous.headingIndex || p.relativeIndex !== previous.relativeIndex));
   return { ...candidates[Math.floor(rng() * candidates.length)] };
 }
 
@@ -79,8 +87,9 @@ export function planeRotationDeg(heading) {
   return index * 45;
 }
 
-export function createT4Example() {
-  const problem = { headingIndex: 1, relativeIndex: 2 };
+// 例題: 8方向なら機首 NE・RBI 9(自機 NW)。4方向では NE を選べないので、機首 E・RBI 9(自機 N)にする
+export function createT4Example(headingDirections = 8) {
+  const problem = { headingIndex: headingDirections === 4 ? 2 : 1, relativeIndex: 2 };
   const { position, heading } = solutionFor(problem.headingIndex, problem.relativeIndex);
   return { problem, selection: { position, heading } };
 }
@@ -99,8 +108,9 @@ export function explainT4Solution(problem) {
   ];
 }
 
-export function createT4Practice(rng, previous = null) {
-  return { phase: 'question', index: 0, answers: [], problem: generateT4Problem(rng, previous), feedback: null };
+export function createT4Practice(rng, previous = null, headingDirections = 8) {
+  return { phase: 'question', index: 0, answers: [], headingDirections,
+    problem: generateT4Problem(rng, previous, headingDirections), feedback: null };
 }
 
 export function answerT4Practice(state, selection) {
@@ -114,7 +124,7 @@ export function advanceT4Practice(state, rng) {
   if (state.phase !== 'explanation') throw new Error('解説を見てから進んでください');
   if (state.index === 2) return { ...state, phase: 'complete', problem: null, lastProblem: state.problem, feedback: null };
   return { ...state, phase: 'question', index: state.index + 1,
-    problem: generateT4Problem(rng, state.problem), feedback: null };
+    problem: generateT4Problem(rng, state.problem, state.headingDirections ?? 8), feedback: null };
 }
 
 export function createT4Selection() {

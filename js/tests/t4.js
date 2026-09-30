@@ -3,7 +3,7 @@
 // 2026-09-30 本番に合わせて変更: 左は GYRO、右は RBI。中央の電波局は NDB。
 
 import {
-  DIRECTIONS, generateT4Problem, createT4Selection, createT4Example,
+  DIRECTIONS, generateT4Problem, headingIndexes, createT4Selection, createT4Example,
   selectT4Position, selectT4Heading, canSubmitT4,
   judgeT4, gyroCardRotationDeg, rbiNeedleDeg, planeRotationDeg,
   createT4Practice, answerT4Practice, advanceT4Practice, explainT4Solution,
@@ -112,7 +112,7 @@ export function mount(root, ctx) {
       <button class="btn btn-primary" type="button" data-ref="start">本番を始める</button></div></section>`;
     root.querySelector('[data-ref="again"]').addEventListener('click', () => {
       const rng = createRng(randomSeed());
-      showBoard('practice', performance.now(), createT4Practice(rng, state.lastProblem), rng);
+      showBoard('practice', performance.now(), createT4Practice(rng, state.lastProblem, params.headingDirections), rng);
     });
     root.querySelector('[data-ref="start"]').addEventListener('click', () => showBoard('test', performance.now()));
   }
@@ -124,8 +124,8 @@ export function mount(root, ctx) {
     const isPractice = mode === 'practice';
     const explaining = isPractice && practice.phase === 'explanation';
     const rng = createRng(randomSeed());
-    const sample = createT4Example();
-    let problem = example ? sample.problem : isPractice ? practice.problem : generateT4Problem(rng);
+    const sample = createT4Example(params.headingDirections);
+    let problem = example ? sample.problem : isPractice ? practice.problem : generateT4Problem(rng, null, params.headingDirections);
     let selection = createT4Selection();
     let tally = createT4Tally();
     let paleUntil = -Infinity;
@@ -179,7 +179,8 @@ export function mount(root, ctx) {
         $('map').append(button);
       }
     }
-    for (const d of DIRECTIONS) {
+    // 向きのボタンは、機首の向きの数(4 なら N・E・S・W)だけ出す
+    for (const d of headingIndexes(params.headingDirections).map(i => DIRECTIONS[i])) {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 't4-choice t4-heading';
@@ -234,7 +235,7 @@ export function mount(root, ctx) {
       }
       paleUntil = e.timeStamp + params.answerFeedbackMs;
       submit.classList.add('is-pressed');
-      problem = generateT4Problem(rng, problem);
+      problem = generateT4Problem(rng, problem, params.headingDirections);
       drawProblem();
     }
 
@@ -255,7 +256,7 @@ export function mount(root, ctx) {
       $('start').addEventListener('click', () => showBoard('test', performance.now()));
       $('practiceStart').addEventListener('click', () => {
         const practiceRng = createRng(randomSeed());
-        showBoard('practice', performance.now(), createT4Practice(practiceRng, sample.problem), practiceRng);
+        showBoard('practice', performance.now(), createT4Practice(practiceRng, sample.problem, params.headingDirections), practiceRng);
       });
       return;
     }

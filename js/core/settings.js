@@ -130,6 +130,7 @@ export const DEFAULTS = Object.freeze({
     durationSec: 180,
     answerFeedbackMs: 300,
     // compassMode(北が上/機首が上の切り替え)は廃止。左の計器は GYRO だけ(2026-09-30 本番に合わせて変更)
+    headingDirections: 4, // 機首の向きの数。本番は N・E・S・W の4つ(2026-09-30 本番の記憶で追加)。8 にもできる
   }),
   t5: Object.freeze({
     durationSec: 180,

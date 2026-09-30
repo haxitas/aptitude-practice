@@ -137,8 +137,79 @@ test('解説: RBI の8方向の言い方と、NDB と自機のマスは正解の
   }
 });
 
-test('T4 の既定値は承認済みの数値(compassMode は廃止)', () => {
-  assert.deepEqual(P, { durationSec: 180, answerFeedbackMs: 300 });
+test('T4 の既定値は承認済みの数値(compassMode は廃止。機首の向きは4方向)', () => {
+  assert.deepEqual(P, { durationSec: 180, answerFeedbackMs: 300, headingDirections: 4 });
+});
+
+// ---- 機首の向きの数(2026-09-30 本番の記憶で追加) ----
+
+test('機首の向きが4のとき: 問題の機首は N・E・S・W だけで、多数のシードで4つとも出る。RBI は8方向のまま', () => {
+  const rng = createRng(404);
+  const headings = new Set();
+  const relatives = new Set();
+  let previous = null;
+  for (let i = 0; i < 2000; i++) {
+    const q = generateT4Problem(rng, previous, 4);
+    headings.add(DIRECTIONS[q.headingIndex].key);
+    relatives.add(q.relativeIndex);
+    if (previous) assert.notDeepEqual(q, previous);
+    previous = q;
+  }
+  assert.deepEqual([...headings].sort(), ['E', 'N', 'S', 'W']);
+  assert.deepEqual([...relatives].sort((a, b) => a - b), [0, 1, 2, 3, 4, 5, 6, 7]);
+});
+
+test('機首の向きが8のとき: 今までどおり8方向すべてが出る', () => {
+  const rng = createRng(808);
+  const headings = new Set();
+  for (let i = 0; i < 2000; i++) headings.add(generateT4Problem(rng, null, 8).headingIndex);
+  assert.equal(headings.size, 8);
+  assert.equal(generateT4Problem.length >= 1, true);
+});
+
+test('機首の向きが4でも正解の計算は変わらない', () => {
+  for (const h of [0, 2, 4, 6]) for (let r = 0; r < 8; r++) {
+    const t = (h + r) % 8;
+    assert.deepEqual(solutionFor(h, r), { towerDirection: t, position: DIRECTIONS[(t + 4) % 8].key, heading: DIRECTIONS[h].key });
+  }
+});
+
+test('機首の向きが4のとき: 練習問題も N・E・S・W だけ。例題は機首 E・RBI 9・自機 N のマス・向き E', () => {
+  const rng = createRng(12);
+  let state = createT4Practice(rng, null, 4);
+  for (let i = 0; i < 3; i++) {
+    assert.ok([0, 2, 4, 6].includes(state.problem.headingIndex), JSON.stringify(state.problem));
+    state = answerT4Practice(state, { position: 'N', heading: 'N' });
+    state = advanceT4Practice(state, rng);
+  }
+  const example = createT4Example(4);
+  assert.deepEqual(example.problem, { headingIndex: 2, relativeIndex: 2 });
+  assert.deepEqual(example.selection, { position: 'N', heading: 'E' });
+  assert.deepEqual(explainT4Solution(example.problem), [
+    '1. GYRO の▲の位置が機首 → 機首は E',
+    '2. RBI の針は 9(機首の右)→ NDB は E の右90° = S',
+    '3. 自機は NDB の反対の N のマス。向きは機首のまま E',
+  ]);
+  assert.deepEqual(createT4Example(8).problem, { headingIndex: 1, relativeIndex: 2 }, '8 のときの例題は今のまま');
+});
+
+test('向きの回答ボタンは、4のとき N・E・S・W の4つ、8のとき8つ', () => {
+  for (const [n, expected] of [[4, ['N', 'E', 'S', 'W']], [8, DIRECTIONS.map(d => d.key)]]) {
+    const created = [];
+    const make = () => ({ textContent: '', innerHTML: '', className: '', dataset: {}, classList: { add() {}, toggle() {}, remove() {} },
+      append() {}, setAttribute() {}, addEventListener() {}, focus() {} });
+    const nodes = new Map();
+    const root = { innerHTML: '', querySelector(sel) { if (!nodes.has(sel)) nodes.set(sel, make()); return nodes.get(sel); }, querySelectorAll() { return []; } };
+    const previous = globalThis.document;
+    globalThis.document = { createElement: () => { const node = make(); created.push(node); return node; }, addEventListener() {}, removeEventListener() {} };
+    try {
+      const cleanup = mount(root, { settings: { t4: { ...P, headingDirections: n }, common: DEFAULTS.common }, store: null, navigate() {} });
+      assert.deepEqual(created.filter(node => node.dataset.heading).map(node => node.dataset.heading), expected, `${n}方向`);
+      cleanup();
+    } finally {
+      globalThis.document = previous;
+    }
+  }
 });
 
 test('compassMode がなくなっても正解の計算は変わらない(古い設定が残っていても同じ)', () => {
@@ -259,7 +330,7 @@ test('記録はSPEC §4の形で、その回の設定を複製する', () => {
   assert.deepEqual(record, {
     id: `${date}-t4`, test: 't4', date, score: 2,
     detail: { answered: 4, correct: 2, positionOnlyCorrect: 1, headingOnlyCorrect: 1 },
-    settings: { durationSec: 180, answerFeedbackMs: 300 },
+    settings: { durationSec: 180, answerFeedbackMs: 300, headingDirections: 4 },
   });
   assert.notEqual(record.settings, P);
 });
