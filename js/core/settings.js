@@ -98,6 +98,7 @@ export const DEFAULTS = Object.freeze({
     matchRate: 0.25,
     maxConsecutiveMatches: 3, // 一致が続いてよい最大回数(2026-09-30 本番に合わせて 1 → 3)
     matchWaitMs: 5000, // 一致の表示は押すまで止まる。この時間で押せなければやり直し(2026-09-30 本番に合わせて追加)
+    initialNonMatchCount: 3, // 始まってから最初のこの数の表示では一致を出さない(2026-09-30 ユーザーの実機の感想で追加)
     pressFeedbackMs: 300, // 押したあとボタンを薄くしておく最低の時間
     stallAbortMs: 1000, // フレームの間隔がこれを超えたら描画が止まったとみなして中断する
   }),

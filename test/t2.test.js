@@ -16,7 +16,7 @@ const P = DEFAULTS.t2;
 test('既定値: 2分・不一致は1000msで切り替え・一致25%・連続3回まで・一致は5秒待つ', () => {
   assert.deepEqual(P, {
     durationSec: 120, intervalMs: 1000, matchRate: 0.25, maxConsecutiveMatches: 3,
-    matchWaitMs: 5000, pressFeedbackMs: 300, stallAbortMs: 1000,
+    matchWaitMs: 5000, initialNonMatchCount: 3, pressFeedbackMs: 300, stallAbortMs: 1000,
   });
 });
 
@@ -68,6 +68,38 @@ test('系列: 一致の割合は約25%(連続上限の分だけわずかに下�
   assert.ok(rate > 0.23 && rate < 0.26, `rate=${rate}`);
 });
 
+test('系列: 始まってから最初の3つの表示では一致を出さない(2026-09-30 ユーザーの実機の感想で追加)', () => {
+  let fourthMatches = 0;
+  for (let seed = 1; seed <= 2000; seed++) {
+    const seq = makeSequence(seed, 4, { ...P, matchRate: 1 });
+    assert.deepEqual(seq.slice(0, 3).map(d => d.match), [false, false, false], `seed=${seed}`);
+    if (seq[3].match) fourthMatches++;
+  }
+  assert.equal(fourthMatches, 2000, '4つ目からは一致が出る(一致確率1なら必ず)');
+  let withDefault = 0;
+  for (let seed = 1; seed <= 2000; seed++) {
+    const seq = makeSequence(seed, 3);
+    assert.ok(seq.every(d => !d.match), `seed=${seed}`);
+    if (makeSequence(seed, 4)[3].match) withDefault++;
+  }
+  assert.ok(withDefault > 300, `既定の確率でも4つ目は一致になりうる: ${withDefault}/2000`);
+});
+
+test('系列: 最初の一致しない表示の数(initialNonMatchCount)は設定で変えられる', () => {
+  const seq = makeSequence(1, 6, { ...P, matchRate: 1, initialNonMatchCount: 5 });
+  assert.deepEqual(seq.map(d => d.match), [false, false, false, false, false, true]);
+  const none = makeSequence(1, 1, { ...P, matchRate: 1, initialNonMatchCount: 0 });
+  assert.equal(none[0].match, true);
+});
+
+test('進行: 始めた時点(最初のフレームより前)から押下を受け付ける', () => {
+  const rng = createRng(3);
+  const run = createT2Run(P, rng, 1000);
+  const r = pressT2(run, 1000, P, rng);
+  assert.notEqual(r.result, 'ignored');
+  assert.equal(r.result, 'falseAlarm', '最初の表示は一致しない');
+});
+
 test('系列: 太い十字も出る。シードが同じなら同じ系列', () => {
   const seq = makeSequence(3, 2000);
   assert.ok(seq.some(d => d.left === 'thickCross' || d.right === 'thickCross'));
@@ -87,9 +119,11 @@ test('設定の検証: 間隔・待ち時間・確率・連続上限が不正な
 // 最初の表示を一致・不一致に固定して始める(rng を小さな値・大きな値に固定)
 const low = () => 0.01; // 一致を選ぶ
 const high = () => 0.99; // 不一致を選ぶ
+// 最初の表示から一致を出せるよう、始めの一致しない表示の数を0にした設定(進行のテスト用)
+const Q = { ...P, initialNonMatchCount: 0 };
 
 test('一致の表示: 押されるまで止まり、押したら反応時間を記録して次へ進む', () => {
-  let run = createT2Run(P, low, 1000);
+  let run = createT2Run(Q, low, 1000);
   assert.equal(run.display.match, true);
   const t = tickT2(run, 1000 + P.intervalMs * 3, P, high);
   assert.equal(t.event, null, '1000ms を過ぎても切り替わらない');
@@ -103,7 +137,7 @@ test('一致の表示: 押されるまで止まり、押したら反応時間を
 });
 
 test('一致の表示: matchWaitMs(5秒)たっても押されなければやり直し', () => {
-  const run = createT2Run(P, low, 1000);
+  const run = createT2Run(Q, low, 1000);
   assert.equal(tickT2(run, 1000 + P.matchWaitMs - 1, P, high).event, null);
   assert.equal(tickT2(run, 1000 + P.matchWaitMs, P, high).event, 'restart');
 });
@@ -130,7 +164,7 @@ test('不一致の表示は押さなければ何も数えない。見逃しは�
 });
 
 test('進行は元の状態を書き換えない', () => {
-  const run = createT2Run(P, low, 0);
+  const run = createT2Run(Q, low, 0);
   const before = structuredClone(run);
   pressT2(run, 500, P, high);
   tickT2(run, 9999, P, high);

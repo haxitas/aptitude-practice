@@ -275,6 +275,7 @@ h1 { font-size: 1.6rem; margin: 0 0 16px; }
   transition: opacity 80ms linear;
 }
 .t2-same.is-pressed { opacity: 0.35; } /* 押したら次の表示まで薄くする(正誤は出さない) */
+.t2-space-hint { margin: 2px 0 0; font-size: 0.8rem; color: var(--muted); text-align: center; }
 
 /* ---- テスト1 本番 ---- */
 .t1-play {

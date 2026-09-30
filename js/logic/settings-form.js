@@ -50,6 +50,7 @@ export const SETTING_FIELDS = Object.freeze({
     number('matchRate', '同じ組の確率', 0, 1, { step: 0.01 }),
     number('maxConsecutiveMatches', '一致の連続上限', 0, 1000, { integer: true, unit: '回' }),
     number('matchWaitMs', '同じ図形で待つ時間', 500, 60000, { integer: true, unit: 'ms', hint: '押せなければ最初からやり直し' }),
+    number('initialNonMatchCount', '始めの一致しない表示の数', 0, 100, { integer: true, unit: '個' }),
   ]),
   t3: Object.freeze([
     duration(),

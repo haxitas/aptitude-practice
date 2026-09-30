@@ -102,7 +102,7 @@ test('apt_settings がなければ既定値そのもの', () => {
 test('T2 の既定値は SPEC §6 と承認済みの値', () => {
   assert.deepEqual(DEFAULTS.t2, {
     durationSec: 120, intervalMs: 1000, matchRate: 0.25, maxConsecutiveMatches: 3,
-    matchWaitMs: 5000, pressFeedbackMs: 300, stallAbortMs: 1000,
+    matchWaitMs: 5000, initialNonMatchCount: 3, pressFeedbackMs: 300, stallAbortMs: 1000,
   });
   for (const id of ['t1', 't2', 't3', 't4', 't5', 't6']) assert.ok(DEFAULTS[id], id);
 });

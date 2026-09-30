@@ -110,6 +110,7 @@ export function mount(root, ctx) {
         <div class="t2-bottom">
           ${feedbackSlotHtml()}
           <button class="t2-same" type="button" data-ref="same">同じ</button>
+          <p class="t2-space-hint">スペースキーでも押せます(本番では使えません)</p>
         </div>
       </section>`;
     const $ = name => root.querySelector(`[data-ref="${name}"]`);
@@ -118,7 +119,9 @@ export function mount(root, ctx) {
     const sameBtn = $('same');
     const feedback = createFeedbackSlot($('feedback'), { durationMs: common.feedbackMs });
 
-    let run = null; // 最初のフレームで始める
+    // 始めのタップの処理の中で最初の表示を作る。以前は最初のフレームで作っていたため、
+    // それより前の押下を捨てていた(2026-09-30 ユーザーの実機の感想で直した)
+    let run = null;
     let lastFrameTs = null;
 
     // フォーカスのあるボタンがスペースキーで押されないように外しておく
@@ -139,7 +142,6 @@ export function mount(root, ctx) {
     }
 
     function press(ts) {
-      if (!run) return;
       const r = pressT2(run, ts, params, rng);
       if (r.result === 'ignored') return;
       run = r.state;
@@ -164,25 +166,20 @@ export function mount(root, ctx) {
         return;
       }
       lastFrameTs = ts;
-      if (!run) {
-        run = createT2Run(params, rng, ts);
-        draw();
-      } else {
-        const t = tickT2(run, ts, params, rng);
-        if (t.event === 'restart') {
-          // 同じ図形を時間内に押せなかった: この回は保存せず、開始画面に戻る
-          showStart(`${params.matchWaitMs / 1000}秒以内に押せなかったため、最初からやり直します`);
-          return;
-        }
-        run = t.state;
-        if (t.event === 'advanced') draw();
+      const t = tickT2(run, ts, params, rng);
+      if (t.event === 'restart') {
+        // 同じ図形を時間内に押せなかった: この回は保存せず、開始画面に戻る
+        showStart(`${params.matchWaitMs / 1000}秒以内に押せなかったため、最初からやり直します`);
+        return;
       }
+      run = t.state;
+      if (t.event === 'advanced') draw();
       feedback.tick(ts);
       setPale(run.pressed || ts - lastPressTs < params.pressFeedbackMs);
     }
 
     function onEnd() {
-      const tally = run ? run.tally : createT2Tally();
+      const tally = run.tally;
       const record = buildRecord({ date: new Date().toISOString(), tally, settings: params });
       const saveResult = appendRecord(ctx.store, record);
       setPhase(null); // 入力の受け付けを外す
@@ -224,6 +221,9 @@ export function mount(root, ctx) {
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
     document.addEventListener('visibilitychange', onVisibility);
+
+    run = createT2Run(params, rng, performance.now());
+    draw();
 
     // 制限時間は、同じ図形で止まっている間も進む
     const timer = startTimer({

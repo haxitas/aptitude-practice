@@ -17,18 +17,23 @@ export function validateT2Params(p) {
   if (!(Number.isInteger(p.maxConsecutiveMatches) && p.maxConsecutiveMatches >= 0)) {
     bad.push(`連続の上限 maxConsecutiveMatches=${p.maxConsecutiveMatches}`);
   }
+  if (!(Number.isInteger(p.initialNonMatchCount) && p.initialNonMatchCount >= 0)) {
+    bad.push(`最初の一致しない表示の数 initialNonMatchCount=${p.initialNonMatchCount}`);
+  }
   if (bad.length) throw new Error(`テスト3(同一図形)の設定が不正です: ${bad.join('、')}`);
 }
 
 // ---- 表示の系列(必要な分だけ順に作る) ----
 
 export function createSequenceState() {
-  return { prev: null, run: 0 };
+  return { prev: null, run: 0, shown: 0 };
 }
 
-// 一致は確率 matchRate。一致が maxConsecutiveMatches 回続いたら不一致にする。直前とまったく同じ表示は避ける
+// 一致は確率 matchRate。一致が maxConsecutiveMatches 回続いたら不一致にする。直前とまったく同じ表示は避ける。
+// 始まってから最初の initialNonMatchCount 個の表示は一致にしない(2026-09-30 ユーザーの実機の感想で追加)
 export function nextT2Display(state, rng, p) {
-  const canMatch = state.run < p.maxConsecutiveMatches;
+  const shown = state.shown ?? 0;
+  const canMatch = state.run < p.maxConsecutiveMatches && shown >= p.initialNonMatchCount;
   const match = canMatch && rng() < p.matchRate;
   const prev = state.prev;
   let display;
@@ -41,7 +46,7 @@ export function nextT2Display(state, rng, p) {
     const [a, b] = cands[Math.floor(rng() * cands.length)];
     display = { left: a, right: b, match: false };
   }
-  return { display, state: { prev: display, run: match ? state.run + 1 : 0 } };
+  return { display, state: { prev: display, run: match ? state.run + 1 : 0, shown: shown + 1 } };
 }
 
 // ---- 進行 ----
