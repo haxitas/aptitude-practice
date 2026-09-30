@@ -728,3 +728,107 @@ test('速さ: 時間を求める問題では距離と速さを同じ数にしな
   }
   assert.ok(time > 500, `時間を求める問題 ${time}`);
 });
+
+// ---- 場面と数値を釣り合わせる(2026-09-30 レビュー後の直し) ----
+// 場面ごとに、現実的な数値の範囲をテストの側で持つ。問題の数値がその場面の範囲に入ることを確かめる。
+
+// 単位換算: 量ごとの基準の単位への倍率(面積 m²・長さ m・重さ kg・体積 L・時間 分・速さ 時速km)
+const BASE = {
+  'ha': 10000, 'a': 100, 'km²': 1e6, 'm²': 1, 'cm²': 1e-4, 'mm²': 1e-6,
+  'km': 1000, 'm': 1, 'cm': 0.01, 'mm': 0.001,
+  'kg': 1, 'g': 0.001, 't': 1000, 'メートルトン': 1000,
+  'L': 1, 'mL': 0.001, 'dL': 0.1, 'm³': 1000, 'cm³': 0.001, 'mm³': 1e-6,
+  '時間': 60, '分': 1, '秒': 1 / 60, '日': 1440,
+  '時速km': 1, '分速m': 0.06, '秒速m': 3.6,
+};
+const UNIT_SCENE_RANGES = {
+  // 面積(m²)
+  office: [100, 2000], hangar: [1000, 20000], warehouse: [5000, 200000], apron: [10000, 500000], airport: [500000, 2e7],
+  label: [1e-4, 1e-2], window: [0.5, 5], panel: [1, 20], sheet: [1, 20],
+  // 長さ(m)
+  runway: [1000, 5000], road: [1000, 20000], taxiway: [1000, 10000], width: [0.1, 2], cable: [1, 20], part: [0.01, 0.3],
+  // 重さ(kg)
+  baggage: [1, 30], catering: [1, 100], cargo: [100, 20000], truckload: [500, 20000],
+  // 体積(L)
+  drinks: [1, 50], water: [1, 20], fuel: [500, 20000], partVolume: [0.001, 0.02], screw: [0.001, 0.005], partCase: [0.005, 0.02],
+  // 時間(分)
+  flight: [30, 1200], maintenance: [10, 28800], loading: [1, 180], voyage: [1440, 28800],
+  // 速さ(時速km)
+  taxiing: [5, 50], takeoff: [100, 360], truck: [10, 100], wind: [3, 100], bicycle: [5, 30],
+};
+const SPEED_SCENE_RANGES = { walker: [2, 6], runner: [6, 15], bicycle: [8, 25], truck: [10, 80], ship: [10, 40] };
+// 周回: [遅い方の範囲, 速い方の範囲]
+const LAP_SCENE_RANGES = { pondWalkers: [[2, 6], [2, 6]], joggers: [[4, 12], [4, 12]], walkerRunner: [[2, 6], [6, 12]] };
+const within = (v, [min, max]) => v >= min - 1e-9 && v <= max + 1e-9;
+
+function sceneName(q) {
+  const parts = q.scene.split(':');
+  return parts[parts.length - 1];
+}
+
+function assertSceneFits(q) {
+  const name = sceneName(q);
+  const v = q.values;
+  const where = `${q.kind}/${q.variant} ${q.scene}: ${q.prompt}`;
+  if (q.kind === 'unit') {
+    const unit = v.fromPre ? `${v.fromPre}${v.from}` : v.from;
+    const value = v.shown * BASE[unit];
+    assert.ok(UNIT_SCENE_RANGES[name], `範囲の無い場面 ${where}`);
+    assert.ok(within(value, UNIT_SCENE_RANGES[name]), `${where}(${value} は ${UNIT_SCENE_RANGES[name]} の外)`);
+  } else if (q.kind === 'speed') {
+    assert.ok(within(v.speed, SPEED_SCENE_RANGES[name]), where);
+  } else if (q.kind === 'meeting' || q.kind === 'catchup') {
+    const [slow, fast] = LAP_SCENE_RANGES[name];
+    assert.ok(within(v.b, slow) && within(v.a, fast), where);
+  } else if (q.kind === 'percentage' || q.kind === 'inversePercentage') {
+    if (name === 'passengers' || name === 'seats') assert.ok(v.base <= 500, where);
+  } else if (q.kind === 'price' && (q.variant === 'total' || q.variant === 'unit-price')) {
+    const ranges = { souvenir: [100, 3000], snack: [10, 300], part: [10, 3000] };
+    assert.ok(within(v.price, ranges[name]), where);
+  } else if (q.kind === 'geometry' && q.variant.startsWith('circle')) {
+    const diameter = v.diameter ?? (v.radius !== undefined ? v.radius * 2 : q.answer);
+    const ranges = { tray: [20, 60], table: [40, 200], flowerbed: [50, 600], fountain: [100, 600] };
+    assert.ok(within(diameter, ranges[name]), `${where}(直径 ${diameter})`);
+  } else if (q.kind === 'cylinder') {
+    if (name === 'can') assert.ok(v.diameter <= 30 && v.heightM <= 1, where);
+    if (name === 'tank') assert.ok(v.diameter >= 20, where);
+  }
+}
+
+test('場面と数値: 多数のシードで、どの種類も場面が数値の範囲に合っている(旅客機が時速15km、18km²の倉庫などは出さない)', () => {
+  for (const kind of PROBLEM_KINDS) {
+    for (let seed = 1; seed <= 1500; seed++) assertSceneFits(generateT1Problem(createRng(seed), P, null, kind));
+  }
+  const rng = createRng(99);
+  let previous = null;
+  for (let i = 0; i < 6000; i++) {
+    previous = generateT1Problem(rng, P, previous);
+    assertSceneFits(previous);
+  }
+});
+
+test('場面と数値: 単位換算はどの種類・どの数値でも合う場面があり、場面は量ごとに3つ以上出る', () => {
+  const byQuantity = new Map();
+  for (const id of UNIT_VARIANT_IDS) {
+    for (let seed = 1; seed <= 300; seed++) {
+      const q = generateT1Problem(createRng(seed), P, null, 'unit', id);
+      assertSceneFits(q);
+      const quantity = q.scene.split(':')[1];
+      if (!byQuantity.has(quantity)) byQuantity.set(quantity, new Set());
+      byQuantity.get(quantity).add(sceneName(q));
+    }
+  }
+  assert.deepEqual([...byQuantity.keys()].sort(), ['area', 'length', 'speed', 'time', 'volume', 'weight']);
+  for (const [quantity, names] of byQuantity) assert.ok(names.size >= 3, `${quantity}: ${[...names]}`);
+});
+
+test('場面と数値: 速さの場面は時速2〜20kmのどの数値にも合うものがある(旅客機は使わない)', () => {
+  const seen = new Set();
+  for (let seed = 1; seed <= 3000; seed++) {
+    const q = generateT1Problem(createRng(seed), P, null, 'speed');
+    assertSceneFits(q);
+    assert.doesNotMatch(q.prompt, /旅客機|飛行機/, q.prompt);
+    seen.add(sceneName(q));
+  }
+  assert.ok(seen.size >= 3, [...seen].join(','));
+});

@@ -10,66 +10,114 @@ export const PROBLEM_KINDS = Object.freeze([
 // ---- 場面(2026-09-30 本番に合わせて追加) ----
 // 問題文は「場面の文。問いの文」にする。場面は種類ごとに3つ以上あり、ランダムに使う。
 // 場面の文には数字を入れない(問題文の数値は、正解の計算に使う数値だけにする)。
+// 場面ごとに使ってよい数値の範囲を持ち、その問題の数値に合う場面の中から選ぶ(2026-09-30 レビュー後の直し)。
+// 数値の作り方と正解は変えず、場面の選び方だけを変える。
 function pickScene(rng, list) {
   const index = randInt(rng, 0, list.length - 1);
   return { index, scene: list[index] };
 }
 
-// 単位換算の場面。q: 換算前の量(「時速6km」など)、ask: 問いの単位(「分速何m」など)
+// fits(場面) が真の場面から選ぶ。合う場面が無ければ(設定で数値の範囲を広げたときなど)、範囲に最も近い場面を使う
+function pickFittingScene(rng, scenes, fits, distance = () => 0) {
+  const fitting = scenes.filter(fits);
+  if (fitting.length) return fitting[randInt(rng, 0, fitting.length - 1)];
+  return scenes.reduce((best, scene) => (distance(scene) < distance(best) ? scene : best));
+}
+
+const inRange = (value, min, max) => value >= min - 1e-9 && value <= max + 1e-9;
+// 範囲からどれだけ外れているか(比で測る)
+const rangeGap = (value, min, max) => (value < min ? min / value : value > max ? value / max : 1);
+
+// 単位換算: 量ごとの基準の単位への倍率(面積 m²・長さ m・重さ kg・体積 L・時間 分・速さ 時速km)
+const UNIT_BASE = Object.freeze({
+  area: { 'ha': 10000, 'a': 100, 'km²': 1e6, 'm²': 1, 'cm²': 1e-4, 'mm²': 1e-6 },
+  length: { 'km': 1000, 'm': 1, 'cm': 0.01, 'mm': 0.001 },
+  weight: { 'kg': 1, 'g': 0.001, 't': 1000 },
+  volume: { 'L': 1, 'mL': 0.001, 'dL': 0.1, 'm³': 1000, 'cm³': 0.001, 'mm³': 1e-6 },
+  time: { '時間': 60, '分': 1, '秒': 1 / 60, '日': 1440 },
+  speed: { '時速km': 1, '分速m': 0.06, '秒速m': 3.6 },
+});
+
+// 単位換算の場面。min・max は基準の単位での範囲。q: 換算前の量(「時速6km」など)、ask: 問いの単位(「分速何m」など)
 const UNIT_SCENES = Object.freeze({
-  lengthLong: [
-    (q, ask) => `滑走路の長さは${q}です。これは${ask}ですか?`,
-    (q, ask) => `空港から倉庫までの道のりは${q}です。これは${ask}ですか?`,
-    (q, ask) => `飛行機が誘導路を${q}走りました。これは${ask}ですか?`,
+  area: [
+    { id: 'office', min: 100, max: 2000, text: (q, ask) => `事務所の床面積は${q}です。これは${ask}ですか?` },
+    { id: 'hangar', min: 1000, max: 20000, text: (q, ask) => `格納庫の床面積は${q}です。これは${ask}ですか?` },
+    { id: 'warehouse', min: 5000, max: 200000, text: (q, ask) => `物流倉庫の敷地は${q}です。これは${ask}ですか?` },
+    { id: 'apron', min: 10000, max: 500000, text: (q, ask) => `新しい駐機場の広さは${q}です。これは${ask}ですか?` },
+    { id: 'airport', min: 500000, max: 2e7, text: (q, ask) => `空港の敷地の広さは${q}です。これは${ask}ですか?` },
+    { id: 'label', min: 1e-4, max: 1e-2, text: (q, ask) => `荷札のラベルの面積は${q}です。これは${ask}ですか?` },
+    { id: 'window', min: 0.5, max: 5, text: (q, ask) => `窓ガラスの面積は${q}です。これは${ask}ですか?` },
+    { id: 'panel', min: 1, max: 20, text: (q, ask) => `機体のパネルの面積は${q}です。これは${ask}ですか?` },
+    { id: 'sheet', min: 1, max: 20, text: (q, ask) => `床に敷くシートの面積は${q}です。これは${ask}ですか?` },
   ],
-  lengthShort: [
-    (q, ask) => `荷物の幅は${q}です。これは${ask}ですか?`,
-    (q, ask) => `整備用のケーブルの長さは${q}です。これは${ask}ですか?`,
-    (q, ask) => `部品の長さを測ると${q}でした。これは${ask}ですか?`,
+  length: [
+    { id: 'runway', min: 1000, max: 5000, text: (q, ask) => `滑走路の長さは${q}です。これは${ask}ですか?` },
+    { id: 'road', min: 1000, max: 20000, text: (q, ask) => `空港から倉庫までの道のりは${q}です。これは${ask}ですか?` },
+    { id: 'taxiway', min: 1000, max: 10000, text: (q, ask) => `飛行機が誘導路を${q}走りました。これは${ask}ですか?` },
+    { id: 'width', min: 0.1, max: 2, text: (q, ask) => `荷物の幅は${q}です。これは${ask}ですか?` },
+    { id: 'cable', min: 1, max: 20, text: (q, ask) => `整備用のケーブルの長さは${q}です。これは${ask}ですか?` },
+    { id: 'part', min: 0.01, max: 0.3, text: (q, ask) => `部品の長さを測ると${q}でした。これは${ask}ですか?` },
   ],
   weight: [
-    (q, ask) => `貨物の重さは${q}です。これは${ask}ですか?`,
-    (q, ask) => `機内食の材料を${q}仕入れました。これは${ask}ですか?`,
-    (q, ask) => `トラックに${q}の荷物を積みました。これは${ask}ですか?`,
-  ],
-  areaLarge: [
-    (q, ask) => `空港の敷地の広さは${q}です。これは${ask}ですか?`,
-    (q, ask) => `新しい駐機場の広さは${q}です。これは${ask}ですか?`,
-    (q, ask) => `物流倉庫の敷地は${q}です。これは${ask}ですか?`,
-  ],
-  areaSmall: [
-    (q, ask) => `機体のパネルの面積は${q}です。これは${ask}ですか?`,
-    (q, ask) => `窓ガラスの面積は${q}です。これは${ask}ですか?`,
-    (q, ask) => `荷札のラベルの面積は${q}です。これは${ask}ですか?`,
+    { id: 'baggage', min: 1, max: 30, text: (q, ask) => `手荷物の重さは${q}です。これは${ask}ですか?` },
+    { id: 'catering', min: 1, max: 100, text: (q, ask) => `機内食の材料を${q}仕入れました。これは${ask}ですか?` },
+    { id: 'cargo', min: 100, max: 20000, text: (q, ask) => `貨物の重さは${q}です。これは${ask}ですか?` },
+    { id: 'truckload', min: 500, max: 20000, text: (q, ask) => `トラックに${q}の荷物を積みました。これは${ask}ですか?` },
   ],
   volume: [
-    (q, ask) => `タンクに燃料が${q}入っています。これは${ask}ですか?`,
-    (q, ask) => `機内で飲み物を${q}用意しました。これは${ask}ですか?`,
-    (q, ask) => `容器に水が${q}入っています。これは${ask}ですか?`,
-  ],
-  volumeSmall: [
-    (q, ask) => `部品の体積は${q}です。これは${ask}ですか?`,
-    (q, ask) => `小さな箱の容積は${q}です。これは${ask}ですか?`,
-    (q, ask) => `ねじの体積は${q}です。これは${ask}ですか?`,
+    { id: 'drinks', min: 1, max: 50, text: (q, ask) => `機内で飲み物を${q}用意しました。これは${ask}ですか?` },
+    { id: 'water', min: 1, max: 20, text: (q, ask) => `容器に水が${q}入っています。これは${ask}ですか?` },
+    { id: 'fuel', min: 500, max: 20000, text: (q, ask) => `タンクに燃料が${q}入っています。これは${ask}ですか?` },
+    { id: 'partVolume', min: 0.001, max: 0.02, text: (q, ask) => `部品の体積は${q}です。これは${ask}ですか?` },
+    { id: 'screw', min: 0.001, max: 0.005, text: (q, ask) => `ねじの体積は${q}です。これは${ask}ですか?` },
+    { id: 'partCase', min: 0.005, max: 0.02, text: (q, ask) => `小さな部品ケースの容積は${q}です。これは${ask}ですか?` },
   ],
   time: [
-    (q, ask) => `フライトの時間は${q}です。これは${ask}ですか?`,
-    (q, ask) => `機体の整備に${q}かかりました。これは${ask}ですか?`,
-    (q, ask) => `荷物の積み込みに${q}かかりました。これは${ask}ですか?`,
+    { id: 'flight', min: 30, max: 1200, text: (q, ask) => `フライトの時間は${q}です。これは${ask}ですか?` },
+    { id: 'maintenance', min: 10, max: 28800, text: (q, ask) => `機体の整備に${q}かかりました。これは${ask}ですか?` },
+    { id: 'loading', min: 1, max: 180, text: (q, ask) => `荷物の積み込みに${q}かかりました。これは${ask}ですか?` },
+    { id: 'voyage', min: 1440, max: 28800, text: (q, ask) => `貨物船での輸送に${q}かかりました。これは${ask}ですか?` },
   ],
   speed: [
-    (q, ask) => `旅客機が地上を${q}で移動しています。これは${ask}ですか?`,
-    (q, ask) => `トラックが${q}で走っています。これは${ask}ですか?`,
-    (q, ask) => `風の速さは${q}です。これは${ask}ですか?`,
+    { id: 'taxiing', min: 5, max: 50, text: (q, ask) => `旅客機が地上を${q}で移動しています。これは${ask}ですか?` },
+    { id: 'takeoff', min: 100, max: 360, text: (q, ask) => `離陸のために滑走する旅客機の速さは${q}です。これは${ask}ですか?` },
+    { id: 'truck', min: 10, max: 100, text: (q, ask) => `トラックが${q}で走っています。これは${ask}ですか?` },
+    { id: 'wind', min: 3, max: 100, text: (q, ask) => `風の速さは${q}です。これは${ask}ですか?` },
+    { id: 'bicycle', min: 5, max: 30, text: (q, ask) => `自転車が${q}で走っています。これは${ask}ですか?` },
   ],
 });
 
-// 図形の問題に使う物の名前(形ごとに3つ)
+// 速さの問題の場面(時速 min〜max km)。旅客機は時速200km以上なので、時速2〜20kmの問題には使わない
+const SPEED_SCENES = Object.freeze([
+  { id: 'walker', min: 2, max: 6, subject: '人', past: '歩きました', verb: '歩く', place: '駅' },
+  { id: 'runner', min: 6, max: 15, subject: 'ランナー', past: '走りました', verb: '走る', place: 'ゴール' },
+  { id: 'bicycle', min: 8, max: 25, subject: '自転車', past: '走りました', verb: '走る', place: '公園' },
+  { id: 'truck', min: 10, max: 80, subject: 'トラック', past: '走りました', verb: '走る', place: '倉庫' },
+  { id: 'ship', min: 10, max: 40, subject: '船', past: '進みました', verb: '進む', place: '港' },
+]);
+
+// 周回(出会い・追いつき)の場面。slow・fast は遅い方・速い方の時速の範囲
+const LAP_SCENES = Object.freeze([
+  { id: 'pondWalkers', slow: [2, 6], fast: [2, 6], place: '池のまわり',
+    who: (a, b) => `時速${a}kmと時速${b}kmで歩くふたり`, faster: '速い方', slower: '遅い方' },
+  { id: 'joggers', slow: [4, 12], fast: [4, 12], place: '公園のジョギングコース',
+    who: (a, b) => `時速${a}kmと時速${b}kmで走るふたりのランナー`, faster: '速い方', slower: '遅い方' },
+  { id: 'walkerRunner', slow: [2, 6], fast: [6, 12], place: '公園の周回コース',
+    who: (a, b) => `時速${a}kmで走る人と時速${b}kmで歩く人`, faster: '走る人', slower: '歩く人' },
+]);
+
+// 図形の問題に使う物の名前。円は直径(cm)の範囲を持つ。多角形は辺が2〜20cmなので小さな物にする
+const CIRCLE_NOUNS = Object.freeze([
+  { id: 'tray', name: '丸いトレー', min: 20, max: 60 },
+  { id: 'table', name: '丸いテーブル', min: 40, max: 200 },
+  { id: 'flowerbed', name: '円形の花壇', min: 50, max: 600 },
+  { id: 'fountain', name: '円形の噴水', min: 100, max: 600 },
+]);
 const GEOMETRY_NOUNS = Object.freeze({
-  circle: ['円形の花壇', '丸いテーブル', '円形の噴水'],
-  triangle: ['三角形の旗', '三角形の板', '三角形のラベル'],
-  trapezoid: ['台形の板', '台形の窓', '台形の看板'],
-  parallelogram: ['平行四辺形の板', '平行四辺形のタイル', '平行四辺形の看板'],
+  triangle: ['三角形の小旗', '三角形の板', '三角形のラベル'],
+  trapezoid: ['台形の板', '台形の部品', '台形のタイル'],
+  parallelogram: ['平行四辺形の板', '平行四辺形のタイル', '平行四辺形のシール'],
 });
 
 // 単位換算の組(大きい単位 → 小さい単位の向きを1行で書き、往復の2種類を作る)。
@@ -77,14 +125,14 @@ const GEOMETRY_NOUNS = Object.freeze({
 // confuse: 典型的に取り違える倍率(掛けると割るの逆、換算忘れは共通で加える)。
 // forgotPower: 2乗・3乗の換算で「乗し忘れ」たときの倍率(長さの倍率のまま)。
 const UNIT_PAIRS = Object.freeze([
-  { ids: ['ha-to-m2', 'm2-to-ha'], scene: 'areaLarge', big: 'ha', small: 'm²', num: 10000, den: 1, confuse: [100, 1000, 1000000] },
-  { ids: ['a-to-m2', 'm2-to-a'], scene: 'areaLarge', big: 'a', small: 'm²', num: 100, den: 1, confuse: [10, 1000, 10000] },
-  { ids: ['km2-to-ha', 'ha-to-km2'], scene: 'areaLarge', big: 'km²', small: 'ha', num: 100, den: 1, confuse: [1000, 10000, 1000000] },
-  { ids: ['km-to-m', 'm-to-km'], scene: 'lengthLong', big: 'km', small: 'm', num: 1000, den: 1, confuse: [100, 10000] },
+  { ids: ['ha-to-m2', 'm2-to-ha'], scene: 'area', big: 'ha', small: 'm²', num: 10000, den: 1, confuse: [100, 1000, 1000000] },
+  { ids: ['a-to-m2', 'm2-to-a'], scene: 'area', big: 'a', small: 'm²', num: 100, den: 1, confuse: [10, 1000, 10000] },
+  { ids: ['km2-to-ha', 'ha-to-km2'], scene: 'area', big: 'km²', small: 'ha', num: 100, den: 1, confuse: [1000, 10000, 1000000] },
+  { ids: ['km-to-m', 'm-to-km'], scene: 'length', big: 'km', small: 'm', num: 1000, den: 1, confuse: [100, 10000] },
   { ids: ['hours-to-minutes', 'minutes-to-hours'], scene: 'time', big: '時間', small: '分', num: 60, den: 1, confuse: [100, 3600, 24] },
   // 2026-09-27 ユーザーの判断で追加
-  { ids: ['m-to-cm', 'cm-to-m'], scene: 'lengthShort', big: 'm', small: 'cm', num: 100, den: 1, confuse: [10, 1000, 10000] },
-  { ids: ['cm-to-mm', 'mm-to-cm'], scene: 'lengthShort', big: 'cm', small: 'mm', num: 10, den: 1, confuse: [100, 1000, 10000] },
+  { ids: ['m-to-cm', 'cm-to-m'], scene: 'length', big: 'm', small: 'cm', num: 100, den: 1, confuse: [10, 1000, 10000] },
+  { ids: ['cm-to-mm', 'mm-to-cm'], scene: 'length', big: 'cm', small: 'mm', num: 10, den: 1, confuse: [100, 1000, 10000] },
   { ids: ['kg-to-g', 'g-to-kg'], scene: 'weight', big: 'kg', small: 'g', num: 1000, den: 1, confuse: [100, 10000] },
   { ids: ['t-to-kg', 'kg-to-t'], scene: 'weight', big: 't', small: 'kg', num: 1000, den: 1, confuse: [100, 10000] },
   { ids: ['L-to-mL', 'mL-to-L'], scene: 'volume', big: 'L', small: 'mL', num: 1000, den: 1, confuse: [100, 10000] },
@@ -92,16 +140,16 @@ const UNIT_PAIRS = Object.freeze([
   { ids: ['m3-to-L', 'L-to-m3'], scene: 'volume', big: 'm³', small: 'L', num: 1000, den: 1, confuse: [100, 10000, 1000000] },
   { ids: ['minutes-to-seconds', 'seconds-to-minutes'], scene: 'time', big: '分', small: '秒', num: 60, den: 1, confuse: [100, 3600, 24] },
   { ids: ['days-to-hours', 'hours-to-days'], scene: 'time', big: '日', small: '時間', num: 24, den: 1, confuse: [60, 12, 100] },
-  { ids: ['ha-to-a', 'a-to-ha'], scene: 'areaLarge', big: 'ha', small: 'a', num: 100, den: 1, confuse: [10, 1000, 10000] },
+  { ids: ['ha-to-a', 'a-to-ha'], scene: 'area', big: 'ha', small: 'a', num: 100, den: 1, confuse: [10, 1000, 10000] },
   // 速さ: 60 と 3600 の取り違え、km→m の換算忘れなど
   { ids: ['kmh-to-mpm', 'mpm-to-kmh'], scene: 'speed', big: 'km', bigPre: '時速', small: 'm', smallPre: '分速', num: 1000, den: 60,
     confuse: [1000 / 3600, 1000, 60, 1 / 60] },
   { ids: ['mps-to-kmh', 'kmh-to-mps'], scene: 'speed', big: 'm', bigPre: '秒速', small: 'km', smallPre: '時速', num: 3600, den: 1000,
     confuse: [60 / 1000, 3600, 60, 1000 / 3600] },
   // 2乗・3乗の換算(2026-09-27 ユーザーの判断で追加)
-  { ids: ['m2-to-cm2', 'cm2-to-m2'], scene: 'areaSmall', big: 'm²', small: 'cm²', num: 10000, den: 1, forgotPower: 100, confuse: [1000, 1000000] },
-  { ids: ['cm2-to-mm2', 'mm2-to-cm2'], scene: 'areaSmall', big: 'cm²', small: 'mm²', num: 100, den: 1, forgotPower: 10, confuse: [1000, 10000] },
-  { ids: ['cm3-to-mm3', 'mm3-to-cm3'], scene: 'volumeSmall', big: 'cm³', small: 'mm³', num: 1000, den: 1, forgotPower: 10, confuse: [100, 1000000] },
+  { ids: ['m2-to-cm2', 'cm2-to-m2'], scene: 'area', big: 'm²', small: 'cm²', num: 10000, den: 1, forgotPower: 100, confuse: [1000, 1000000] },
+  { ids: ['cm2-to-mm2', 'mm2-to-cm2'], scene: 'area', big: 'cm²', small: 'mm²', num: 100, den: 1, forgotPower: 10, confuse: [1000, 10000] },
+  { ids: ['cm3-to-mm3', 'mm3-to-cm3'], scene: 'volume', big: 'cm³', small: 'mm³', num: 1000, den: 1, forgotPower: 10, confuse: [100, 1000000] },
   { ids: ['L-to-cm3', 'cm3-to-L'], scene: 'volume', big: 'L', small: 'cm³', num: 1000, den: 1, forgotPower: 10, confuse: [100, 10000] },
 ]);
 
@@ -220,7 +268,9 @@ function unitProblem(rng, p, forcedVariant = null) {
   const label = unit => (unit === 't' ? tonWord : unit);
   const from = label(v.from);
   const to = label(v.to);
-  const { index, scene } = pickScene(rng, UNIT_SCENES[v.scene]);
+  // 換算前の量を基準の単位に直し、それに合う場面を選ぶ
+  const amount = shown * UNIT_BASE[v.scene][`${v.fromPre}${v.from}`];
+  const scene = pickFittingScene(rng, UNIT_SCENES[v.scene], sc => inRange(amount, sc.min, sc.max), sc => rangeGap(amount, sc.min, sc.max));
   const mistakes = [
     shown, // 換算し忘れ
     shown * v.den / v.num, // 掛けると割るを逆にする
@@ -230,10 +280,10 @@ function unitProblem(rng, p, forcedVariant = null) {
   ].filter(value => value <= UNIT_DISTRACTOR_MAX); // すぐに誤りと分かる極端に大きな誤答は使わない
   return finish(
     'unit', v.id,
-    scene(`${v.fromPre}${formatNumber(shown)}${from}`, `${v.toPre}何${to}`),
+    scene.text(`${v.fromPre}${formatNumber(shown)}${from}`, `${v.toPre}何${to}`),
     answer, to, mistakes, rng,
     { shown, num: v.num, den: v.den, from, fromPre: v.fromPre, to, toPre: v.toPre },
-    { answerPrefix: v.toPre, required: v.forgotPower ? [shown * v.forgotPower] : [], scene: `${v.scene}:${index}` },
+    { answerPrefix: v.toPre, required: v.forgotPower ? [shown * v.forgotPower] : [], scene: `unit:${v.scene}:${scene.id}` },
   );
 }
 
@@ -244,28 +294,20 @@ function speedProblem(rng, p) {
   // 時間を求める問題で距離 = 速さ(答えが1時間)にならないよう、1時間は選び直す(2026-09-30 追加の直し)
   if (variant === 'time' && hours === 1 && p.speedHoursMax >= 2) hours = randInt(rng, Math.max(2, p.speedHoursMin), p.speedHoursMax);
   const distance = speed * hours;
-  const index = randInt(rng, 0, 2);
-  const scene = `speed:${index}`;
-  const vehicle = ['旅客機', 'トラック', '船'][index];
+  // 速さに合う場面(歩く人・ランナー・自転車・トラック・船)を選ぶ(2026-09-30 レビュー後の直し)
+  const sc = pickFittingScene(rng, SPEED_SCENES, x => inRange(speed, x.min, x.max), x => rangeGap(speed, x.min, x.max));
+  const scene = `speed:${sc.id}`;
   if (variant === 'distance') {
-    const prompt = [
-      `旅客機が時速${speed}kmで${hours}時間飛びました。何km進みましたか?`,
-      `トラックが時速${speed}kmで${hours}時間走りました。何km進みましたか?`,
-      `船が時速${speed}kmで${hours}時間進みました。何km進みましたか?`,
-    ][index];
+    const prompt = `${sc.subject}が時速${speed}kmで${hours}時間${sc.past}。何km進みましたか?`;
     return finish('speed', variant, prompt, distance, 'km',
       [speed + hours, speed * 60, distance + speed, Math.abs(distance - speed), distance * 10, distance / 10], rng, { speed, hours, distance }, { scene });
   }
   if (variant === 'time') {
-    const prompt = [
-      `次の空港まで${distance}kmあります。時速${speed}kmで飛ぶと何時間かかりますか?`,
-      `倉庫まで${distance}kmの道のりを、トラックが時速${speed}kmで走ります。何時間かかりますか?`,
-      `港まで${distance}kmの航路を、船が時速${speed}kmで進みます。何時間かかりますか?`,
-    ][index];
+    const prompt = `${sc.place}まで${distance}kmあります。${sc.subject}が時速${speed}kmで${sc.verb}と何時間かかりますか?`;
     return finish('speed', variant, prompt, hours, '時間',
       [distance - speed, hours * 60, distance + speed, speed + hours, distance, hours * 10, hours / 10], rng, { speed, hours, distance }, { scene });
   }
-  return finish('speed', variant, `${vehicle}が${distance}kmを${hours}時間で進みました。速さは時速何kmですか?`, speed, 'km',
+  return finish('speed', variant, `${sc.subject}が${distance}kmを${hours}時間で${sc.past}。速さは時速何kmですか?`, speed, 'km',
     [distance - hours, speed * 60, distance + hours, speed + hours, distance, speed * 10, speed / 10], rng, { speed, hours, distance },
     { answerPrefix: '時速', scene });
 }
@@ -295,22 +337,22 @@ function pickLap(rng, p) {
   return pool[randInt(rng, 0, pool.length - 1)];
 }
 
-// 周回の場面(出会い・追いつき)。「周囲◯km」の形は保つ
-const LAP_SCENES = Object.freeze([
-  { place: '空港の外周道路', who: '車両' },
-  { place: '池のまわり', who: 'ふたり' },
-  { place: '公園のジョギングコース', who: 'ランナー' },
-]);
+// 周回の場面は、ふたりの時速に合うものを選ぶ(2026-09-30 レビュー後の直し)。「周囲◯km」の形は保つ
+function pickLapScene(rng, a, b) {
+  const fits = sc => inRange(b, ...sc.slow) && inRange(a, ...sc.fast);
+  const gap = sc => rangeGap(b, ...sc.slow) * rangeGap(a, ...sc.fast);
+  return pickFittingScene(rng, LAP_SCENES, fits, gap);
+}
 
 function meetingProblem(rng, p) {
   const { a, b, multiplier, length } = pickLap(rng, p);
   const difference = a - b;
   const minutes = difference * multiplier;
   const wrongOperation = (a + b) * multiplier;
-  const { index, scene } = pickScene(rng, LAP_SCENES);
+  const scene = pickLapScene(rng, a, b);
   return finish('meeting', 'opposite',
-    `周囲${formatNumber(length)}kmの${scene.place}を、時速${a}kmと時速${b}kmの${scene.who}が同じ地点から反対方向に進み始めました。何分後に出会いますか?`,
-    minutes, '分', [wrongOperation, minutes / 60, minutes * 60, minutes * 10, minutes / 10], rng, { length, a, b }, { scene: `meeting:${index}` });
+    `周囲${formatNumber(length)}kmの${scene.place}を、${scene.who(a, b)}が同じ地点から反対方向に進み始めました。何分後に出会いますか?`,
+    minutes, '分', [wrongOperation, minutes / 60, minutes * 60, minutes * 10, minutes / 10], rng, { length, a, b }, { scene: `meeting:${scene.id}` });
 }
 
 function catchupProblem(rng, p) {
@@ -319,10 +361,10 @@ function catchupProblem(rng, p) {
   const difference = a - b;
   const minutes = sum * multiplier;
   const wrongOperation = difference * multiplier;
-  const { index, scene } = pickScene(rng, LAP_SCENES);
+  const scene = pickLapScene(rng, a, b);
   return finish('catchup', 'same-direction',
-    `周囲${formatNumber(length)}kmの${scene.place}を、時速${a}kmと時速${b}kmの${scene.who}が同じ地点から同じ方向に進み始めました。速い方は何分後に遅い方に追いつきますか?`,
-    minutes, '分', [wrongOperation, minutes / 60, minutes * 60, minutes * 10, minutes / 10], rng, { length, a, b }, { scene: `catchup:${index}` });
+    `周囲${formatNumber(length)}kmの${scene.place}を、${scene.who(a, b)}が同じ地点から同じ方向に進み始めました。${scene.faster}は何分後に${scene.slower}に追いつきますか?`,
+    minutes, '分', [wrongOperation, minutes / 60, minutes * 60, minutes * 10, minutes / 10], rng, { length, a, b }, { scene: `catchup:${scene.id}` });
 }
 
 function percentageProblem(rng, p) {
@@ -330,28 +372,29 @@ function percentageProblem(rng, p) {
   const unit = randInt(rng, p.percentageUnitMin, p.percentageUnitMax);
   const base = unit * 100;
   const answer = unit * percent;
-  const { index, scene } = pickScene(rng, [
-    { unit: '人', text: `乗客${base}人のうち${percent}%がビジネスクラスです。ビジネスクラスの乗客は何人ですか?` },
-    { unit: 'kg', text: `貨物${base}kgのうち${percent}%が郵便物です。郵便物は何kgですか?` },
-    { unit: '円', text: `運賃${base}円のうち${percent}%が燃料費です。燃料費は何円ですか?` },
-  ]);
+  // 旅客機1便の乗客は500人まで(2026-09-30 レビュー後の直し)
+  const scene = pickFittingScene(rng, [
+    { id: 'passengers', max: 500, unit: '人', text: `乗客${base}人のうち${percent}%がビジネスクラスです。ビジネスクラスの乗客は何人ですか?` },
+    { id: 'cargo', max: Infinity, unit: 'kg', text: `貨物${base}kgのうち${percent}%が郵便物です。郵便物は何kgですか?` },
+    { id: 'fare', max: Infinity, unit: '円', text: `運賃${base}円のうち${percent}%が燃料費です。燃料費は何円ですか?` },
+  ], sc => base <= sc.max);
   return finish('percentage', 'basic', scene.text, answer, scene.unit,
     [base * percent, base - answer, base + percent, Math.abs(base - percent), answer * 10, answer / 10], rng, { base, percent },
-    { scene: `percentage:${index}` });
+    { scene: `percentage:${scene.id}` });
 }
 
 function inversePercentageProblem(rng, p) {
   const percent = p.percentagePercents[randInt(rng, 0, p.percentagePercents.length - 1)];
   const base = randInt(rng, p.percentageUnitMin, p.percentageUnitMax) * 100;
   const part = base * percent / 100;
-  const { index, scene } = pickScene(rng, [
-    `定員${base}人の便に${part}人が乗っています。搭乗率は何%ですか?`,
-    `${base}個の荷物のうち${part}個を積み終えました。何%を積み終えましたか?`,
-    `予算${base}円のうち${part}円を使いました。予算の何%を使いましたか?`,
-  ]);
-  return finish('inversePercentage', 'basic', scene, percent, '%',
+  const scene = pickFittingScene(rng, [
+    { id: 'seats', max: 500, text: `定員${base}人の便に${part}人が乗っています。搭乗率は何%ですか?` },
+    { id: 'parcels', max: Infinity, text: `${base}個の荷物のうち${part}個を積み終えました。何%を積み終えましたか?` },
+    { id: 'budget', max: Infinity, text: `予算${base}円のうち${part}円を使いました。予算の何%を使いましたか?` },
+  ], sc => base <= sc.max);
+  return finish('inversePercentage', 'basic', scene.text, percent, '%',
     [100 - percent, percent * 100, percent / 100, base - part, base * part, percent * 10, percent / 10], rng, { base, part },
-    { scene: `inversePercentage:${index}` });
+    { scene: `inversePercentage:${scene.id}` });
 }
 
 function priceProblem(rng, p, forcedVariant = null) {
@@ -360,24 +403,19 @@ function priceProblem(rng, p, forcedVariant = null) {
     const price = randInt(rng, p.priceMin, p.priceMax);
     const count = randInt(rng, p.priceCountMin, p.priceCountMax);
     const total = price * count;
-    const index = randInt(rng, 0, 2);
+    // 単価に合う品物を選ぶ(機内販売の品物は100円以上。2026-09-30 レビュー後の直し)
+    const sc = pickFittingScene(rng, [
+      { id: 'souvenir', min: 100, max: 3000, name: '機内販売の品物' },
+      { id: 'snack', min: 10, max: 300, name: 'お菓子' },
+      { id: 'part', min: 10, max: 3000, name: '部品' },
+    ], x => inRange(price, x.min, x.max), x => rangeGap(price, x.min, x.max));
     if (variant === 'total') {
-      const prompt = [
-        `機内販売で${price}円の品物を${count}個買いました。合計は何円ですか?`,
-        `${price}円のお弁当を${count}個注文しました。合計は何円ですか?`,
-        `単価${price}円の部品を${count}個発注しました。合計は何円ですか?`,
-      ][index];
-      return finish('price', 'total', prompt, total, '円',
+      return finish('price', 'total', `単価${price}円の${sc.name}を${count}個買いました。合計は何円ですか?`, total, '円',
         [price / count, price + count, price, total + price, total - price, total * 10, total / 10], rng, { price, count, total },
-        { scene: `price:${index}` });
+        { scene: `price:${sc.id}` });
     }
-    const prompt = [
-      `機内販売で同じ品物を${count}個買うと${total}円でした。単価は何円ですか?`,
-      `同じお弁当を${count}個注文すると${total}円でした。単価は何円ですか?`,
-      `同じ部品を${count}個発注すると${total}円でした。単価は何円ですか?`,
-    ][index];
-    return finish('price', 'unit-price', prompt, price, '円',
-      [total * count, total - count, total, price + count, price * 10, price / 10], rng, { price, count, total }, { scene: `price:${index}` });
+    return finish('price', 'unit-price', `同じ${sc.name}を${count}個買うと${total}円でした。単価は何円ですか?`, price, '円',
+      [total * count, total - count, total, price + count, price * 10, price / 10], rng, { price, count, total }, { scene: `price:${sc.id}` });
   }
   if (variant === 'per-100g') {
     // 2026-09-27 ユーザーの判断で追加: 「300gで450円の品物は、100gあたり何円ですか?」
@@ -391,7 +429,7 @@ function priceProblem(rng, p, forcedVariant = null) {
     const { index, scene } = pickScene(rng, ['コーヒー豆', 'お茶の葉', 'ナッツ']);
     return finish('price', 'per-100g', `${scene}が${grams}gで${total}円です。${per}gあたり何円ですか?`, answer, '円',
       [total, total * grams / per, total / grams, grams * per / total, answer * 10, answer / 10], rng, { grams, total, per },
-      { scene: `price:${index}` });
+      { scene: `price:per100g-${index}` });
   }
   if (variant === 'per-gram-total') {
     // 2026-09-27 ユーザーの判断で追加: 「1gあたり3円の品物を250g買うと何円ですか?」
@@ -401,7 +439,7 @@ function priceProblem(rng, p, forcedVariant = null) {
     const { index, scene } = pickScene(rng, ['チョコレート', 'ナッツ', '香辛料']);
     return finish('price', 'per-gram-total', `1gあたり${perGram}円の${scene}があります。${grams}g買うと何円ですか?`, answer, '円',
       [grams, perGram + grams, answer / 100, grams / perGram, answer * 100, answer * 10, answer / 10], rng, { perGram, grams },
-      { scene: `price:${index}` });
+      { scene: `price:perGram-${index}` });
   }
   throw new RangeError(`不明な単価の問題です: ${variant}`);
 }
@@ -452,14 +490,24 @@ function geometryProblem(rng, p, forcedVariant = null) {
   const note = `(円周率は${formatNumber(pi)})`;
   const min = p.geometryLengthMin;
   const max = p.geometryLengthMax;
-  // 場面は形ごとの物の名前(2026-09-30 本番に合わせて変更)
-  const shape = variant.startsWith('circle') ? 'circle' : variant.replace('-area', '');
-  const nounIndex = randInt(rng, 0, GEOMETRY_NOUNS[shape].length - 1);
-  const noun = GEOMETRY_NOUNS[shape][nounIndex];
-  const scene = `geometry:${nounIndex}`;
+  // 場面は形ごとの物の名前(2026-09-30 本番に合わせて変更)。円は直径に合う物を選ぶ(2026-09-30 レビュー後の直し)
+  let noun;
+  let scene;
+  const circleNoun = diameter => {
+    const sc = pickFittingScene(rng, CIRCLE_NOUNS, x => inRange(diameter, x.min, x.max), x => rangeGap(diameter, x.min, x.max));
+    noun = sc.name;
+    scene = `geometry:${sc.id}`;
+  };
+  if (!variant.startsWith('circle')) {
+    const shape = variant.replace('-area', '');
+    const nounIndex = randInt(rng, 0, GEOMETRY_NOUNS[shape].length - 1);
+    noun = GEOMETRY_NOUNS[shape][nounIndex];
+    scene = `geometry:${shape}-${nounIndex}`;
+  }
   if (variant === 'circle-circumference-diameter') {
     const diameter = p.circleDiameterUnit * randInt(rng, 1, p.circleMultiplierMax);
     const answer = diameter * pi;
+    circleNoun(diameter);
     return finish('geometry', variant, `${noun}の直径は${diameter}cmです。周の長さは何cmですか?${note}`, answer, 'cm',
       [diameter * 3, answer / 2, (diameter / 2) ** 2 * pi, answer * 10, answer / 10], rng, { diameter, pi },
       { required: [answer * 2], scene }); // 直径を半径として計算する
@@ -467,18 +515,21 @@ function geometryProblem(rng, p, forcedVariant = null) {
   if (variant === 'circle-circumference-radius') {
     const radius = p.circleDiameterUnit / 2 * randInt(rng, 1, p.circleMultiplierMax);
     const answer = radius * 2 * pi;
+    circleNoun(radius * 2);
     return finish('geometry', variant, `${noun}の半径は${radius}cmです。周の長さは何cmですか?${note}`, answer, 'cm',
       [radius * pi, radius * 4 * pi, radius * 2 * 3, radius * radius * pi, answer * 10, answer / 10], rng, { radius, pi }, { scene });
   }
   if (variant === 'circle-diameter') {
     const diameter = p.circleDiameterUnit * randInt(rng, 1, p.circleMultiplierMax);
     const circumference = roundNumber(diameter * pi);
+    circleNoun(diameter);
     return finish('geometry', variant, `${noun}の周の長さは${circumference}cmです。直径は何cmですか?${note}`, diameter, 'cm',
       [diameter / 2, diameter * 2, circumference / 3, diameter * 10, diameter / 10], rng, { circumference, pi }, { scene });
   }
   if (variant === 'circle-area') {
     const radius = p.circleAreaRadiusUnit * randInt(rng, 1, p.circleAreaMultiplierMax);
     const answer = radius * radius * pi;
+    circleNoun(radius * 2);
     return finish('geometry', variant, `${noun}の半径は${radius}cmです。面積は何cm²ですか?${note}`, answer, 'cm²',
       [radius * radius * 3, (radius * 2) ** 2 * pi, radius * 2 * pi, radius * pi, answer * 10, answer / 10], rng, { radius, pi }, { scene });
   }
@@ -633,15 +684,16 @@ function cylinderProblem(rng, p) {
     radius * radius * cm / 1000, // 3.14 を掛け忘れる
     pi * diameter * cm / 1000, // 半径を2乗し忘れる
   ].map(round1);
-  const { index, scene } = pickScene(rng, [
-    { vessel: '円筒の缶', edge: '上', content: '燃料' },
-    { vessel: '円柱形のタンク', edge: '上', content: '水' },
-    { vessel: '円筒形の容器', edge: 'ふち', content: '油' },
-  ]);
+  // 缶は直径30cm・高さ1mまで、タンクは直径20cm以上(2026-09-30 レビュー後の直し)
+  const scene = pickFittingScene(rng, [
+    { id: 'can', vessel: '円筒の缶', edge: '上', content: '燃料', fits: () => diameter <= 30 && heightM <= 1 },
+    { id: 'tank', vessel: '円柱形のタンク', edge: '上', content: '水', fits: () => diameter >= 20 },
+    { id: 'container', vessel: '円筒形の容器', edge: 'ふち', content: '油', fits: () => true },
+  ], sc => sc.fits());
   return finish('cylinder', 'fuel',
     `直径${diameter}cm、高さ${formatNumber(heightM)}mの${scene.vessel}があります。${scene.edge}から${gap}cm下まで${scene.content}を入れると、約何L入りますか?(円周率は${formatNumber(pi)})`,
     answer, 'L', mistakes, rng, { diameter, heightM, gap, pi },
-    { answerPrefix: '約', decimals: 1, required: [round1(pi * radius * radius * heightCm / 1000)], scene: `cylinder:${index}` }); // 上から下げた分を引き忘れる
+    { answerPrefix: '約', decimals: 1, required: [round1(pi * radius * radius * heightCm / 1000)], scene: `cylinder:${scene.id}` }); // 上から下げた分を引き忘れる
 }
 
 const GENERATORS = { unit: unitProblem, speed: speedProblem, meeting: meetingProblem, catchup: catchupProblem, percentage: percentageProblem,
