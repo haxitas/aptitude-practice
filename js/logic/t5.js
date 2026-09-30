@@ -110,9 +110,9 @@ export function nextT5Level(state, correct, p) {
   return { level: Math.max(p.minDots, state.level - 1), wrongStreak: 0, maxLevel: state.maxLevel };
 }
 
-// 出す数の範囲: 段階の上下 levelSpread。minDots〜maxDots に収める
+// 出す数の範囲: 段階 − levelSpreadDown 〜 段階 + levelSpreadUp(平均で少し多めに出る)。minDots〜maxDots に収める
 export function t5CountRange(level, p) {
-  return { min: Math.max(p.minDots, level - p.levelSpread), max: Math.min(p.maxDots, level + p.levelSpread) };
+  return { min: Math.max(p.minDots, level - p.levelSpreadDown), max: Math.min(p.maxDots, level + p.levelSpreadUp) };
 }
 
 // 範囲から一様に選ぶ。直前と同じ数は避ける(候補が1つしかないときを除く)

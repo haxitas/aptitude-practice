@@ -133,10 +133,11 @@ export const DEFAULTS = Object.freeze({
   }),
   t5: Object.freeze({
     durationSec: 180,
-    // 2026-09-30 本番に合わせて変更: 点の数は段階(最初は minDots、正解で+1、続けて不正解で−1)の上下 levelSpread から選ぶ
+    // 2026-09-30 本番に合わせて変更: 点の数は段階(最初は minDots、正解で+1、続けて不正解で−1)の −levelSpreadDown〜+levelSpreadUp から選ぶ
     minDots: 3,
     maxDots: 14,
-    levelSpread: 3,
+    levelSpreadDown: 2, // 出す数の範囲は 段階 − levelSpreadDown 〜 段階 + levelSpreadUp(2026-09-30 ユーザーの実機の感想で −3〜+3 → −2〜+3)
+    levelSpreadUp: 3,
     levelDownWrongStreak: 2, // この回数続けて不正解なら段階を1つ下げる
     choiceCount: 5, // 回答の選択肢(連続した数)の個数
     shuffleIntervalMs: 850,

@@ -16,7 +16,8 @@ test('T5 の既定値は承認済みの数値(2026-09-30 本番に合わせて�
     durationSec: 180,
     minDots: 3,
     maxDots: 14,
-    levelSpread: 3,
+    levelSpreadDown: 2,
+    levelSpreadUp: 3,
     levelDownWrongStreak: 2,
     choiceCount: 5,
     shuffleIntervalMs: 850,
@@ -68,13 +69,35 @@ test('段階を書き換えない', () => {
   assert.deepEqual(s, createT5Level(P));
 });
 
-test('出す数の範囲は段階の上下3で、3〜14に収める', () => {
-  assert.deepEqual(t5CountRange(8, P), { min: 5, max: 11 });
-  assert.deepEqual(t5CountRange(14, P), { min: 11, max: 14 });
+test('出す数の範囲は段階の −2〜+3 で、3〜14に収める(2026-09-30 ユーザーの実機の感想で −3〜+3 から変更)', () => {
+  assert.deepEqual(t5CountRange(8, P), { min: 6, max: 11 });
+  assert.deepEqual(t5CountRange(14, P), { min: 12, max: 14 });
   assert.deepEqual(t5CountRange(3, P), { min: 3, max: 6 });
+  assert.deepEqual(t5CountRange(4, P), { min: 3, max: 7 });
+  assert.deepEqual(t5CountRange(12, P), { min: 10, max: 14 });
+  // 下側・上側は設定で変えられる
+  assert.deepEqual(t5CountRange(8, { ...P, levelSpreadDown: 3, levelSpreadUp: 3 }), { min: 5, max: 11 });
 });
 
-test('出す数は段階の上下3の範囲から一様に選び、多数の試行で範囲の端まで出る', () => {
+test('出す数の平均は段階より少し大きい(範囲の端まで出る)', () => {
+  for (const level of [5, 8, 11]) {
+    const rng = createRng(level * 7);
+    let sum = 0;
+    const seen = new Set();
+    const trials = 6000;
+    for (let i = 0; i < trials; i++) {
+      const n = pickT5Count(rng, level, P, null);
+      sum += n;
+      seen.add(n);
+    }
+    const mean = sum / trials;
+    assert.ok(mean > level + 0.3 && mean < level + 0.7, `段階${level}: 平均 ${mean.toFixed(2)}(段階 + 0.5 くらいのはず)`);
+    assert.ok(seen.has(level - 2) && seen.has(level + 3), `段階${level}: ${[...seen].sort((a, b) => a - b)}`);
+    assert.equal(seen.has(level - 3), false);
+  }
+});
+
+test('出す数は段階の −2〜+3 の範囲から一様に選び、多数の試行で範囲の端まで出る', () => {
   for (const level of [3, 8, 14]) {
     const { min, max } = t5CountRange(level, P);
     const counts = new Map();
@@ -102,13 +125,13 @@ test('出す数は直前と同じ数を避ける(候補が1つしかないとき
   assert.equal(pickT5Count(createRng(1), 3, single, 3), 3);
 });
 
-test('最初の1問はちょうど3個、2問目からは段階の上下3の範囲', () => {
+test('最初の1問はちょうど3個、2問目からは段階の −2〜+3 の範囲', () => {
   for (let seed = 1; seed <= 300; seed++) {
     const rng = createRng(seed);
     const first = generateT5Problem(rng, P);
     assert.equal(first.count, 3, `seed=${seed}`);
     const second = generateT5Problem(rng, P, first, 8);
-    assert.ok(second.count >= 5 && second.count <= 11, `seed=${seed}: ${second.count}`);
+    assert.ok(second.count >= 6 && second.count <= 11, `seed=${seed}: ${second.count}`);
   }
 });
 
