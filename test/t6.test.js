@@ -6,6 +6,7 @@ import {
   normalizeAngleDeg, angularDistanceDeg, toPolar, clampToTunnel,
   normalizeInput, keyboardInput, moveAircraft,
   computeTunnelLayout, stickInputAt, stickVectorAt, stickToPosition, projectTunnelSection,
+  currentPlaneEdge, radialLineEnds,
   projectScale, baseSpeedAt, advanceSpeed, applyCollisionSpeed,
   createObstacle, createInitialObstacles, advanceObstacle, recycleObstacles, drawableObstacles,
   crossedAircraftPlane, isHalfOpeningSafe, isBladeOpeningSafe, isObstacleSafe,
@@ -50,7 +51,6 @@ test('T6 の既定値は承認済みの数値', () => {
     perspectiveFocal: 1,
     collisionZ: 1,
     farZ: 32,
-    tunnelEdgeZ: 0.5,
     sectorOpeningDeg: 90,
     holeSlotCount: 4,
     holeOpenCounts: [1, 2, 3],
@@ -229,6 +229,40 @@ test('一人称: 機体の面(collisionZ)では、断面上の自機の位置が
   // 断面の座標で自機の位置を画面に写すと、画面の中心(照準)になる
   approx(section.centerX + position.x * section.radius, view.centerX);
   approx(section.centerY - position.y * section.radius, view.centerY);
+});
+
+// ---- 今いる面のトンネルの縁(2026-09-30 レビュー後の直し) ----
+
+test('今いる面の縁: 自機の位置の反対側へずれ、壁の近くにいれば縁が画面の中心の近くまで来る', () => {
+  const view = { centerX: 400, centerY: 300, radius: 200 };
+  assert.deepEqual(currentPlaneEdge({ x: 0, y: 0 }, view, P), { centerX: 400, centerY: 300, radius: 200 });
+  const atWall = currentPlaneEdge({ x: P.aircraftMaxRadius, y: 0 }, view, P);
+  approx(atWall.centerX, 400 - P.aircraftMaxRadius * 200);
+  approx(atWall.centerY, 300);
+  approx(atWall.radius, 200);
+  // 画面の中心(照準)から縁までの距離 = 半径 × (1 − 自機の半径)
+  const gap = atWall.radius - Math.hypot(atWall.centerX - view.centerX, atWall.centerY - view.centerY);
+  approx(gap, 200 * (1 - P.aircraftMaxRadius));
+  assert.ok(gap < 200 * 0.2);
+  const up = currentPlaneEdge({ x: 0, y: 0.5 }, view, P);
+  approx(up.centerY, 300 + 0.5 * 200, 1e-9); // 上にいると縁は下へずれる
+  assert.deepEqual(currentPlaneEdge({ x: 0.3, y: -0.2 }, view, P), projectTunnelSection({ x: 0.3, y: -0.2 }, P.collisionZ, view, P));
+});
+
+test('放射状の線は、奥の消失点(画面の中心)から、ずらした縁の上の点へ引く', () => {
+  const view = { centerX: 400, centerY: 300, radius: 200 };
+  const position = { x: -0.5, y: 0.4 };
+  const edge = currentPlaneEdge(position, view, P);
+  const lines = radialLineEnds(position, view, P, 12);
+  assert.equal(lines.length, 12);
+  for (const line of lines) {
+    assert.deepEqual(line.from, { x: 400, y: 300 });
+    approx(Math.hypot(line.to.x - edge.centerX, line.to.y - edge.centerY), edge.radius);
+  }
+});
+
+test('tunnelEdgeZ は使わなくなったので既定値に無い', () => {
+  assert.equal('tunnelEdgeZ' in P, false);
 });
 
 test('投影倍率は z が2倍なら半分になる', () => {

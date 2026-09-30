@@ -145,6 +145,24 @@ export function projectTunnelSection(position, z, view, p) {
   };
 }
 
+// 機体のいる面(collisionZ)のトンネルの縁。自機の位置の反対側へずれ、壁の近くにいれば縁が画面の中心の近くまで来る
+// (2026-09-30 レビュー後の直し)
+export function currentPlaneEdge(position, view, p) {
+  return projectTunnelSection(position, p.collisionZ, view, p);
+}
+
+// 放射状の線: 奥の消失点(画面の中心)から、ずらした縁の上の count 個の点へ
+export function radialLineEnds(position, view, p, count) {
+  const edge = currentPlaneEdge(position, view, p);
+  return Array.from({ length: count }, (_, i) => {
+    const a = i * 2 * Math.PI / count;
+    return {
+      from: { x: view.centerX, y: view.centerY },
+      to: { x: edge.centerX + Math.cos(a) * edge.radius, y: edge.centerY - Math.sin(a) * edge.radius },
+    };
+  });
+}
+
 export function isHalfOpeningSafe(position, blockedSide) {
   let dot;
   if (blockedSide === 'up') dot = position.y;

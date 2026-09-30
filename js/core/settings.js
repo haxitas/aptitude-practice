@@ -181,7 +181,6 @@ export const DEFAULTS = Object.freeze({
     perspectiveFocal: 1,
     collisionZ: 1,
     farZ: 32, // 奥まで見えるよう 12 → 32(2026-09-30 本番に合わせて変更)
-    tunnelEdgeZ: 0.5, // 放射状の線を引く、手前のトンネルの縁の奥行き(2026-09-30 本番に合わせて追加)
     sectorOpeningDeg: 90,
     holeSlotCount: 4,
     holeOpenCounts: Object.freeze([1, 2, 3]),

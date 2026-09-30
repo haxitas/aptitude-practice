@@ -4,7 +4,7 @@
 
 import {
   computeTunnelLayout, stickInputAt, stickVectorAt, keyboardInput,
-  projectScale, projectTunnelSection, drawableObstacles, holeCenters,
+  projectScale, projectTunnelSection, currentPlaneEdge, radialLineEnds, drawableObstacles, holeCenters,
   createT6State, stepT6State, buildT6Record,
 } from '../logic/t6.js';
 import { createRng, randomSeed } from '../core/rng.js';
@@ -16,6 +16,7 @@ import { T6_COLOR_OPTIONS } from '../core/settings.js';
 
 const DEG = Math.PI / 180;
 const RADIAL_LINES = 12; // 消失点から手前の縁へ引く放射状の線の本数
+const TUNNEL_WALL_COLOR = '#12233a'; // 機体のいる面より手前のトンネルの壁
 const RETICLE = Object.freeze({ sizeRatio: 0.045, minSizePx: 8, color: '#eaf1fb', pushColor: '#ffcc4d' });
 
 // 断面の座標(トンネル半径1、y が上)を画面へ
@@ -197,19 +198,25 @@ function drawScene(ctx, layout, state, p) {
   ctx.arc(cx, cy, viewRadius, 0, Math.PI * 2);
   ctx.clip();
 
-  // 放射状の線: 奥の消失点(画面の中心)から、手前のトンネルの縁へ引く
-  const edge = projectTunnelSection(state.position, p.tunnelEdgeZ, view, p);
+  // 機体のいる面のトンネルの縁は、自機の位置の反対側へずらす(2026-09-30 レビュー後の直し)。
+  // 縁の外側(手前のトンネルの壁)は少し明るく塗る
+  const edge = currentPlaneEdge(state.position, view, p);
+  ctx.fillStyle = TUNNEL_WALL_COLOR;
+  ctx.fillRect(cx - viewRadius, cy - viewRadius, viewRadius * 2, viewRadius * 2);
+  ctx.fillStyle = '#07101f';
+  ctx.beginPath();
+  ctx.arc(edge.centerX, edge.centerY, edge.radius, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 放射状の線: 奥の消失点(画面の中心)から、ずらした縁へ引く
   ctx.strokeStyle = 'rgba(110, 170, 230, 0.32)';
   ctx.lineWidth = 1;
-  for (let i = 0; i < RADIAL_LINES; i++) {
-    const a = i * 360 / RADIAL_LINES;
-    const to = toScreen(edge, Math.cos(a * DEG), Math.sin(a * DEG));
+  for (const line of radialLineEnds(state.position, view, p, RADIAL_LINES)) {
     ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.lineTo(to.x, to.y);
+    ctx.moveTo(line.from.x, line.from.y);
+    ctx.lineTo(line.to.x, line.to.y);
     ctx.stroke();
   }
-  strokeCircle(ctx, edge.centerX, edge.centerY, edge.radius);
 
   const fill = T6_COLOR_OPTIONS.obstacle.find(color => color.name === p.obstacleColor)?.value ?? T6_COLOR_OPTIONS.obstacle[0].value;
   const stroke = T6_COLOR_OPTIONS.edge.find(color => color.name === p.obstacleEdgeColor)?.value ?? T6_COLOR_OPTIONS.edge[0].value;
@@ -226,10 +233,15 @@ function drawScene(ctx, layout, state, p) {
     else drawHoles(ctx, obstacle, section, p);
     strokeCircle(ctx, section.centerX, section.centerY, section.radius);
   }
-  ctx.restore();
-
+  // 機体のいる面の縁(ずらした円)
   ctx.strokeStyle = '#75a8d8';
   ctx.lineWidth = 3;
+  strokeCircle(ctx, edge.centerX, edge.centerY, edge.radius);
+  ctx.restore();
+
+  // 画面の外枠(描く範囲)は動かさない
+  ctx.strokeStyle = 'rgba(117, 168, 216, 0.45)';
+  ctx.lineWidth = 2;
   strokeCircle(ctx, cx, cy, viewRadius);
   drawReticle(ctx, view, state.pushback !== null);
   drawStick(ctx, layout, state.position, p);
