@@ -30,50 +30,59 @@ export const DEFAULTS = Object.freeze({
     feedbackMs: 1200, // 判定を出しておく時間(テスト4は次の決定まで出し続ける)
   }),
   t1: Object.freeze({
-    durationSec: 180,
+    // 2026-09-30 本番の記憶で変更: 1回15問(単位変換5 → 割合5 → 計算5)を5分。数値は小数を含む有効数字3〜4桁にする
+    durationSec: 300,
+    questionsPerCategory: 5,
     calculatorDuringTest: true,
     answerFeedbackMs: 300,
     stallAbortMs: 1000,
-    unitValueMin: 1,
+    unitValueMin: 1, // 単位変換の大きい単位の量の範囲(速さは時速3〜60km・秒速5〜100m)
     unitValueMax: 20,
-    speedMin: 2,
+    speedMin: 2, // 速さ(時速km、小数第1位まで)
     speedMax: 20,
-    speedHoursMin: 1,
-    speedHoursMax: 8,
-    lapSpeedMin: 2,
-    lapSpeedMax: 10,
-    lapMultiplierMin: 3,
-    lapMultiplierMax: 10,
-    lapIntegerRate: 0.8,
-    percentagePercents: Object.freeze([10, 20, 25, 40, 50, 75]),
-    percentageUnitMin: 2,
-    percentageUnitMax: 20,
-    priceMin: 10,
-    priceMax: 200,
-    priceCountMin: 2,
-    priceCountMax: 12,
-    averageMin: 2,
+    speedHoursMin: 1.05, // 速さの問題の時間(小数第2位まで)
+    speedHoursMax: 8.95,
+    lapSpeedMin: 2, // 出会い・追いつきの時速(小数第1位まで)
+    lapSpeedMax: 12,
+    lapMinutesMin: 12, // 出会い・追いつきの答えの分(6の倍数)
+    lapMinutesMax: 180,
+    percentBaseMin: 101, // 割合・利益率・割引のもとの数(3〜4桁の整数)
+    percentBaseMax: 4999,
+    percentMin: 11, // 割合の率(5の倍数でない整数%)
+    percentMax: 89,
+    markupRateMin: 11, // 利益率
+    markupRateMax: 59,
+    discountRateMin: 11, // 割引率
+    discountRateMax: 45,
+    wholeMin: 101, // 全体の逆算の全体(人・便)
+    wholeMax: 480,
+    growthRateMin: 3, // 前年比の伸び(%)
+    growthRateMax: 29,
+    yearValueMin: 1000000, // 前年比の去年の値
+    yearValueMax: 9999999,
+    priceMin: 101, // 単価(円)
+    priceMax: 999,
+    priceCountMin: 12,
+    priceCountMax: 48,
+    averageMin: 2, // 平均(小数第1位まで)
     averageMax: 50,
     clockStartHourMin: 6,
     clockStartHourMax: 18,
     elapsedMinutesMin: 15,
     elapsedMinutesMax: 180,
-    // 単位換算が全体に占める割合(残りの種類は均等)。2026-09-28 ユーザーの判断で追加(重み unitKindWeight)。
-    // 2026-09-30 本番に合わせて変更: 重みをやめて割合で持つ(1問目だけを数えても約1/3になるように)
-    unitKindShare: 0.33,
     // 図形(2026-09-28 ユーザーの判断で追加)
-    geometryLengthMin: 2, // 三角形・台形・平行四辺形の辺と高さ(cm)
-    geometryLengthMax: 20,
+    geometryLengthMin: 2.1, // 三角形・台形・平行四辺形の辺と高さ(cm、小数第1位まで)
+    geometryLengthMax: 19.9,
     circlePi: 3.14,
-    circleDiameterUnit: 50, // 円周の問題の直径は50の倍数(円周が整数になる)
-    circleAreaRadiusUnit: 10, // 円の面積の問題の半径は10の倍数(面積が整数になる)
-    circleMultiplierMax: 6,
-    circleAreaMultiplierMax: 3,
+    circleDiameterMin: 101, // 円周の問題の直径(cm。有効数字3桁)
+    circleDiameterMax: 299,
+    circleAreaRadiusMin: 10, // 円の面積の問題の半径は ◯.5cm(10.5〜29.5)
+    circleAreaRadiusMax: 29,
     // 本番に出た形(2026-09-30 本番に合わせて追加)
-    workWorkersMin: 2, // 仕事算の人数
-    workWorkersMax: 9,
-    workHoursMin: 2, // 仕事算の時間
-    workHoursMax: 15,
+    workWorkersMin: 3, // 仕事算の人数
+    workWorkersMax: 24,
+    workHoursMin: 2.05, // 仕事算の時間(小数第2位まで)
+    workHoursMax: 15.95,
     flightSpeedMin: 600, // 速さと時間の時速(km)
     flightSpeedMax: 900,
     flightSpeedDiffMax: 60, // 2つの時速の差の上限
@@ -85,10 +94,10 @@ export const DEFAULTS = Object.freeze({
     wageDollarCentsMax: 5000,
     wageYenMin: 900, // 時給(円)。10円刻み
     wageYenMax: 2500,
-    cylinderDiameterMin: 8, // 円筒の直径(cm)
-    cylinderDiameterMax: 40,
-    cylinderHeightTenthsMin: 5, // 円筒の高さ(0.1m 単位。5 → 0.5m)
-    cylinderHeightTenthsMax: 20,
+    cylinderDiameterMin: 8.1, // 円筒の直径(cm、小数第1位まで)
+    cylinderDiameterMax: 39.9,
+    cylinderHeightMin: 0.51, // 円筒の高さ(m、小数第2位まで)
+    cylinderHeightMax: 1.99,
     cylinderGapMin: 5, // 上から下げる長さ(cm)
     cylinderGapMax: 20,
   }),

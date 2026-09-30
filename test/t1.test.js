@@ -7,6 +7,7 @@ import {
   createT1Tally, recordT1Answer, summarizeT1, buildT1Record,
 } from '../js/logic/t1.js';
 import { t1MistakeEntry, t1ReviewSummary, t1Formula, formatT1Answer, UNIT_VARIANT_IDS, POWER_UNIT_VARIANT_IDS, PRICE_VARIANTS, GEOMETRY_VARIANTS } from '../js/logic/t1.js';
+import { T1_CATEGORIES, generateT1Round, T1_CONVERSIONS, DISCOUNT_VARIANTS, isRoundNumber, significantDigits } from '../js/logic/t1.js';
 
 const P = DEFAULTS.t1;
 
@@ -49,7 +50,7 @@ function geometryExpected(variant, n) {
   if (variant === 'parallelogram-area') return n[0] * n[1];
   throw new Error(variant);
 }
-const close = (a, b) => Math.abs(a - b) < 1e-8;
+const close = (a, b) => Math.abs(a - b) < 1e-8 * Math.max(1, Math.abs(b));
 
 // 新しい4種類(2026-09-30 本番に合わせて追加): 問題文の数値の並びから正解を計算する
 // 仕事算 [人数1, 時間, 人数2] / 速さと時間 [速さ1, 時間, 速さ2](答えは分) / 時給 [時間, 給料] / 円筒 [直径cm, 高さm, 上からcm](約◯L)
@@ -64,12 +65,28 @@ function decimalsOf(v) {
   const text = String(v);
   return text.includes('.') ? text.split('.')[1].length : 0;
 }
-// 答えの小数の桁数の上限: 仕事算・時給(ドル)は第2位、円筒は第1位、ほかは整数
+// 答えの小数の桁数の上限(2026-09-30 本番の記憶で、どの種類も第3位まで。人数・分・円などの整数で答える種類は0)
 function answerDecimals(q) {
-  if (q.kind === 'work') return 2;
   if (q.kind === 'wage') return q.variant === 'dollar' ? 2 : 0;
   if (q.kind === 'cylinder') return 1;
-  return 0;
+  if (['speedTime', 'wholeFromPart', 'yearOverYear', 'meeting', 'catchup', 'elapsed', 'inversePercentage'].includes(q.kind)) return 0;
+  return 3;
+}
+// 選択肢(誤答も)の小数の桁数の上限: 人数・分などを整数で答える一部の種類は整数、時給(ドル)は第2位、円筒は第1位、ほかは第3位まで
+function choiceDecimals(q) {
+  if (['speedTime', 'wholeFromPart', 'yearOverYear'].includes(q.kind) || (q.kind === 'wage' && q.variant === 'yen')) return 0;
+  if (q.kind === 'wage') return 2;
+  if (q.kind === 'cylinder') return 1;
+  return 3;
+}
+// 割合の新しい4種類(2026-09-30 本番の記憶で追加): 問題文の数値の並びから正解を計算する
+// 利益率 [原価, 率] / 割引 売値 [定価, 率]・定価 [率, 売値] / 全体の逆算 [部分, 率] / 前年比 [率, 今年]
+function ratioExpected(kind, variant, n) {
+  if (kind === 'markup') return n[0] * (1 + n[1] / 100);
+  if (kind === 'discount') return variant === 'sale-price' ? n[0] * (1 - n[1] / 100) : n[1] / (1 - n[0] / 100);
+  if (kind === 'wholeFromPart') return n[0] / (n[1] / 100);
+  if (kind === 'yearOverYear') return n[1] / (1 + n[0] / 100);
+  throw new Error(kind);
 }
 // 問題文に出る数値(順番どおり)。値は problem.values から取る
 function promptValues(q) {
@@ -97,92 +114,99 @@ function promptValues(q) {
     case 'speedTime': return [v.speed1, v.hours1, v.speed2];
     case 'wage': return [v.hours, v.total];
     case 'cylinder': return [v.diameter, v.heightM, v.gap];
+    case 'markup': return [v.cost, v.rate];
+    case 'discount': return q.variant === 'sale-price' ? [v.list, v.rate] : [v.rate, v.sale];
+    case 'wholeFromPart': return [v.part, v.rate];
+    case 'yearOverYear': return [v.rate, v.now];
     default: throw new Error(q.kind);
   }
 }
 const evaluateExpr = expression => Function(`"use strict"; return (${expression});`)();
 
-test('T1 の既定値は承認済みの数値', () => {
+test('T1 の既定値は承認済みの数値(2026-09-30 本番の記憶で15問・5分に変更)', () => {
   assert.deepEqual(P, {
-    durationSec: 180,
+    durationSec: 300,
+    questionsPerCategory: 5,
     calculatorDuringTest: true,
     answerFeedbackMs: 300,
     stallAbortMs: 1000,
     unitValueMin: 1,
     unitValueMax: 20,
-    speedMin: 2,
-    speedMax: 20,
-    speedHoursMin: 1,
-    speedHoursMax: 8,
-    lapSpeedMin: 2,
-    lapSpeedMax: 10,
-    lapMultiplierMin: 3,
-    lapMultiplierMax: 10,
-    lapIntegerRate: 0.8,
-    percentagePercents: [10, 20, 25, 40, 50, 75],
-    percentageUnitMin: 2,
-    percentageUnitMax: 20,
-    priceMin: 10, priceMax: 200, priceCountMin: 2, priceCountMax: 12,
+    speedMin: 2, speedMax: 20, speedHoursMin: 1.05, speedHoursMax: 8.95,
+    lapSpeedMin: 2, lapSpeedMax: 12, lapMinutesMin: 12, lapMinutesMax: 180,
+    percentBaseMin: 101, percentBaseMax: 4999, percentMin: 11, percentMax: 89,
+    markupRateMin: 11, markupRateMax: 59, discountRateMin: 11, discountRateMax: 45,
+    wholeMin: 101, wholeMax: 480,
+    growthRateMin: 3, growthRateMax: 29, yearValueMin: 1000000, yearValueMax: 9999999,
+    priceMin: 101, priceMax: 999, priceCountMin: 12, priceCountMax: 48,
     averageMin: 2, averageMax: 50,
     clockStartHourMin: 6, clockStartHourMax: 18,
     elapsedMinutesMin: 15, elapsedMinutesMax: 180,
-    unitKindShare: 0.33,
-    geometryLengthMin: 2, geometryLengthMax: 20,
-    circlePi: 3.14, circleDiameterUnit: 50, circleAreaRadiusUnit: 10, circleMultiplierMax: 6, circleAreaMultiplierMax: 3,
-    // 2026-09-30 本番に合わせて追加
-    workWorkersMin: 2, workWorkersMax: 9, workHoursMin: 2, workHoursMax: 15,
+    geometryLengthMin: 2.1, geometryLengthMax: 19.9,
+    circlePi: 3.14, circleDiameterMin: 101, circleDiameterMax: 299, circleAreaRadiusMin: 10, circleAreaRadiusMax: 29,
+    workWorkersMin: 3, workWorkersMax: 24, workHoursMin: 2.05, workHoursMax: 15.95,
     flightSpeedMin: 600, flightSpeedMax: 900, flightSpeedDiffMax: 60, flightHoursMin: 2, flightHoursMax: 12,
     wageHoursMin: 4, wageHoursMax: 40, wageDollarCentsMin: 1000, wageDollarCentsMax: 5000, wageYenMin: 900, wageYenMax: 2500,
-    cylinderDiameterMin: 8, cylinderDiameterMax: 40, cylinderHeightTenthsMin: 5, cylinderHeightTenthsMax: 20,
+    cylinderDiameterMin: 8.1, cylinderDiameterMax: 39.9, cylinderHeightMin: 0.51, cylinderHeightMax: 1.99,
     cylinderGapMin: 5, cylinderGapMax: 20,
   });
+  assert.equal('unitKindShare' in P, false, '「単位換算を約1/3」の設定は、15問の形式では不要');
 });
 
 const NEW_KINDS = ['work', 'speedTime', 'wage', 'cylinder'];
-const OLD_KINDS = ['unit', 'speed', 'meeting', 'catchup', 'percentage', 'inversePercentage', 'price', 'average', 'elapsed', 'geometry'];
+const RATIO_KINDS = ['percentage', 'inversePercentage', 'markup', 'discount', 'wholeFromPart', 'yearOverYear'];
+const CALC_KINDS = ['speed', 'meeting', 'catchup', 'elapsed', 'average', 'geometry', 'price', 'work', 'speedTime', 'wage', 'cylinder'];
 
-// 単位換算は約1/3、残りの13種類は均等(2026-09-30 本番に合わせて変更)
-function assertKindShares(counts, total, label) {
-  const unitShare = counts.unit / total;
-  assert.ok(unitShare >= 0.30 && unitShare <= 0.37, `${label}: 単位換算 ${unitShare}`);
-  const others = PROBLEM_KINDS.filter(k => k !== 'unit');
-  const even = (1 - unitShare) / others.length;
-  for (const kind of others) {
-    const share = counts[kind] / total;
-    assert.ok(Math.abs(share - even) < even * 0.25, `${label}: ${kind} ${share}(均等なら ${even.toFixed(4)})`);
-  }
-}
+// ---- 形式(2026-09-30 本番の記憶で変更): 15問、単位変換5 → 割合5 → 計算5、5分 ----
 
-test('問題は14種類(今の10種類と、仕事算・速さと時間・時給・円筒)', () => {
-  assert.deepEqual(PROBLEM_KINDS, [...OLD_KINDS, ...NEW_KINDS]);
+test('分野は3つ: 単位変換・割合(割合・逆算・利益率・割引・全体の逆算・前年比)・計算', () => {
+  assert.deepEqual(T1_CATEGORIES.map(c => [c.id, c.label]), [['unit', '単位変換'], ['ratio', '割合'], ['calc', '計算']]);
+  assert.deepEqual(T1_CATEGORIES[0].kinds, ['unit']);
+  assert.deepEqual([...T1_CATEGORIES[1].kinds].sort(), [...RATIO_KINDS].sort());
+  assert.deepEqual([...T1_CATEGORIES[2].kinds].sort(), [...CALC_KINDS].sort());
+  assert.deepEqual([...PROBLEM_KINDS].sort(), ['unit', ...RATIO_KINDS, ...CALC_KINDS].sort());
 });
 
-test('種類の割合: 続けて出しても(本番と同じ)、各シードの1問目でも、単位換算は30〜37%、ほかは均等', () => {
-  const total = 6000;
-  const rng = createRng(2026);
-  const chained = Object.fromEntries(PROBLEM_KINDS.map(k => [k, 0]));
-  let previous = null;
-  for (let i = 0; i < total; i++) {
-    const q = generateT1Problem(rng, P, previous);
-    if (previous) assert.notEqual(q.kind, previous.kind, '同じ種類は続けて出さない');
-    chained[q.kind]++;
-    previous = q;
+test('1回は15問で、単位変換5 → 割合5 → 計算5 の順。分野の中は違う種類(違う換算)で、順番はランダム', () => {
+  const firstRatio = new Set();
+  const firstCalc = new Set();
+  for (let seed = 1; seed <= 300; seed++) {
+    const round = generateT1Round(createRng(seed), P);
+    assert.equal(round.length, 15);
+    assert.deepEqual(round.map(q => q.category), [...Array(5).fill('unit'), ...Array(5).fill('ratio'), ...Array(5).fill('calc')]);
+    assert.ok(round.slice(0, 5).every(q => q.kind === 'unit'));
+    assert.equal(new Set(round.slice(0, 5).map(q => q.variant)).size, 5, '違う換算');
+    assert.ok(round.slice(5, 10).every(q => RATIO_KINDS.includes(q.kind)));
+    assert.equal(new Set(round.slice(5, 10).map(q => q.kind)).size, 5);
+    assert.ok(round.slice(10).every(q => CALC_KINDS.includes(q.kind)));
+    assert.equal(new Set(round.slice(10).map(q => q.kind)).size, 5);
+    firstRatio.add(round[5].kind);
+    firstCalc.add(round[10].kind);
   }
-  assertKindShares(chained, total, '続けて出す');
-  const first = Object.fromEntries(PROBLEM_KINDS.map(k => [k, 0]));
-  for (let seed = 1; seed <= total; seed++) first[generateT1Problem(createRng(seed), P).kind]++;
-  assertKindShares(first, total, '各シードの1問目');
+  assert.equal(firstRatio.size, RATIO_KINDS.length, '割合の1問目はどの種類にもなる');
+  assert.ok(firstCalc.size >= 8, [...firstCalc].join(','));
 });
 
-test('2000シード: 小数は第1位まで・20%以下・全種類の正解が式に一致', () => {
-  let decimals = 0;
+test('制限時間は5分(300秒)', () => {
+  assert.equal(P.durationSec, 300);
+  assert.equal(P.questionsPerCategory * T1_CATEGORIES.length, 15);
+});
+
+test('開始前の画面に出す換算の一覧: 出題に使う換算の組ごとに1行', () => {
+  assert.equal(T1_CONVERSIONS.length, UNIT_VARIANT_IDS.length / 2);
+  for (const line of ['1ha = 10,000m²', '1t(メートルトン)= 1,000kg', '1時間 = 60分', '1km = 1,000m', '1m³ = 1,000L']) {
+    assert.ok(T1_CONVERSIONS.includes(line), `${line} が無い: ${T1_CONVERSIONS.join(' / ')}`);
+  }
+  assert.ok(T1_CONVERSIONS.some(line => line.includes('秒速 1/3.6m')));
+});
+
+test('2000シード: 問題文の小数は第3位まで・全種類の正解が問題文の数値の計算と一致(2026-09-30 本番の記憶で第1位 → 第3位)', () => {
   const seen = new Set();
   for (let seed = 1; seed <= 2000; seed++) {
     const q = generateT1Problem(createRng(seed), P);
     seen.add(q.kind);
     const body = q.prompt.replace(PI_NOTE, ''); // 円周率の注記は定数なので除いて調べる
-    assert.ok(!/\d+\.\d{2,}/.test(body), `seed=${seed} ${q.prompt}`);
-    if (/\d+\.\d+/.test(q.prompt)) decimals++;
+    assert.ok(!/\d+\.\d{4,}/.test(body), `seed=${seed} ${q.prompt}`);
     const n = body.match(/\d+(?:\.\d+)?/g).map(Number);
     let expected;
     if (q.kind === 'unit') expected = n[0] * UNIT_RATIOS[q.variant];
@@ -196,23 +220,10 @@ test('2000シード: 小数は第1位まで・20%以下・全種類の正解が�
     if (q.kind === 'elapsed') expected = (n[2]-n[0])*60+n[3]-n[1];
     if (q.kind === 'geometry') expected = geometryExpected(q.variant, n);
     if (NEW_KINDS.includes(q.kind)) expected = newKindExpected(q.kind, n);
+    if (['markup', 'discount', 'wholeFromPart', 'yearOverYear'].includes(q.kind)) expected = ratioExpected(q.kind, q.variant, n);
     assert.ok(Math.abs(q.answer-expected) < 1e-8, `seed=${seed} ${q.prompt}: ${q.answer} != ${expected}`);
   }
-  assert.ok(decimals <= 400, `小数問題=${decimals}/2000`);
   assert.equal(seen.size, PROBLEM_KINDS.length);
-});
-
-test('周回問題は8割以上が整数の距離で、小数も第1位まで', () => {
-  for (const kind of ['meeting', 'catchup']) {
-    let integer = 0;
-    for (let seed=1; seed<=2000; seed++) {
-      const q = generateT1Problem(createRng(seed), P, null, kind);
-      const length = Number(q.prompt.match(/周囲([\d.]+)/)[1]);
-      if (Number.isInteger(length)) integer++;
-      assert.ok(!/\d+\.\d{2,}/.test(q.prompt), q.prompt);
-    }
-    assert.ok(integer >= 1550, `${kind}: ${integer}/2000 (80%の確率、標本許容差)`);
-  }
 });
 
 test('SPECの例: L=4.2, a=4, b=3 の逆方向は36分', () => {
@@ -226,7 +237,7 @@ test('追いつきは速度差、出会いは速度和を使う', () => {
 });
 
 test('4択は重ならず、正解を1つだけ含み、誤答は正の整数で桁ずらしは1つまで', () => {
-  const made = makeT1Choices(36, [252, 42, 2160, 0.6, 360, 3.6, 36, -1], createRng(1));
+  const made = makeT1Choices(36, [252, 42, 2160, 0.6, 360, 3.6, 36, -1], createRng(1), [], 0); // 整数で答える形(人数など)
   assert.equal(made.choices.length, 4);
   assert.equal(new Set(made.choices).size, 4);
   assert.equal(made.choices.filter(v => v === 36).length, 1);
@@ -235,7 +246,7 @@ test('4択は重ならず、正解を1つだけ含み、誤答は正の整数で
   assert.equal(made.choices[made.correctIndex], 36);
 });
 
-test('シード2000種類で全種類が出て、4択は正の整数・重複なし・桁ずらし1つまで', () => {
+test('シード2000種類で全種類が出て、4択は正の数(小数第3位まで)・重複なし・桁ずらし1つまで', () => {
   const kinds = new Set();
   for (let seed = 1; seed <= 2000; seed++) {
     const q = generateT1Problem(createRng(seed), P);
@@ -245,8 +256,8 @@ test('シード2000種類で全種類が出て、4択は正の整数・重複な
     assert.equal(new Set(q.choices).size, 4, `seed=${seed}`);
     assert.equal(new Set(q.choices.map(v => formatT1Answer(q, v))).size, 4, `seed=${seed} 表示が重なる ${q.choices}`);
     assert.equal(q.choices.filter(v => v === q.answer).length, 1, `seed=${seed}`);
-    assert.ok(q.choices.every(v => v > 0 && decimalsOf(v) <= answerDecimals(q)), `seed=${seed} ${q.kind} choices=${q.choices}`);
-    if (OLD_KINDS.includes(q.kind)) assert.ok(q.choices.every(v => Number.isInteger(v)), `これまでの種類は正の整数: ${q.kind} ${q.choices}`);
+    assert.ok(decimalsOf(q.answer) <= answerDecimals(q), `seed=${seed} ${q.kind} answer=${q.answer}`);
+    assert.ok(q.choices.every(v => v > 0 && decimalsOf(v) <= choiceDecimals(q)), `seed=${seed} ${q.kind} choices=${q.choices}`);
     const digitShiftCount = q.choices.filter(v => v === q.answer * 10 || v === q.answer / 10).length;
     assert.ok(digitShiftCount <= 1, `seed=${seed} answer=${q.answer} choices=${q.choices}`);
     assert.equal(q.choices[q.correctIndex], q.answer, `seed=${seed}`);
@@ -316,7 +327,7 @@ test('式: 全種類で式を作り、式を計算すると正解と一致する
     assert.ok(formula.text.endsWith(` = ${formatT1Answer(problem, problem.answer)}`), `${kind}: ${formula.text}`);
     const value = evaluateExpr(formula.expression);
     const expected = kind === 'cylinder' ? Math.round(value * 10) / 10 : value;
-    assert.ok(Math.abs(expected - problem.answer) < 1e-9, `${kind}: ${formula.expression} != ${problem.answer}`);
+    assert.ok(Math.abs(expected - problem.answer) < 1e-9 * Math.max(1, problem.answer), `${kind}: ${formula.expression} != ${problem.answer}`);
     kinds.add(problem.kind);
     if (problem.kind === 'speed') speedVariants.add(problem.variant);
   }
@@ -376,12 +387,12 @@ test('単位換算: 各種類の正解は換算の式と一致し、式(t1Formul
   }
 });
 
-test('単位換算: 4択の決まり(正の整数・重複なし・桁ずらし1つまで)を全種類で守る', () => {
+test('単位換算: 4択の決まり(正の数で小数第3位まで・重複なし・桁ずらし1つまで)を全種類で守る', () => {
   for (const id of UNIT_VARIANT_IDS) {
     for (let seed = 1; seed <= 60; seed++) {
       const q = generateT1Problem(createRng(seed), P, null, 'unit', id);
       assert.equal(new Set(q.choices).size, 4, `${id} ${q.choices}`);
-      assert.ok(q.choices.every(v => Number.isInteger(v) && v > 0), `${id} ${q.choices}`);
+      assert.ok(q.choices.every(v => v > 0 && decimalsOf(v) <= 3), `${id} ${q.choices}`);
       assert.equal(q.choices.filter(v => v === q.answer).length, 1);
       assert.ok(q.choices.filter(v => v === q.answer * 10 || v === q.answer / 10).length <= 1, `${id} ${q.choices}`);
       assert.ok(q.choices.every(v => v <= 10000000), `${id}: 極端に大きな誤答 ${q.choices}`);
@@ -396,15 +407,6 @@ test('単位換算: 2乗・3乗の換算は、誤答に必ず「乗し忘れ」�
       const forgot = Math.round(q.values.shown * FORGOT_POWER_RATIOS[id] * 1e6) / 1e6;
       assert.ok(q.choices.includes(forgot), `${id}: ${q.prompt} 乗し忘れ ${forgot} が ${q.choices} にない`);
     }
-  }
-});
-
-test('単位換算: 速さの換算は答えが整数になる数値だけを使う', () => {
-  for (let seed = 1; seed <= 300; seed++) {
-    const kmh = generateT1Problem(createRng(seed), P, null, 'unit', 'kmh-to-mpm');
-    assert.equal(kmh.values.shown % 3, 0, kmh.prompt);
-    const mps = generateT1Problem(createRng(seed), P, null, 'unit', 'mps-to-kmh');
-    assert.equal(mps.values.shown % 5, 0, mps.prompt);
   }
 });
 
@@ -448,7 +450,7 @@ test('単価: gあたりの問題も正解が式と一致し、式を計算し�
       assert.ok(close(q.answer, priceExpected(variant, n)), `${q.prompt} → ${q.answer}`);
       assert.ok(close(evaluateExpr(t1Formula(q).expression), q.answer), t1Formula(q).text);
       assert.equal(new Set(q.choices).size, 4);
-      assert.ok(q.choices.every(v => Number.isInteger(v) && v > 0), `${q.prompt} ${q.choices}`);
+      assert.ok(q.choices.every(v => v > 0 && decimalsOf(v) <= 3), `${q.prompt} ${q.choices}`);
       assert.ok(q.choices.filter(v => v === q.answer * 10 || v === q.answer / 10).length <= 1);
     }
   }
@@ -474,7 +476,7 @@ test('図形: 円周・直径・円の面積・三角形・台形・平行四辺
   for (const [v, count] of Object.entries(counts)) assert.ok(count >= 400 && count <= 600, `${v}: ${count}/${total}`);
 });
 
-test('図形: 正解は公式と一致し、式を計算しても一致し、4択の決まり(正の整数・重複なし・桁ずらし1つまで)を守る', () => {
+test('図形: 正解は公式と一致し、式を計算しても一致し、4択の決まり(正の数で小数第3位まで・重複なし・桁ずらし1つまで)を守る', () => {
   for (const variant of GEOMETRY_VARIANTS) {
     for (let seed = 1; seed <= 500; seed++) {
       const q = generateT1Problem(createRng(seed), P, null, 'geometry', variant);
@@ -482,9 +484,9 @@ test('図形: 正解は公式と一致し、式を計算しても一致し、4�
       const n = q.prompt.replace(PI_NOTE, '').match(/\d+(?:\.\d+)?/g).map(Number);
       assert.ok(close(q.answer, geometryExpected(variant, n)), `${q.prompt} → ${q.answer}`);
       assert.ok(close(evaluateExpr(t1Formula(q).expression), q.answer), t1Formula(q).text);
-      assert.ok(Number.isInteger(q.answer) && q.answer > 0);
+      assert.ok(q.answer > 0 && decimalsOf(q.answer) <= 3, `${q.prompt} → ${q.answer}`);
       assert.equal(new Set(q.choices).size, 4, `${q.prompt} ${q.choices}`);
-      assert.ok(q.choices.every(v => Number.isInteger(v) && v > 0), `${q.prompt} ${q.choices}`);
+      assert.ok(q.choices.every(v => v > 0 && decimalsOf(v) <= 3), `${q.prompt} ${q.choices}`);
       assert.ok(q.choices.filter(v => v === q.answer * 10 || v === q.answer / 10).length <= 1, `${q.prompt} ${q.choices}`);
       if (variant.startsWith('circle')) assert.ok(q.prompt.endsWith(PI_NOTE), q.prompt);
       assert.ok(q.unit === 'cm' || q.unit === 'cm²');
@@ -495,11 +497,11 @@ test('図形: 正解は公式と一致し、式を計算しても一致し、4�
 test('図形: 円周の問題の誤答には「半径と直径の取り違え」、面積の問題には「÷2のし忘れ」が入る', () => {
   for (let seed = 1; seed <= 300; seed++) {
     const d = generateT1Problem(createRng(seed), P, null, 'geometry', 'circle-circumference-diameter');
-    assert.ok(d.choices.includes(Math.round(d.answer * 2)), `${d.prompt} ${d.choices}`);
+    assert.ok(d.choices.includes(Math.round(d.answer * 2 * 1e6) / 1e6), `${d.prompt} ${d.choices}`);
     const t = generateT1Problem(createRng(seed), P, null, 'geometry', 'triangle-area');
-    assert.ok(t.choices.includes(t.answer * 2), `${t.prompt} ${t.choices}`);
+    assert.ok(t.choices.includes(Math.round(t.answer * 2 * 1e6) / 1e6), `${t.prompt} ${t.choices}`);
     const z = generateT1Problem(createRng(seed), P, null, 'geometry', 'trapezoid-area');
-    assert.ok(z.choices.includes(z.answer * 2), `${z.prompt} ${z.choices}`);
+    assert.ok(z.choices.includes(Math.round(z.answer * 2 * 1e6) / 1e6), `${z.prompt} ${z.choices}`);
   }
 });
 
@@ -566,7 +568,7 @@ test('新しい4種類: 多数のシードで出て、正解は問題文の数�
       const n = q.prompt.replace(PI_NOTE, '').match(/\d+(?:\.\d+)?/g).map(Number);
       assert.ok(close(q.answer, newKindExpected(kind, n)), `${q.prompt} → ${q.answer}`);
       assert.ok(q.answer > 0 && decimalsOf(q.answer) <= answerDecimals(q), `${kind}: ${q.answer}`);
-      assert.ok(!/\d+\.\d{2,}/.test(q.prompt.replace(PI_NOTE, '')), `問題文の小数は第1位まで: ${q.prompt}`);
+      assert.ok(!/\d+\.\d{4,}/.test(q.prompt.replace(PI_NOTE, '')), `問題文の小数は第3位まで: ${q.prompt}`);
     }
     if (kind === 'wage') assert.deepEqual([...variants].sort(), ['dollar', 'yen']);
   }
@@ -589,8 +591,8 @@ test('仕事算: 人数と時間は反比例(5人で11時間 → 4人で13.75時
     const { workers1, hours1, workers2 } = q.values;
     assert.notEqual(workers1, workers2);
     assert.ok(close(q.answer, workers1 * hours1 / workers2), q.prompt);
-    const proportional = Math.round(hours1 * workers2 / workers1 * 100) / 100;
-    if (decimalsOf(hours1 * workers2 / workers1) <= 2) assert.ok(q.choices.includes(proportional), `${q.prompt} 比例の誤答 ${proportional} が ${q.choices} にない`);
+    const proportional = Math.round(hours1 * workers2 / workers1 * 1e6) / 1e6;
+    if (decimalsOf(proportional) <= 3) assert.ok(q.choices.includes(proportional), `${q.prompt} 比例の誤答 ${proportional} が ${q.choices} にない`);
   }
   assert.equal(t1Formula({ kind: 'work', variant: 'basic', answer: 13.75, unit: '時間', values: { workers1: 5, hours1: 11, workers2: 4 } }).text,
     '5人 × 11時間 ÷ 4人 = 13.75時間');
@@ -831,4 +833,88 @@ test('場面と数値: 速さの場面は時速2〜20kmのどの数値にも合�
     seen.add(sceneName(q));
   }
   assert.ok(seen.size >= 3, [...seen].join(','));
+});
+
+// ---- 割合の問題を足す(2026-09-30 本番の記憶で追加) ----
+
+const RATIO_NEW = ['markup', 'discount', 'wholeFromPart', 'yearOverYear'];
+
+test('割合の新しい4種類: 正解は問題文の数値の計算と一致し、式を計算しても一致し、答えの形を守る', () => {
+  for (const kind of RATIO_NEW) {
+    const variants = new Set();
+    for (let seed = 1; seed <= 1000; seed++) {
+      const q = generateT1Problem(createRng(seed), P, null, kind);
+      variants.add(q.variant);
+      const n = q.prompt.match(/\d+(?:\.\d+)?/g).map(Number);
+      assert.ok(close(q.answer, ratioExpected(kind, q.variant, n)), `${q.prompt} → ${q.answer}(${ratioExpected(kind, q.variant, n)})`);
+      assert.ok(close(evaluateExpr(t1Formula(q).expression), q.answer), `${kind}: ${t1Formula(q).text}`);
+      assert.ok(q.answer > 0 && decimalsOf(q.answer) <= answerDecimals(q), `${kind}: ${q.answer}`);
+      assert.equal(new Set(q.choices).size, 4);
+      assert.ok(q.choices.every(v => v > 0 && decimalsOf(v) <= choiceDecimals(q)), `${q.prompt} ${q.choices}`);
+    }
+    if (kind === 'discount') assert.deepEqual([...variants].sort(), [...DISCOUNT_VARIANTS].sort());
+  }
+});
+
+test('利益率: 例のとおり(製造コスト560ドルに33%の利益 → 744.8ドル)。誤答に「率だけを掛ける」「引く」が入る', () => {
+  const q = { kind: 'markup', variant: 'basic', answer: 744.8, unit: 'ドル', values: { cost: 560, rate: 33 } };
+  assert.equal(t1Formula(q).text, '560ドル × (1 + 0.33) = 744.8ドル');
+  for (let seed = 1; seed <= 300; seed++) {
+    const g = generateT1Problem(createRng(seed), P, null, 'markup');
+    const { cost, rate } = g.values;
+    const rateOnly = Math.round(cost * rate) / 100;
+    const minus = Math.round(cost * (100 - rate)) / 100;
+    assert.ok(g.choices.includes(rateOnly) || g.choices.includes(minus) || g.choices.includes(Math.round(cost / (1 + rate / 100) * 100) / 100) || g.choices.includes(cost + rate),
+      `${g.prompt} ${g.choices}`);
+  }
+});
+
+test('割引・全体の逆算・前年比の式の例', () => {
+  assert.equal(t1Formula({ kind: 'discount', variant: 'sale-price', answer: 267.96, unit: 'ドル', values: { list: 348, rate: 23, sale: 267.96 } }).text,
+    '348ドル × (1 − 0.23) = 267.96ドル');
+  assert.equal(t1Formula({ kind: 'discount', variant: 'list-price', answer: 348, unit: 'ドル', values: { list: 348, rate: 23, sale: 267.96 } }).text,
+    '267.96ドル ÷ (1 − 0.23) = 348ドル');
+  assert.equal(t1Formula({ kind: 'wholeFromPart', variant: 'basic', answer: 175, unit: '人', values: { part: 56, rate: 32 } }).text,
+    '56人 ÷ 0.32 = 175人');
+  assert.equal(t1Formula({ kind: 'yearOverYear', variant: 'basic', answer: 2846688, unit: 'ドル', values: { now: 3245224, rate: 14 } }).text,
+    '3245224ドル ÷ (1 + 0.14) = 2846688ドル');
+});
+
+test('全体の逆算と前年比は、答えが整数(割り切れる)になる組だけ', () => {
+  for (let seed = 1; seed <= 500; seed++) {
+    const w = generateT1Problem(createRng(seed), P, null, 'wholeFromPart');
+    assert.ok(Number.isInteger(w.answer) && Number.isInteger(w.values.part), w.prompt);
+    assert.equal(w.values.part, w.answer * w.values.rate / 100);
+    const y = generateT1Problem(createRng(seed), P, null, 'yearOverYear');
+    assert.ok(Number.isInteger(y.answer), y.prompt);
+    assert.equal(y.values.now, y.answer * (100 + y.values.rate) / 100);
+  }
+});
+
+// ---- 暗算で一瞬の問題をなくす(2026-09-30 本番の記憶で追加) ----
+
+test('きりのいい数と有効数字の判定', () => {
+  // きりのいい数 = 有効数字1桁の整数(1桁の整数と 10・60・300・3000 など)。560 のように2桁以上あれば違う
+  for (const v of [2, 7, 10, 60, 100, 1000, 3000]) assert.equal(isRoundNumber(v), true, String(v));
+  for (const v of [13, 347, 560, 23570, 2.35, 0.5, 744.8]) assert.equal(isRoundNumber(v), false, String(v));
+  assert.equal(significantDigits(3.47), 3);
+  assert.equal(significantDigits(560), 2);
+  assert.equal(significantDigits(0.0582), 3);
+  assert.equal(significantDigits(3245224), 7);
+});
+
+test('暗算で一瞬の問題は出ない: 多数のシードで、問題文の数値がきりのいい数だけにならず、経過時間以外は有効数字3桁以上の数を含む', () => {
+  for (const kind of PROBLEM_KINDS) {
+    for (let seed = 1; seed <= 800; seed++) {
+      const q = generateT1Problem(createRng(seed), P, null, kind);
+      const n = q.prompt.replace(PI_NOTE, '').match(/\d+(?:\.\d+)?/g).map(Number);
+      assert.ok(!n.every(isRoundNumber), `きりのいい数だけ: ${q.prompt}`);
+      if (kind !== 'elapsed') assert.ok(n.some(v => significantDigits(v) >= 3), `有効数字3桁以上の数が無い: ${q.prompt}`);
+    }
+  }
+  // 以前の「2時間は何分ですか」「7tは何kgですか」のような形は出ない
+  for (let seed = 1; seed <= 3000; seed++) {
+    const q = generateT1Problem(createRng(seed), P, null, 'unit');
+    assert.ok(!isRoundNumber(q.values.shown), q.prompt);
+  }
 });

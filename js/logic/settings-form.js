@@ -1,5 +1,4 @@
 import { generateDotPositions } from './t5.js';
-import { lapCandidates } from './t1.js';
 import { T6_COLOR_OPTIONS } from '../core/settings.js';
 
 const number = (key, label, min, max, options = {}) => ({ key, label, min, max, type: 'number', ...options });
@@ -17,32 +16,28 @@ export const SETTING_FIELDS = Object.freeze({
       { value: 'true', label: '表示する', parsed: true },
       { value: 'false', label: '表示しない', parsed: false },
     ] },
-    number('unitValueMin', '単位換算の最小値', 1, 100, { integer: true }),
-    number('unitValueMax', '単位換算の最大値', 1, 100, { integer: true }),
+    // 2026-09-30 本番の記憶で変更: 1回15問(単位変換5 → 割合5 → 計算5)。数値は小数を含む有効数字3〜4桁
+    number('questionsPerCategory', '分野ごとの問題数', 1, 20, { integer: true, unit: '問', hint: '単位変換・割合・計算の順に出す' }),
+    number('unitValueMin', '単位変換の量の最小値', 1, 100, { integer: true }),
+    number('unitValueMax', '単位変換の量の最大値', 1, 100, { integer: true }),
     number('speedMin', '速さの最小値', 1, 100, { integer: true, unit: 'km/h' }),
     number('speedMax', '速さの最大値', 1, 100, { integer: true, unit: 'km/h' }),
-    number('speedHoursMin', '時間の最小値', 1, 24, { integer: true, unit: '時間' }),
-    number('speedHoursMax', '時間の最大値', 1, 24, { integer: true, unit: '時間' }),
     number('lapSpeedMin', '周回問題の速さ最小', 1, 100, { integer: true, unit: 'km/h' }),
     number('lapSpeedMax', '周回問題の速さ最大', 1, 100, { integer: true, unit: 'km/h' }),
-    number('lapMultiplierMin', '周回距離の倍率最小', 1, 100, { integer: true }),
-    number('lapMultiplierMax', '周回距離の倍率最大', 1, 100, { integer: true }),
-    list('percentagePercents', '割合の候補', 1, 99, { integer: true, unit: '%', hint: 'カンマ区切り' }),
-    number('percentageUnitMin', '割合問題の単位最小', 1, 1000, { integer: true }),
-    number('percentageUnitMax', '割合問題の単位最大', 1, 1000, { integer: true }),
-    number('priceMin', '単価の最小値', 2, 1000, { integer: true, unit: '円' }),
-    number('priceMax', '単価の最大値', 2, 1000, { integer: true, unit: '円' }),
-    number('priceCountMin', '商品の最小個数', 2, 100, { integer: true }),
-    number('priceCountMax', '商品の最大個数', 2, 100, { integer: true }),
-    number('averageMin', '平均問題の最小値', 2, 1000, { integer: true }),
-    number('averageMax', '平均問題の最大値', 2, 1000, { integer: true }),
+    number('percentBaseMin', '割合のもとの数の最小値', 11, 99999, { integer: true }),
+    number('percentBaseMax', '割合のもとの数の最大値', 11, 99999, { integer: true }),
+    number('percentMin', '割合の率の最小値', 1, 99, { integer: true, unit: '%' }),
+    number('percentMax', '割合の率の最大値', 1, 99, { integer: true, unit: '%' }),
+    number('priceMin', '単価の最小値', 11, 9999, { integer: true, unit: '円' }),
+    number('priceMax', '単価の最大値', 11, 9999, { integer: true, unit: '円' }),
+    number('priceCountMin', '商品の最小個数', 11, 999, { integer: true }),
+    number('priceCountMax', '商品の最大個数', 11, 999, { integer: true }),
+    number('averageMin', '平均問題の最小値', 1, 1000, { integer: true }),
+    number('averageMax', '平均問題の最大値', 1, 1000, { integer: true }),
     number('clockStartHourMin', '経過時間の開始時(最小)', 0, 20, { integer: true }),
     number('clockStartHourMax', '経過時間の開始時(最大)', 0, 20, { integer: true }),
-    number('elapsedMinutesMin', '経過時間の最小値', 1, 180, { integer: true, unit: '分' }),
-    number('elapsedMinutesMax', '経過時間の最大値', 1, 180, { integer: true, unit: '分' }),
-    number('unitKindShare', '単位換算の割合', 0, 0.5, { step: 0.01, hint: '全体に占める割合。残りの種類は均等。0.33で約1/3' }),
-    number('geometryLengthMin', '図形の辺・高さの最小値', 1, 100, { integer: true, unit: 'cm' }),
-    number('geometryLengthMax', '図形の辺・高さの最大値', 2, 100, { integer: true, unit: 'cm' }),
+    number('elapsedMinutesMin', '経過時間の最小値', 1, 600, { integer: true, unit: '分' }),
+    number('elapsedMinutesMax', '経過時間の最大値', 1, 600, { integer: true, unit: '分' }),
   ]),
   t2: Object.freeze([
     duration(),
@@ -174,11 +169,10 @@ export function validateTestSettings(testId, raw, defaults) {
   if (Object.keys(errors).length) return { ok: false, value, errors };
 
   if (testId === 't1') {
-    for (const pair of [['unitValueMin', 'unitValueMax'], ['speedMin', 'speedMax'], ['speedHoursMin', 'speedHoursMax'], ['lapSpeedMin', 'lapSpeedMax'], ['lapMultiplierMin', 'lapMultiplierMax'], ['percentageUnitMin', 'percentageUnitMax']]) minMax(errors, value, ...pair);
+    for (const pair of [['unitValueMin', 'unitValueMax'], ['speedMin', 'speedMax'], ['lapSpeedMin', 'lapSpeedMax'], ['percentBaseMin', 'percentBaseMax'], ['percentMin', 'percentMax']]) minMax(errors, value, ...pair);
     for (const pair of [['priceMin', 'priceMax'], ['priceCountMin', 'priceCountMax'], ['averageMin', 'averageMax'], ['clockStartHourMin', 'clockStartHourMax'], ['elapsedMinutesMin', 'elapsedMinutesMax']]) minMax(errors, value, ...pair);
-    if (value.geometryLengthMax <= value.geometryLengthMin) errors.geometryLengthMax = '台形を作るため、最小値より大きくしてください';
-    if (value.averageMax - value.averageMin < 2) errors.averageMax = '整数の平均を作るため、最小値より2以上大きくしてください';
-    if (!Object.keys(errors).length && !lapCandidates(value).integer.length) errors.lapMultiplierMax = '整数の周回距離を作れる速度と倍率の組がありません';
+    if (value.averageMax - value.averageMin < 2) errors.averageMax = '平均を作るため、最小値より2以上大きくしてください';
+    if (value.lapSpeedMax - value.lapSpeedMin < 1) errors.lapSpeedMax = 'ふたりの速さに差を付けるため、最小値より1以上大きくしてください';
   } else if (testId === 't2') {
     // 系列は順に作るので、一致確率と連続上限の組み合わせに制限はない
     if (value.durationSec * 1000 < value.intervalMs) errors.intervalMs = '制限時間より短い間隔にしてください';

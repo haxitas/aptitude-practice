@@ -1,7 +1,9 @@
 // テスト1 計算: 4択表示、回答、時間管理、保存。
+// 2026-09-30 本番の記憶で変更: 1回15問(単位変換5 → 割合5 → 計算5)を5分。15問答えるか5分たったら終わる。
 
 import {
-  generateT1Problem, judgeT1, t1MistakeEntry, t1ReviewSummary, formatT1Answer, createT1Tally, recordT1Answer, buildT1Record,
+  generateT1Round, T1_CATEGORIES, T1_CONVERSIONS,
+  judgeT1, t1MistakeEntry, t1ReviewSummary, formatT1Answer, createT1Tally, recordT1Answer, buildT1Record,
 } from '../logic/t1.js';
 import { createRng, randomSeed } from '../core/rng.js';
 import { startTimer, formatDuration } from '../core/timer.js';
@@ -54,15 +56,20 @@ export function mount(root, ctx) {
     root.innerHTML = `
       <section class="screen">
         <h1 data-ref="title"></h1>
-        <p>単位換算、速さ、出会い、追いつき、割合、割合の逆算、単価と合計、平均、経過時間、図形、仕事算、速さと時間、時給、円筒の容積の14種類の文章題を4択で答えます。</p>
-        <p>回答するとすぐ次の問題へ進みます。制限時間は <span data-ref="duration"></span>です。</p>
+        <p><span data-ref="plan"></span>の文章題を4択で答えます。電卓を使えます。</p>
+        <p>回答するとすぐ次の問題へ進みます。全部答えるか、<span data-ref="duration"></span>たったら終わります。</p>
         <div class="actions">
           <button class="btn btn-primary btn-large" type="button" data-ref="start">開始</button>
           <a class="btn" href="#/">ホーム</a>
         </div>
+        <section class="t1-conversions">
+          <h2>出題に使う換算</h2>
+          <table><tbody>${T1_CONVERSIONS.map(line => `<tr><td>${line}</td></tr>`).join('')}</tbody></table>
+        </section>
       </section>`;
     const $ = name => root.querySelector(`[data-ref="${name}"]`);
     $('title').textContent = meta.name;
+    $('plan').textContent = `${T1_CATEGORIES.map(c => `${c.label}${params.questionsPerCategory}問`).join(' → ')}の${params.questionsPerCategory * T1_CATEGORIES.length}問`;
     $('duration').textContent = formatDuration(params.durationSec);
     $('start').addEventListener('click', startPlay);
     $('start').focus();
@@ -71,7 +78,9 @@ export function mount(root, ctx) {
   function startPlay() {
     setPhase(null);
     const rng = createRng(randomSeed());
-    let problem = generateT1Problem(rng, params);
+    const round = generateT1Round(rng, params);
+    let index = 0;
+    let problem = round[index];
     let tally = createT1Tally();
     let lastFrameTs = null;
     const pale = new Map();
@@ -80,6 +89,7 @@ export function mount(root, ctx) {
       <section class="t1-play">
         <div class="topbar">
           <span class="remaining" data-ref="remaining"></span>
+          <strong class="t1-progress" data-ref="progress"></strong>
           <button class="btn btn-quiet" type="button" data-ref="quit">途中終了</button>
         </div>
         <div class="t1-main">
@@ -98,12 +108,16 @@ export function mount(root, ctx) {
       </section>`;
     const $ = name => root.querySelector(`[data-ref="${name}"]`);
     const choiceButtons = [...root.querySelectorAll('[data-index]')];
-    const kindLabels = { unit: '単位換算', speed: '速さ', meeting: '出会い', catchup: '追いつき', percentage: '割合', inversePercentage: '割合の逆算', price: '単価と合計', average: '平均', elapsed: '経過時間', geometry: '図形',
+    const kindLabels = { unit: '単位変換', speed: '速さ', meeting: '出会い', catchup: '追いつき', percentage: '割合', inversePercentage: '割合の逆算',
+      markup: '利益率', discount: '割引', wholeFromPart: '全体の逆算', yearOverYear: '前年比',
+      price: '単価と合計', average: '平均', elapsed: '経過時間', geometry: '図形',
       work: '仕事算', speedTime: '速さと時間', wage: '時給', cylinder: '円筒の容積' };
+    const categoryLabel = id => T1_CATEGORIES.find(c => c.id === id)?.label ?? '';
     const cleanupCalculator = params.calculatorDuringTest ? mountCalculator($('calculator')) : null;
     const mistakes = []; // 結果画面で振り返る(テスト中は正誤を出さない)
 
     function drawProblem() {
+      $('progress').textContent = `${categoryLabel(problem.category)} ${index + 1}/${round.length}`;
       $('kind').textContent = kindLabels[problem.kind];
       $('question').textContent = problem.prompt;
       choiceButtons.forEach((button, index) => {
@@ -119,8 +133,29 @@ export function mount(root, ctx) {
       if (mistake) mistakes.push(mistake);
       button.classList.add('is-pressed');
       pale.set(button, e.timeStamp);
-      problem = generateT1Problem(rng, params, problem);
+      index++;
+      // 15問答えたら、時間が残っていても終わる
+      if (index >= round.length) {
+        finishRound();
+        return;
+      }
+      problem = round[index];
       drawProblem();
+    }
+
+    function finishRound() {
+      const record = buildT1Record({ date: new Date().toISOString(), tally, settings: params });
+      const saveResult = appendRecord(ctx.store, record);
+      setPhase(null);
+      renderResult(root, {
+        testName: meta.name,
+        score: record.score,
+        details: meta.details.map(d => ({ label: d.label, value: formatDetail(d, record.detail[d.key]) })),
+        saveResult,
+        onRetry: showStart,
+        extra: reviewSection(t1ReviewSummary(tally.answered, mistakes), mistakes),
+      });
+      root.querySelector('.result .actions')?.insertAdjacentHTML('beforeend', '<a class="btn" href="#/calc">電卓</a>');
     }
 
     function abort(message) {
@@ -154,20 +189,7 @@ export function mount(root, ctx) {
           }
         }
       },
-      onEnd() {
-        const record = buildT1Record({ date: new Date().toISOString(), tally, settings: params });
-        const saveResult = appendRecord(ctx.store, record);
-        setPhase(null);
-        renderResult(root, {
-          testName: meta.name,
-          score: record.score,
-          details: meta.details.map(d => ({ label: d.label, value: formatDetail(d, record.detail[d.key]) })),
-          saveResult,
-          onRetry: showStart,
-          extra: reviewSection(t1ReviewSummary(tally.answered, mistakes), mistakes),
-        });
-        root.querySelector('.result .actions')?.insertAdjacentHTML('beforeend', '<a class="btn" href="#/calc">電卓</a>');
-      },
+      onEnd: finishRound,
     });
 
     setPhase(() => {

@@ -598,3 +598,10 @@ h1 { font-size: 1.6rem; margin: 0 0 16px; }
 /* スキップは「重複あり」「重複なし」の下の段(2026-09-30 ユーザーの実機の感想で変更) */
 .t3-skip-row { display: flex; justify-content: center; width: min(100%, 420px); }
 .t3-skip-row .t3-skip { width: 60%; height: clamp(36px, 6vh, 56px); font-size: clamp(0.95rem, 1.8vw, 1.15rem); }
+/* テスト1: 進みぐあいと、開始前の換算の一覧(2026-09-30 本番の記憶で追加) */
+.t1-progress { font-variant-numeric: tabular-nums; }
+.t1-conversions { margin-top: 18px; }
+.t1-conversions h2 { font-size: 1rem; margin: 0 0 6px; }
+.t1-conversions table { border-collapse: collapse; width: 100%; max-width: 560px; font-variant-numeric: tabular-nums; }
+.t1-conversions tbody { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 0 12px; }
+.t1-conversions td { display: block; padding: 3px 6px; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
