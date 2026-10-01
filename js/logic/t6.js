@@ -303,8 +303,18 @@ export function pickBladeOpeningCount(rng, p) {
 // 5種類(半円・3枚羽根・扇形・小穴・回転する長方形)を同じ確率で出す
 export const OBSTACLE_TYPES = Object.freeze(['half', 'blades', 'sector', 'holes', 'bar']);
 
-export function createObstacle(rng, z, id, p) {
-  const typeIndex = Math.floor(rng() * OBSTACLE_TYPES.length);
+// 同じ種類は続けて maxSameObstacleRun(2)個まで(2026-10-01 ユーザーの判断で追加)。
+// recent: 手前から奥の順の、直前に並んだ障害物の種類。最後の maxSameObstacleRun 個が同じ種類なら、その種類を除いて選ぶ
+function pickObstacleType(rng, p, recent) {
+  const run = p.maxSameObstacleRun;
+  const tail = recent.slice(-run);
+  const banned = tail.length === run && tail.every(type => type === tail[0]) ? tail[0] : null;
+  const allowed = OBSTACLE_TYPES.filter(type => type !== banned);
+  return allowed[Math.floor(rng() * allowed.length)];
+}
+
+export function createObstacle(rng, z, id, p, recent = []) {
+  const typeIndex = OBSTACLE_TYPES.indexOf(pickObstacleType(rng, p, recent));
   if (typeIndex === 0) {
     return {
       id, type: 'half', z,
@@ -350,7 +360,7 @@ export function createInitialObstacles(rng, p) {
   let z = p.collisionZ + p.firstObstacleDistance;
   let id = 1;
   while (z <= p.farZ) {
-    out.push(createObstacle(rng, z, id++, p));
+    out.push(createObstacle(rng, z, id++, p, out.map(o => o.type)));
     z += p.obstacleSpacing;
   }
   return out;
@@ -374,10 +384,15 @@ export function advanceObstacle(obstacle, distanceDelta, elapsedSec, dtSec, p) {
 export function recycleObstacles(obstacles, rng, p, holdHit = false) {
   const active = obstacles.filter(o => o.z > p.collisionZ);
   let farthest = Math.max(p.farZ - p.obstacleSpacing, ...active.map(o => o.z));
+  const kept = o => o.z > p.collisionZ || (holdHit && o.held);
+  // 奥に並んでいる順の種類(作り直した障害物は一番奥に足す)。同じ種類が続きすぎないように使う
+  const recent = obstacles.filter(kept).sort((a, b) => a.z - b.z).map(o => o.type);
   return obstacles.map(o => {
-    if (o.z > p.collisionZ || (holdHit && o.held)) return o;
+    if (kept(o)) return o;
     farthest += p.obstacleSpacing;
-    return createObstacle(rng, farthest, o.id, p);
+    const made = createObstacle(rng, farthest, o.id, p, recent);
+    recent.push(made.type);
+    return made;
   });
 }
 

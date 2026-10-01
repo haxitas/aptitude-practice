@@ -57,6 +57,7 @@ test('T6 の既定値は承認済みの数値', () => {
     collisionZ: 1,
     farZ: 32,
     sectorOpeningDeg: 90,
+    maxSameObstacleRun: 2,
     holeSlotCount: 4,
     holeThreeSlotCount: 3,
     holeOpenCounts: [1, 2, 3],
@@ -907,4 +908,50 @@ test('回復の上限: よけずに再びぶつかったら、また通過する
 test('最高速度: 既定は15で、設定では20まで上げられる', () => {
   assert.equal(P.maxSpeed, 15);
   assert.equal(baseSpeedAt(1000, P), 15);
+});
+
+// ---- 同じ障害物の連続(2026-10-01 ユーザーの判断で追加) ----
+
+function obstacleSequence(seed, recycles) {
+  const rng = createRng(seed);
+  let obstacles = createInitialObstacles(rng, P);
+  const sequence = [...obstacles].sort((a, b) => a.z - b.z).map(o => o.type);
+  for (let i = 0; i < recycles; i++) {
+    // 一番手前の障害物を機体の面より手前へ進め、奥で作り直させる
+    const nearest = obstacles.reduce((a, b) => (a.z < b.z ? a : b));
+    obstacles = obstacles.map(o => (o === nearest ? { ...o, z: P.collisionZ - 0.1 } : o));
+    obstacles = recycleObstacles(obstacles, rng, P);
+    const farthest = obstacles.reduce((a, b) => (a.z > b.z ? a : b));
+    sequence.push(farthest.type);
+  }
+  return sequence;
+}
+
+test('同じ種類の障害物は続けて2個まで(3個続けて出さない)。2個続くことはあり、5種類はほぼ同じ確率', () => {
+  assert.equal(P.maxSameObstacleRun, 2);
+  let pairs = 0;
+  const counts = new Map();
+  for (let seed = 1; seed <= 200; seed++) {
+    const seq = obstacleSequence(seed, 300);
+    let run = 1;
+    for (let i = 1; i < seq.length; i++) {
+      run = seq[i] === seq[i - 1] ? run + 1 : 1;
+      assert.ok(run <= 2, `seed=${seed} ${i}: ${seq.slice(Math.max(0, i - 3), i + 1)}`);
+      if (run === 2) pairs++;
+    }
+    for (const type of seq) counts.set(type, (counts.get(type) ?? 0) + 1);
+  }
+  assert.ok(pairs > 1000, `2個続くことはある: ${pairs}`);
+  const total = [...counts.values()].reduce((a, b) => a + b, 0);
+  for (const [type, count] of counts) assert.ok(Math.abs(count / total - 0.2) < 0.02, `${type}: ${count}/${total}`);
+});
+
+test('同じ種類の連続: 直前の2個が同じ種類なら、次はその種類を出さない', () => {
+  for (let seed = 1; seed <= 2000; seed++) {
+    const o = createObstacle(createRng(seed), 6, seed, P, ['bar', 'bar']);
+    assert.notEqual(o.type, 'bar', `seed=${seed}`);
+  }
+  const types = new Set();
+  for (let seed = 1; seed <= 2000; seed++) types.add(createObstacle(createRng(seed), 6, seed, P, ['bar', 'half']).type);
+  assert.ok(types.has('bar'), '直前2個が違えば同じ種類も出る');
 });

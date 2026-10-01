@@ -208,6 +208,7 @@ export const DEFAULTS = Object.freeze({
     collisionZ: 1,
     farZ: 32, // 奥まで見えるよう 12 → 32(2026-09-30 本番に合わせて変更)
     sectorOpeningDeg: 90,
+    maxSameObstacleRun: 2, // 同じ種類の障害物は続けてこの個数まで(2026-10-01 ユーザーの判断で追加)
     holeSlotCount: 4,
     holeThreeSlotCount: 3, // 3つ空きのときだけ、穴を120°ずつに置く(2026-10-01 ユーザーの実機の感想で追加。固定)
     holeOpenCounts: Object.freeze([1, 2, 3]),
