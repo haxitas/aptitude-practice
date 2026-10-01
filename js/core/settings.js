@@ -277,7 +277,8 @@ export function resolveSettings(saved) {
 // ---- 保存した設定の移行(2026-10-01 7回目で追加) ----
 // 設定画面で保存すると、以前はそのテストの全項目が当時の値で保存され、あとで既定値を変えても保存値が優先された。
 // 版を切り替えたとき一度だけ、既定値を変えた項目の保存値を消して既定値に戻す。済んだ版は apt_settings の
-// defaultsVersion に保存し、2回目以降は何もしない。配色・操縦円の側・制限時間(durationSec)は消さない。成績には触れない。
+// defaultsVersion に保存し、2回目以降は何もしない。配色・操縦円の側・制限時間(durationSec)は消さない
+// (計算の durationSec だけは消す: 15問・5分は本番に合わせた形式の一部のため。version 2)。成績には触れない。
 // 今後、既定値を変えるときは、次の version の項目をここに足す(PHASE_NOTES の「公開の手順」)。
 export const SETTINGS_MIGRATIONS = Object.freeze([
   Object.freeze({
@@ -297,6 +298,12 @@ export const SETTINGS_MIGRATIONS = Object.freeze([
         'collisionPullbackDistance', 'perspectiveFocal', 'farZ', 'holeRadius',
         'bladeOpen1Rate', 'bladeOpen2Rate', 'bladeOpen3Rate', 'centerOpenRadius', 'barWidth', 'hitRadius']),
     }),
+  }),
+  Object.freeze({
+    version: 2,
+    date: '2026-10-01',
+    // 計算の制限時間(180秒 → 300秒)。古い180秒が残ると15問を解ききれない(2026-10-01 9回目で追加)
+    keys: Object.freeze({ t1: Object.freeze(['durationSec']) }),
   }),
 ]);
 

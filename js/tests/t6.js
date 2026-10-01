@@ -291,8 +291,8 @@ export function mount(root, ctx) {
     root.innerHTML = shell(`<section class="t6-start">
       <h1 data-ref="title"></h1>
       <p>トンネルの中を進みます。画面の中心が自分の位置です。操縦用の円の中の位置が、そのまま自分の位置になります(円の中心 = トンネルの中心、指・マウスを離すとその位置のまま)。矢印キーでも動かせます。横画面では左右ボタンで円の側を選べます。縦画面ではトンネルが上、操縦円が下です。</p>
-      <p>半円、回転する羽根(開口1〜3個)、回転する扇形、縁の小穴(開口1〜3個)、回転する長方形(帯の中だけ通れる)を通り抜けます。羽根と扇形は中心も通れます。</p>
-      <p class="muted">衝突すると速度が半分になり、少し手前へ巻き戻されます。よけなければ、同じ障害物にまた衝突します。制限時間は <span data-ref="duration"></span>です。</p>
+      <p>半円、回転する羽根(開口1〜2個)、回転する扇形、縁の小穴(開口1〜3個)、回転する長方形(長方形の穴の中だけ通れる)を通り抜けます。羽根と扇形は中心も通れます。</p>
+      <p class="muted">衝突すると速度が落ち、少し手前へ巻き戻されます。ぶつかった障害物を通過するまでは遅いままです。よけなければ、同じ障害物にまた衝突します。制限時間は <span data-ref="duration"></span>です。</p>
       <p class="notice notice-error" data-ref="layoutError" hidden></p>
       <button class="btn btn-primary btn-large" type="button" data-ref="start">開始</button>
     </section>`);

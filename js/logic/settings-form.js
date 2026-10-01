@@ -99,7 +99,7 @@ export const SETTING_FIELDS = Object.freeze({
     number('bladeOpeningDeg', '羽根の開口角', 1, 119, { step: 1, unit: '°' }),
     number('bladeOpen1Rate', '羽根の開口1つの確率', 0, 1, { step: 0.01 }),
     number('bladeOpen2Rate', '羽根の開口2つの確率', 0, 1, { step: 0.01 }),
-    number('bladeOpen3Rate', '羽根の開口3つの確率', 0, 1, { step: 0.01, hint: '3つの比で選ぶ' }),
+    number('bladeOpen3Rate', '羽根の開口3つの確率', 0, 1, { step: 0.01, hint: '3つの比で選ぶ。既定は0(開口3つは出さない)' }),
     number('centerOpenRadius', '羽根・扇形の中心の安全円の半径', 0, 0.9, { step: 0.01 }),
     number('barWidth', '回転する長方形の幅', 0.05, 1.5, { step: 0.01 }),
     number('barLength', '回転する長方形の長さ', 0.1, 2, { step: 0.01, hint: 'トンネルの直径は2' }),

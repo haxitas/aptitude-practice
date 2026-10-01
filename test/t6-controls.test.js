@@ -37,3 +37,28 @@ test('左右ボタンはt6.stickSideだけを保存し、次回読込で維持�
   assert.match(button.textContent,/左 → 右へ/);
   cleanup();
 });
+
+test('開始前の説明文は今の仕様: 羽根の開口は1〜2個、長方形は長方形の中だけ通れる、衝突のあとは通過するまで遅いまま(2026-10-01 9回目)', t => {
+  const previous = new Map();
+  for (const [key,value] of Object.entries({ innerWidth:1180, innerHeight:820, addEventListener(){}, removeEventListener(){} })) {
+    previous.set(key,Object.getOwnPropertyDescriptor(globalThis,key));
+    Object.defineProperty(globalThis,key,{configurable:true,writable:true,value});
+  }
+  t.after(()=>{for(const [key,descriptor] of previous) {
+    if(descriptor) Object.defineProperty(globalThis,key,descriptor); else delete globalThis[key];
+  }});
+  const nodes=new Map();
+  const root={innerHTML:'',querySelector(selector) {
+    if(!nodes.has(selector)) nodes.set(selector,{textContent:'',hidden:false,disabled:false,clientWidth:1162,clientHeight:720,
+      handlers:{},addEventListener(type,fn){this.handlers[type]=fn;},focus(){}});
+    return nodes.get(selector);
+  }};
+  const cleanup=mount(root,{settings:DEFAULTS,store:null});
+  const html=root.innerHTML;
+  assert.ok(html.includes('回転する羽根(開口1〜2個)'),'羽根は1〜2個');
+  assert.ok(!html.includes('羽根(開口1〜3個)'));
+  assert.ok(html.includes('縁の小穴(開口1〜3個)'),'小穴は1〜3個のまま');
+  assert.ok(html.includes('長方形の穴の中だけ通れる'));
+  assert.ok(html.includes('通過するまで'));
+  cleanup();
+});

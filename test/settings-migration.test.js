@@ -38,12 +38,13 @@ test('移行: 古い保存値(t6 maxSpeed 10・barWidth 0.35・配色)は、maxS
   assert.deepEqual(OLD.t6.maxSpeed, 10, '元の値は書き換えない');
 });
 
-test('移行の一覧: 既定値にある項目だけで、配色・操縦円の側・制限時間(durationSec)は含まない', () => {
+test('移行の一覧: 既定値にある項目だけで、配色・操縦円の側・制限時間(durationSec)は含まない(計算の durationSec だけは消す)', () => {
   for (const migration of SETTINGS_MIGRATIONS) {
     for (const [testId, keys] of Object.entries(migration.keys)) {
       for (const key of keys) {
         assert.ok(key in DEFAULTS[testId], `${testId}.${key}`);
-        assert.ok(!['durationSec', 'obstacleColor', 'obstacleEdgeColor', 'stickSide'].includes(key), `${testId}.${key}`);
+        assert.ok(!['obstacleColor', 'obstacleEdgeColor', 'stickSide'].includes(key), `${testId}.${key}`);
+        if (key === 'durationSec') assert.equal(testId, 't1', `${testId}.durationSec は残す`);
       }
     }
   }
@@ -88,4 +89,33 @@ test('保存: 既定値と同じ項目は保存せず、違う項目だけを保
   assert.deepEqual(withoutDefaults({ ...DEFAULTS.t6, holeOpenCounts: [1, 2, 3] }, DEFAULTS.t6), {}, '配列も中身で比べる');
   assert.deepEqual(withoutDefaults({ ...DEFAULTS.t6, holeOpenCounts: [1, 3] }, DEFAULTS.t6), { holeOpenCounts: [1, 3] });
   assert.deepEqual(withoutDefaults(DEFAULTS.t1, DEFAULTS.t1), {});
+});
+
+// ---- 計算の制限時間も消す(2026-10-01 9回目で追加。移行 version 2) ----
+
+test('移行 version 2: 計算(t1)の durationSec 180 の保存値は消え(15問・5分の形式)、t2 の durationSec 120 は残る', () => {
+  const { value, removed } = migrateSettings({ t1: { durationSec: 180, calculatorDuringTest: false }, t2: { durationSec: 120 } });
+  const { settings } = resolveSettings(value);
+  assert.equal(settings.t1.durationSec, DEFAULTS.t1.durationSec);
+  assert.equal(settings.t1.durationSec, 300);
+  assert.equal(settings.t1.calculatorDuringTest, false, '既定を変えていない項目は残る');
+  assert.equal(settings.t2.durationSec, 120);
+  assert.ok(removed.includes('t1.durationSec'));
+  assert.equal(value.defaultsVersion, 2);
+  assert.equal(SETTINGS_MIGRATIONS.at(-1).version, 2);
+});
+
+test('移行 version 2: version 1 まで済んだ端末でも t1.durationSec が消える。version 1 の項目(maxSpeed)は、済んだあとに保存した値なので消さない', () => {
+  const store = memoryStore({ apt_settings: JSON.stringify({ defaultsVersion: 1, t1: { durationSec: 180 }, t2: { durationSec: 120 }, t6: { maxSpeed: 10 } }) });
+  const result = migrateStoredSettings(store);
+  assert.equal(result.migrated, true);
+  assert.deepEqual(result.removed, ['t1.durationSec']);
+  const { settings } = loadSettings(store);
+  assert.equal(settings.t1.durationSec, 300);
+  assert.equal(settings.t2.durationSec, 120);
+  assert.equal(settings.t6.maxSpeed, 10);
+  assert.equal(JSON.parse(store.values.get('apt_settings')).defaultsVersion, 2);
+  const writes = store.writes.length;
+  assert.equal(migrateStoredSettings(store).migrated, false, '2回目は何もしない');
+  assert.equal(store.writes.length, writes);
 });

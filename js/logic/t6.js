@@ -172,7 +172,7 @@ export function isHalfOpeningSafe(position, blockedSide) {
   return dot < 0; // 直径上は障害物の縁なので衝突
 }
 
-// 中心の円の枠線を描く弧({M}): 塞がった部分と接する弧だけ(開いた方向には描かない)。
+// 中心の円の枠線を描く弧(2026-10-01 ユーザーの実機の感想で変更(7回目)): 塞がった部分と接する弧だけ(開いた方向には描かない)。
 // { fromDeg, toDeg } は fromDeg から反時計回りに toDeg まで
 export function centerRimArcs(obstacle, p) {
   if (obstacle.type === 'blades') {
@@ -223,7 +223,7 @@ export function holeCenters(obstacle, p) {
   });
 }
 
-// 穴の半径: 3つ空きは holeThreeRadius(0.323)、1つ・2つ空きは holeRadius(0.38)({M})
+// 穴の半径: 3つ空きは holeThreeRadius(0.323)、1つ・2つ空きは holeRadius(0.38)(2026-10-01 ユーザーの実機の感想で変更(7回目))
 export function holeRadiusFor(obstacle, p) {
   return obstacle.openSlots.length === 3 ? p.holeThreeRadius : p.holeRadius;
 }
@@ -238,9 +238,9 @@ export function isHoleOpeningSafe(position, obstacle, p) {
   });
 }
 
-// 回転する長方形(2026-09-30 本番に合わせて追加。ユーザーの実機の感想で反転): トンネルの中心を通り直径いっぱいに伸びる
-// 幅 barWidth の帯の中だけが通れる場所で、帯の外はすべて衝突。帯の縁ちょうども衝突。帯の向きは rotationDeg。
-// 帯の両端も塞ぐ: 通れるのは長さ barLength・幅 barWidth の長方形の中だけ({M})
+// 回転する長方形(2026-09-30 本番に合わせて追加。ユーザーの実機の感想で反転): トンネルの中心を通る
+// 長さ barLength・幅 barWidth の長方形の中だけが通れる。長方形の外(帯を延ばした先も)はすべて衝突。縁ちょうども衝突。
+// 長方形の向きは rotationDeg(2026-10-01 ユーザーの実機の感想で変更(7回目)で、両端も塞いだ。以前は帯がトンネルの壁まで通れた)
 export function isBarSafe(position, rotationDeg, p) {
   const rad = rotationDeg * Math.PI / 180;
   const distance = Math.abs(-position.x * Math.sin(rad) + position.y * Math.cos(rad));
